@@ -1,5 +1,5 @@
 import {
-  ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MAX_SPEED, BODY_RADIUS, BULLET_RADIUS,
+  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, MAX_SPEED, BODY_RADIUS, BULLET_RADIUS,
   MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, JET, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
@@ -62,6 +62,43 @@ function updateJet(match, dt, events) {
   const dir = match.rng() < 0.5 ? 1 : -1;
   const x = dir > 0 ? -JET.length / 2 : ARENA_WIDTH + JET.length / 2;
   match.jet = { x, previousX: x, y: JET.y, dir, fireTimer: JET.gun.interval };
+}
+
+/** 유도탄: 가장 가까운 살아있는 적 쪽으로 속도 방향을 turnRate 한도 안에서 꺾는다. 속력은 그대로. */
+function steer(match, b, turnRate, dt) {
+  let target = null, best = Infinity;
+  for (const p of match.players) {
+    if (!p.alive || p.team === b.team) continue;
+    const d = Math.hypot(p.x - b.x, p.y - b.y);
+    if (d < best) { best = d; target = p; }
+  }
+  if (!target) return;
+  const heading = Math.atan2(b.vy, b.vx);
+  let diff = Math.atan2(target.y - b.y, target.x - b.x) - heading;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // [-π, π]
+  const max = turnRate * dt;
+  const next = heading + Math.max(-max, Math.min(max, diff));
+  const speed = Math.hypot(b.vx, b.vy);
+  b.vx = Math.cos(next) * speed; b.vy = Math.sin(next) * speed;
+}
+
+const ENEMY_RAIL = { earth: RAIL_Y.isb, isb: RAIL_Y.earth };
+
+/**
+ * 아무것도 맞히지 못한 RPG가 경로 끝에 닿았는지. 적 레일 선을 넘은 지점, 경기장 밖으로 나간 지점,
+ * 수명이 다한 지점 중 먼저인 곳의 좌표를 돌려준다. 아직이면 null.
+ */
+function rocketEnd(b) {
+  const railY = ENEMY_RAIL[b.team];
+  if ((b.previousY - railY) * (b.y - railY) <= 0 && b.previousY !== railY) {
+    const t = (railY - b.previousY) / (b.y - b.previousY);
+    return { x: b.previousX + (b.x - b.previousX) * t, y: railY };
+  }
+  const out = b.x < 0 || b.x > ARENA_WIDTH || b.y < 0 || b.y > ARENA_HEIGHT;
+  if (out || b.life <= 0) {
+    return { x: Math.max(0, Math.min(ARENA_WIDTH, b.x)), y: Math.max(0, Math.min(ARENA_HEIGHT, b.y)) };
+  }
+  return null;
 }
 
 /** 탄환이 이번 틱에 부서지지 않은 엄폐물에 닿는 가장 이른 접촉 { t, cover }. 없으면 null. */
@@ -177,6 +214,8 @@ export function step(match, inputs, dt = TICK) {
   const contacts = [];
   for (const b of match.projectiles) {
     b.previousX = b.x; b.previousY = b.y;
+    const homing = WEAPONS[b.weapon]?.homing;
+    if (homing) steer(match, b, homing.turnRate, dt);
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.life -= dt;
     let earliest = null;
@@ -206,6 +245,15 @@ export function step(match, inputs, dt = TICK) {
     else events.push({ type: 'block', x, y });
     if (cover) damageCover(cover, coverDamage(b), events);
     if (WEAPONS[b.weapon]?.splash) explode(match, b, x, y, victim, cover, events);
+  }
+
+  // 빗나간 RPG는 경로 끝에서 터져 주변에 폭발 피해를 준다.
+  for (const b of match.projectiles) {
+    if (removed.has(b) || !WEAPONS[b.weapon]?.splash) continue;
+    const end = rocketEnd(b);
+    if (!end) continue;
+    removed.add(b);
+    explode(match, b, end.x, end.y, null, null, events);
   }
 
   // 같은 틱의 피해를 모두 반영한 뒤 쓰러짐을 판정한다.

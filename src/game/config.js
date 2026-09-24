@@ -19,12 +19,16 @@ export const TICK = 1 / 60;
 /**
  * 무기표 (손글씨 메모 2장). 조준(스틱 드래그·발사키 누름)을 유지하는 동안 interval마다 자동 발사.
  * burst는 한 번에 나가는 발 수, burstGap은 점사 사이 간격. splash는 RPG 폭발 범위 피해.
+ * homing.turnRate(rad/s)는 가장 가까운 적을 향해 초당 꺾을 수 있는 최대 각도. RPG는 빗나가도 적 레일 선·경기장 끝·수명 끝에서 터진다.
  */
 export const WEAPONS = {
   rifle: { id: 'rifle', name: '돌격소총', interval: 0.2, damage: 5, speed: 760, burst: 1 },
   pistol: { id: 'pistol', name: '권총', interval: 0.5, damage: 10, speed: 720, burst: 1 },
   dual: { id: 'dual', name: '쌍권총', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1 },
-  rpg: { id: 'rpg', name: 'RPG', interval: 1.5, damage: 40, speed: 1800, burst: 1, splash: { damage: 4, radius: 120 } },
+  rpg: {
+    id: 'rpg', name: 'RPG', interval: 1.5, damage: 40, speed: 1800, burst: 1,
+    splash: { damage: 4, radius: 120 }, homing: { turnRate: 1.5 },
+  },
 };
 export const WEAPON_IDS = Object.keys(WEAPONS);
 

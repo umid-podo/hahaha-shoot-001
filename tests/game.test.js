@@ -389,3 +389,55 @@ test('RPG 폭발 범위는 근처 엄폐물도 깎음, 전투기 기관포는 �
   assert.equal(c.hp, COVER.hp, '전투기 탄은 내구도 영향 없음');
   assert.ok(events.some((e) => e.type === 'block'), '그래도 막힘');
 });
+
+test('RPG 유도: 비껴 쏴도 가장 가까운 적 쪽으로 휘어 직격', () => {
+  const { match, inputs, P1, P2 } = playing(2, { P1: { weapon: 'rpg' } });
+  P1.x = P1.previousX = 300; P2.x = P2.previousX = 600; // 정면이 아니라 300px 옆의 적
+  spawnProjectile(match, P1, UP); // 똑바로 위로
+  const events = run(match, inputs, 1);
+  assert.equal(P2.hp, MAX_HP - WEAPONS.rpg.damage);
+  assert.ok(events.some((e) => e.type === 'hit' && e.victimId === 'P2'));
+
+  // 유도 없는 권총은 같은 조건에서 빗나감
+  const other = playing(2, { P1: { weapon: 'pistol' } });
+  other.P1.x = other.P1.previousX = 300; other.P2.x = other.P2.previousX = 600;
+  spawnProjectile(other.match, other.P1, UP);
+  run(other.match, other.inputs, 2);
+  assert.equal(other.P2.hp, MAX_HP);
+});
+
+test('RPG 유도는 한도가 있어 너무 먼 적은 못 맞힘', () => {
+  const { match, inputs, P1, P2 } = playing(2, { P1: { weapon: 'rpg' } });
+  P1.x = P1.previousX = 200; P2.x = P2.previousX = 1500;
+  spawnProjectile(match, P1, UP);
+  run(match, inputs, 1);
+  assert.equal(P2.hp, MAX_HP);
+});
+
+test('빗나간 RPG는 적 레일 선에서 터져 근처 적에게 폭발 피해', () => {
+  const { match, inputs, P1, P2 } = playing(2, { P1: { weapon: 'rpg' } });
+  P2.x = P2.previousX = 800;
+  const b = spawnProjectile(match, P1, UP);
+  b.x = b.previousX = P2.x + 90; b.y = b.previousY = RAIL_Y.isb + 40; // 판정 원 밖으로 스쳐 지나가는 위치
+  const events = run(match, inputs, 0.2);
+  const boom = events.find((e) => e.type === 'explode');
+  assert.ok(boom, '빗나가도 폭발');
+  assert.ok(Math.abs(boom.y - RAIL_Y.isb) < 1e-6, '적 레일 선에서');
+  assert.equal(P2.hp, MAX_HP - WEAPONS.rpg.splash.damage);
+  assert.equal(match.projectiles.length, 0);
+});
+
+test('레일에 닿기 전에 경기장을 벗어나거나 수명이 다한 RPG도 그 자리에서 터짐', () => {
+  const { match, inputs, P1 } = playing(2, { P1: { weapon: 'rpg' } });
+  P1.x = P1.previousX = MAX_X;
+  const out = spawnProjectile(match, P1, -0.05); // 오른쪽 벽으로 거의 수평
+  const events = run(match, inputs, 0.3);
+  const boom = events.find((e) => e.type === 'explode');
+  assert.ok(boom);
+  assert.equal(boom.x, ARENA_WIDTH);
+  assert.ok(!match.projectiles.includes(out));
+
+  const b = spawnProjectile(match, P1, UP);
+  b.life = TICK / 2;
+  assert.ok(step(match, inputs).some((e) => e.type === 'explode'), '수명 끝');
+});
