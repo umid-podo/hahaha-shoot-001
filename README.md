@@ -97,3 +97,12 @@ npm test         # node --test, 이동·조준·자동 발사·총기 피해·�
 ```sh
 gh api -X POST repos/umid-podo/hahaha-shoot-001/pages -f build_type=workflow
 ```
+
+배포 브랜치 제한이 사라졌다면 아래 명령으로 되살린다. 마지막 줄이 `claude/*,main`을 출력하면 된다.
+
+```sh
+echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' | gh api -X PUT repos/umid-podo/hahaha-shoot-001/environments/github-pages --input -
+gh api -X POST repos/umid-podo/hahaha-shoot-001/environments/github-pages/deployment-branch-policies -f name=main -f type=branch
+gh api -X POST repos/umid-podo/hahaha-shoot-001/environments/github-pages/deployment-branch-policies -f name='claude/*' -f type=branch
+gh api repos/umid-podo/hahaha-shoot-001/environments/github-pages/deployment-branch-policies --jq '[.branch_policies[].name]|join(",")'
+```
