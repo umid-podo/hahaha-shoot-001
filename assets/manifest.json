@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "pathBase": "assets/",
+  "logicalArena": {
+    "width": 1200,
+    "height": 800,
+    "topRailY": 92,
+    "bottomRailY": 692
+  },
+  "assets": [
+    {
+      "id": "arena",
+      "name": "건물 옥상 경기장",
+      "path": "backgrounds/rooftop.svg",
+      "width": 1200,
+      "height": 800,
+      "format": "svg",
+      "hasAlphaChannel": false,
+      "alphaInspection": null,
+      "source": "project-authored vector",
+      "kind": "background",
+      "bytes": 3214
+    },
+    {
+      "id": "earth-arrow",
+      "name": "온이름",
+      "path": "characters/earth-arrow.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 622692,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "alphaInspection": {
+        "min": 0,
+        "max": 255,
+        "fullyTransparentPixels": 1162599
+      },
+      "source": "built-in image_gen",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.48,
+        0.68
+      ],
+      "anchorStatus": "initial visual estimate",
+      "frames": 1
+    },
+    {
+      "id": "earth-pizza",
+      "name": "피자럭스",
+      "path": "characters/earth-pizza.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 759227,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "alphaInspection": {
+        "min": 0,
+        "max": 255,
+        "fullyTransparentPixels": 1033279
+      },
+      "source": "built-in image_gen",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.39,
+        0.68
+      ],
+      "anchorStatus": "initial visual estimate",
+      "frames": 1
+    },
+    {
+      "id": "isb-agent-1",
+      "name": "요원 1",
+      "path": "characters/isb-agent-1.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 749305,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "alphaInspection": {
+        "min": 0,
+        "max": 255,
+        "fullyTransparentPixels": 1092696
+      },
+      "source": "built-in image_gen",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.48,
+        0.64
+      ],
+      "anchorStatus": "initial visual estimate",
+      "frames": 1
+    },
+    {
+      "id": "isb-agent-2",
+      "name": "요원 2",
+      "path": "characters/isb-agent-2.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 845116,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "alphaInspection": {
+        "min": 0,
+        "max": 255,
+        "fullyTransparentPixels": 986466
+      },
+      "source": "built-in image_gen",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.39,
+        0.65
+      ],
+      "anchorStatus": "initial visual estimate",
+      "frames": 1
+    },
+    {
+      "id": "earth-badge",
+      "path": "ui/earth-badge.svg",
+      "width": 64,
+      "height": 64,
+      "bytes": 331,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "ui"
+    },
+    {
+      "id": "isb-badge",
+      "path": "ui/isb-badge.svg",
+      "width": 64,
+      "height": 64,
+      "bytes": 277,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "ui"
+    },
+    {
+      "id": "move-stick",
+      "path": "ui/move-stick.svg",
+      "width": 128,
+      "height": 128,
+      "bytes": 302,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "ui"
+    },
+    {
+      "id": "aim-stick",
+      "path": "ui/aim-stick.svg",
+      "width": 128,
+      "height": 128,
+      "bytes": 333,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "ui"
+    },
+    {
+      "id": "bullet",
+      "path": "effects/bullet.svg",
+      "width": 48,
+      "height": 24,
+      "bytes": 171,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "effect"
+    },
+    {
+      "id": "rocket",
+      "path": "effects/rocket.svg",
+      "width": 64,
+      "height": 32,
+      "bytes": 222,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "effect"
+    },
+    {
+      "id": "hit-spark",
+      "path": "effects/hit-spark.svg",
+      "width": 64,
+      "height": 64,
+      "bytes": 244,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "effect"
+    },
+    {
+      "id": "fighter-jet",
+      "name": "전투기",
+      "path": "effects/fighter-jet.svg",
+      "width": 260,
+      "height": 200,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "effect",
+      "bytes": 739
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <title>HAHA 2 Shoot</title>
+  <link rel="icon" href="assets/ui/earth-badge.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="game" hidden>
+    <div id="arena-wrap"><canvas id="arena" aria-label="경기장"></canvas></div>
+    <div id="controls">
+      <div id="controls-earth" class="team-group"></div>
+      <button id="pause-btn" type="button" aria-label="일시정지">Ⅱ</button>
+      <div id="controls-isb" class="team-group"></div>
+    </div>
+    <p id="live" class="sr-only" aria-live="polite"></p>
+  </main>
+
+  <section id="screen-menu" class="screen">
+    <div class="card">
+      <p class="eyebrow">슈팅게임</p>
+      <h1 tabindex="-1">HAHA 2 Shoot</h1>
+      <p class="teams">
+        <img src="assets/ui/earth-badge.svg" alt=""> 지구방위팀 <span>vs</span> ISB팀 <img src="assets/ui/isb-badge.svg" alt="">
+      </p>
+      <p id="load-status" role="status">에셋을 불러오는 중…</p>
+      <button id="retry-btn" type="button" hidden>다시 시도</button>
+      <div class="row">
+        <button class="primary count-btn" type="button" data-count="2" disabled>2인 대결</button>
+        <button class="primary count-btn" type="button" data-count="4" disabled>4인 대결</button>
+      </div>
+      <details>
+        <summary>조작법</summary>
+        <ul>
+          <li><b>이동키</b> 동그라미를 좌우로 드래그하면 캐릭터가 옥상 레일 위에서 움직입니다.</li>
+          <li><b>발사키</b> 동그라미를 드래그해 조준하면 누르고 있는 동안 자동으로 발사됩니다.</li>
+          <li>체력은 100. 상대 팀을 모두 쓰러뜨리면 우승. 아군은 공격할 수 없습니다.</li>
+          <li>총기: 돌격소총(0.2초·5), 권총(0.5초·10), 쌍권총(0.5초 2점사·10), RPG(1.5초·20, 폭발 범위 4).</li>
+          <li>가끔 가운데로 지나가는 전투기는 양 팀 총알을 모두 막아 줍니다.</li>
+          <li>키보드 조작 키는 다음 화면에서 안내합니다. Esc는 일시정지.</li>
+        </ul>
+      </details>
+      <div class="row">
+        <button class="mute-toggle" type="button" aria-pressed="false">음소거</button>
+        <button id="motion-toggle" type="button" aria-pressed="false">동작 줄이기</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-ready" class="screen" hidden>
+    <div class="card">
+      <h2 tabindex="-1">캐릭터·총기 선택</h2>
+      <ul id="slot-list"></ul>
+      <p class="hint">터치: 화면 아래 자기 패널의 이동키·발사키를 사용합니다. 키보드와 함께 써도 됩니다.</p>
+      <p id="narrow-warning" class="warning" hidden>화면이 좁아 조작 패널이 작습니다. 가로 화면·더 큰 화면이나 키보드를 사용하세요.</p>
+      <div class="row">
+        <button id="start-btn" class="primary" type="button">시작</button>
+        <button id="back-btn" type="button">인원 선택</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-pause" class="screen overlay" hidden>
+    <div class="card">
+      <h2 tabindex="-1">일시정지</h2>
+      <div class="column">
+        <button id="resume-btn" class="primary" type="button">계속</button>
+        <button class="restart-btn" type="button">다시 시작</button>
+        <button class="menu-btn" type="button">인원 선택</button>
+        <button class="mute-toggle" type="button" aria-pressed="false">음소거</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-result" class="screen overlay" hidden>
+    <div class="card">
+      <h2 id="result-title" tabindex="-1"></h2>
+      <p id="result-score"></p>
+      <div class="row">
+        <button class="primary restart-btn" type="button">재대결</button>
+        <button class="menu-btn" type="button">인원 선택</button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

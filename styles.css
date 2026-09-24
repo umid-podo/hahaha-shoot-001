@@ -1,0 +1,163 @@
+:root {
+  --paper: #f5f1e8;
+  --ink: #30353e;
+  --muted: #565c66;
+  --line: #d7d5d0;
+  --earth: #247bdb;
+  --isb: #d56a26;
+  --stick: clamp(88px, 16vh, 128px);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  line-height: 1.5;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 18px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+button.primary { background: var(--ink); color: #fff; }
+button:disabled { opacity: 0.4; cursor: default; }
+button[aria-pressed="true"] { background: #ffd45e; }
+button:focus-visible, h1:focus-visible, h2:focus-visible { outline: 3px solid var(--earth); outline-offset: 3px; }
+h1:focus, h2:focus { outline: none; }
+
+/* 화면 */
+.screen {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  overflow: auto;
+  background: var(--paper);
+}
+.screen.overlay { background: rgba(48, 53, 62, 0.55); }
+.card {
+  width: min(560px, 100%);
+  padding: 24px;
+  border: 2px solid var(--ink);
+  border-radius: 18px;
+  background: #fff;
+  text-align: center;
+}
+.eyebrow { margin: 0; color: var(--muted); }
+h1 { margin: 0; font-size: clamp(32px, 7vw, 52px); }
+h2 { margin: 0 0 12px; font-size: 28px; }
+.teams { display: flex; justify-content: center; align-items: center; gap: 8px; font-weight: 700; }
+.teams img { width: 32px; height: 32px; }
+.teams span { color: var(--muted); font-weight: 400; }
+.row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 16px; }
+.column { display: grid; gap: 10px; }
+details { margin-top: 16px; text-align: left; }
+summary { cursor: pointer; font-weight: 700; }
+details ul { margin: 8px 0 0; padding-left: 20px; font-size: 15px; }
+.hint { color: var(--muted); font-size: 14px; }
+.warning { padding: 8px 12px; border-left: 4px solid var(--isb); background: #fff0dc; font-size: 14px; text-align: left; }
+#result-score { font-size: 22px; font-weight: 700; }
+
+#slot-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+#slot-list li {
+  display: grid;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 2px solid var(--team);
+  border-radius: 12px;
+}
+#slot-list li > b { color: var(--team); }
+#slot-list li > small { color: var(--muted); }
+.team-earth { --team: var(--earth); }
+.team-isb { --team: var(--isb); }
+
+/* 경기: 3:2 경기장 + 경기장 외부의 조작 패널 */
+#game { display: flex; flex-direction: column; height: 100dvh; }
+#arena-wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
+#arena { display: block; border-radius: 8px; }
+#controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.team-group { display: flex; gap: 8px; }
+.panel {
+  display: grid;
+  grid-template-columns: var(--stick) var(--stick);
+  gap: 4px 12px;
+  padding: 6px 10px;
+  border: 2px solid var(--team);
+  border-radius: 14px;
+  background: #fff;
+}
+.panel-head { grid-column: span 2; color: var(--team); font-size: 14px; font-weight: 700; text-align: center; }
+.stick {
+  position: relative;
+  width: var(--stick);
+  height: var(--stick);
+  background: center / contain no-repeat;
+  touch-action: none;
+}
+.stick-move { background-image: url(assets/ui/move-stick.svg); }
+.stick-aim { background-image: url(assets/ui/aim-stick.svg); }
+.knob {
+  position: absolute;
+  left: 30%;
+  top: 30%;
+  width: 40%;
+  height: 40%;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--team);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* 준비 화면: 캐릭터·총기 선택 */
+#screen-ready .card { width: min(820px, 100%); }
+.choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.choices.weapons { grid-template-columns: repeat(2, 1fr); }
+button.choice {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 4px;
+  border-width: 2px;
+  border-color: var(--line);
+  font-size: 13px;
+  line-height: 1.25;
+}
+button.choice small { color: var(--muted); font-size: 11px; font-weight: 400; }
+button.choice[aria-pressed="true"] { border-color: var(--team); background: color-mix(in srgb, var(--team) 14%, #fff); }
+.choices.characters img { width: 52px; height: 52px; object-fit: contain; }

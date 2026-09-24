@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="200" viewBox="0 0 260 200">
+  <!-- 위에서 본 전투기, 기수는 오른쪽 -->
+  <g stroke="#30353E" stroke-width="4" stroke-linejoin="round">
+    <path d="M150 88 108 6h-18l-10 82ZM150 112l-42 82h-18l-10-82Z" fill="#7E93A6"/>
+    <path d="M52 90 30 52H16l4 38ZM52 110l-22 38H16l4-38Z" fill="#7E93A6"/>
+    <path d="M12 84h14l12-6h150q46 4 64 22-18 18-64 22H38l-12-6H12Z" fill="#9FB2C3"/>
+    <path d="M178 90q26 2 36 10-10 8-36 10q-8-10 0-20Z" fill="#5EB3E8"/>
+    <path d="M60 100h96" fill="none" stroke-width="2"/>
+  </g>
+  <path d="M6 88h8v24H6Z" fill="#FF9D3F"/>
+  <circle cx="98" cy="40" r="7" fill="#D5463B"/>
+  <circle cx="98" cy="160" r="7" fill="#D5463B"/>
+</svg>
