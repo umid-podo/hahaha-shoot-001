@@ -5,6 +5,10 @@ const $ = (selector) => document.querySelector(selector);
 const MIN_PANEL_WIDTH = 220;
 
 function weaponInfo(w) {
+  if (w.trigger === 'release') {
+    const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';
+    return `조준 후 떼면 발사 · 쿨타임 ${w.interval}초 · 한 발 ${w.damage}${splash}`;
+  }
   const shots = w.burst > 1 ? `${w.burst}점사 ` : '';
   const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';
   return `${w.interval}초마다 ${shots}· 한 발 ${w.damage}${splash}`;

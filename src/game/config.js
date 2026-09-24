@@ -17,7 +17,8 @@ export const KEY_AIM_SPEED = (120 * Math.PI) / 180;
 export const TICK = 1 / 60;
 
 /**
- * 무기표 (손글씨 메모 2장). 조준(스틱 드래그·발사키 누름)을 유지하는 동안 interval마다 자동 발사.
+ * 무기표 (손글씨 메모 2장). 기본은 조준(스틱 드래그·발사키 누름)을 유지하는 동안 interval마다 자동 발사.
+ * trigger: 'release'인 무기는 조준한 뒤 손을 뗄 때 한 발 쏘고, interval은 발사 후 쿨타임이다.
  * burst는 한 번에 나가는 발 수, burstGap은 점사 사이 간격. splash는 RPG 폭발 범위 피해.
  * homing.turnRate(rad/s)는 가장 가까운 적을 향해 초당 꺾을 수 있는 최대 각도. RPG는 빗나가도 적 레일 선·경기장 끝·수명 끝에서 터진다.
  */
@@ -26,10 +27,13 @@ export const WEAPONS = {
   pistol: { id: 'pistol', name: '권총', interval: 0.5, damage: 10, speed: 720, burst: 1 },
   dual: { id: 'dual', name: '쌍권총', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1 },
   rpg: {
-    id: 'rpg', name: 'RPG', interval: 1.5, damage: 40, speed: 1800, burst: 1,
+    id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release',
     splash: { damage: 4, radius: 120 }, homing: { turnRate: 0.8 },
   },
+  sniper: { id: 'sniper', name: '저격총', interval: 1.5, damage: 60, speed: 1600, burst: 1 },
 };
+/** 경기 중 무기 교체 후 다시 쏠 수 있을 때까지의 시간(초). 교체로 쿨타임을 건너뛰지 못하게 한다. */
+export const SWAP_TIME = 0.4;
 export const WEAPON_IDS = Object.keys(WEAPONS);
 
 export const CHARACTERS = [

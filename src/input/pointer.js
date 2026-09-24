@@ -1,4 +1,4 @@
-import { DEADZONE, TEAM_NAME } from '../game/config.js';
+import { DEADZONE, TEAM_NAME, WEAPONS } from '../game/config.js';
 
 /** 이동 스틱: X 변위만 사용. 데드존 안은 0, 바깥은 ±1까지 선형 보간. */
 export function moveAxisFromDrag(dx, radius) {
@@ -59,9 +59,13 @@ function stickElement(kind, label) {
   return el;
 }
 
-/** 플레이어별 조작 패널을 만들고 입력 프레임에 연결한다. cancelAll()은 모든 스틱을 놓아 사격을 멈춘다. */
+/**
+ * 플레이어별 조작 패널을 만들고 입력 프레임에 연결한다. cancelAll()은 모든 스틱을 놓아 사격을 멈추고,
+ * setWeapon(playerId, weaponId)은 무기 교체 버튼의 표시를 바꾼다.
+ */
 export function createControls(groups, players, inputs) {
   const cancels = [];
+  const swapButtons = {};
   for (const team of ['earth', 'isb']) {
     groups[team].replaceChildren();
     for (const p of players.filter((pl) => pl.team === team)) {
@@ -74,7 +78,15 @@ export function createControls(groups, players, inputs) {
       header.title = TEAM_NAME[team];
       const move = stickElement('move', `${p.id} 이동키`);
       const aim = stickElement('aim', `${p.id} 발사키`);
-      panel.append(header, move, aim);
+      const swap = document.createElement('button');
+      swap.type = 'button';
+      swap.className = 'swap-btn';
+      swap.textContent = WEAPONS[p.weapon].name;
+      swap.setAttribute('aria-label', `${p.id} 무기 교체, 현재 ${WEAPONS[p.weapon].name}`);
+      swap.addEventListener('pointerdown', (e) => { e.preventDefault(); frame.swap = true; });
+      swap.addEventListener('click', (e) => { if (e.detail === 0) frame.swap = true; }); // 키보드로 누른 경우
+      swapButtons[p.id] = swap;
+      panel.append(header, swap, move, aim);
       groups[team].append(panel);
 
       cancels.push(bindStick(move, {
@@ -95,5 +107,13 @@ export function createControls(groups, players, inputs) {
       }));
     }
   }
-  return { cancelAll() { for (const cancel of cancels) cancel(); } };
+  return {
+    cancelAll() { for (const cancel of cancels) cancel(); },
+    setWeapon(playerId, weaponId) {
+      const btn = swapButtons[playerId];
+      if (!btn) return;
+      btn.textContent = WEAPONS[weaponId].name;
+      btn.setAttribute('aria-label', `${playerId} 무기 교체, 현재 ${WEAPONS[weaponId].name}`);
+    },
+  };
 }

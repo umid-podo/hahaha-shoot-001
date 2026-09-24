@@ -80,6 +80,7 @@ const SHOT = {
   pistol: { filter: 1300, decay: 0.14, thump: 190 },
   dual: { filter: 1500, decay: 0.12, thump: 180, volume: 0.9 },
   rpg: { filter: 500, q: 0.5, decay: 0.45, thump: 110, volume: 1.2 },
+  sniper: { filter: 2400, q: 1.2, decay: 0.35, thump: 230, volume: 1.4 },
   jet: { filter: 700, q: 0.5, decay: 0.35, thump: 110, volume: 1.1 },
 };
 
@@ -92,6 +93,7 @@ export function playEvents(events) {
     played.add(key);
     if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
     if (e.type === 'jet-fire') gunshot(SHOT.jet); // 미사일 발사음
+    if (e.type === 'swap') { tone(1200, 0.03, 'square'); tone(900, 0.04, 'square', 0.05); } // 철컥
     if (e.type === 'hit') tone(880, 0.07, 'square');
     if (e.type === 'block') tone(300, 0.05, 'triangle');
     if (e.type === 'explode') { gunshot({ filter: 250, q: 0.4, decay: 0.6, thump: 90, volume: 1.4 }); tone(60, 0.4, 'square', 0.05); }

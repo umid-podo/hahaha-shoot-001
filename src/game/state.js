@@ -48,7 +48,7 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
       x, previousX: x, y: RAIL_Y[slot.team],
       aim: initialAim(slot.team),
       hp: MAX_HP, alive: true, hurt: 0,
-      cooldown: 0, burstLeft: 0, burstTimer: 0,
+      cooldown: 0, burstLeft: 0, burstTimer: 0, wasAiming: false,
     };
   });
   const rng = createRng(seed);
@@ -64,7 +64,7 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
 export function createInputs(players) {
   const inputs = {};
   for (const p of players) {
-    inputs[p.id] = { moveAxis: 0, touchAxis: 0, aim: initialAim(p.team), aiming: false };
+    inputs[p.id] = { moveAxis: 0, touchAxis: 0, aim: initialAim(p.team), aiming: false, swap: false };
   }
   return inputs;
 }
@@ -72,6 +72,6 @@ export function createInputs(players) {
 /** 일시정지·포커스 상실 시 호출. 조준 각도는 유지하고 진행 중인 입력(이동·사격)만 버린다. */
 export function cancelInputs(inputs) {
   for (const f of Object.values(inputs)) {
-    f.moveAxis = 0; f.touchAxis = 0; f.aiming = false;
+    f.moveAxis = 0; f.touchAxis = 0; f.aiming = false; f.swap = false;
   }
 }

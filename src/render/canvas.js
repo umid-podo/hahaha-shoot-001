@@ -80,7 +80,8 @@ export function createRenderer(canvas, wrap, assets) {
   resize();
 
   function drawPlayer(p, input, time, reducedMotion) {
-    const { img, anchor } = assets[p.characterId];
+    // 무기별 그림(manifest id '<캐릭터>@<무기>')이 있으면 그것을, 없으면 기본 그림을 쓴다.
+    const { img, anchor } = assets[`${p.characterId}@${p.weapon}`] ?? assets[p.characterId];
     const color = TEAM_COLOR[p.team];
     const hurt = p.hurt > 0;
 
@@ -126,21 +127,24 @@ export function createRenderer(canvas, wrap, assets) {
 
     // 현재 조준 방향 눈금(항상) + 발사 준비 중에만 조준선
     const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
-    ctx.fillStyle = color;
+    // 떼면 쏘는 무기(RPG)는 쿨타임 동안 눈금을 회색으로 표시
+    const reloading = WEAPONS[p.weapon].trigger === 'release' && p.cooldown > 0;
+    ctx.fillStyle = reloading ? '#9A9EA5' : color;
     ctx.beginPath();
     ctx.arc(p.x + cos * BODY_RADIUS, p.y + sin * BODY_RADIUS, 5, 0, Math.PI * 2);
     ctx.fill();
     if (input.aiming) {
+      const reach = p.weapon === 'sniper' ? 420 : 190; // 저격총은 긴 조준선
       ctx.strokeStyle = color;
       ctx.lineWidth = 4;
       ctx.setLineDash([14, 10]);
       ctx.beginPath();
       ctx.moveTo(p.x + cos * 38, p.y + sin * 38);
-      ctx.lineTo(p.x + cos * 190, p.y + sin * 190);
+      ctx.lineTo(p.x + cos * reach, p.y + sin * reach);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.save();
-      ctx.translate(p.x + cos * 200, p.y + sin * 200);
+      ctx.translate(p.x + cos * (reach + 10), p.y + sin * (reach + 10));
       ctx.rotate(p.aim);
       ctx.beginPath();
       ctx.moveTo(12, 0); ctx.lineTo(-10, -10); ctx.lineTo(-10, 10);
@@ -339,7 +343,8 @@ export function createRenderer(canvas, wrap, assets) {
         }
         const rocket = b.weapon === 'rpg';
         const { img } = assets[rocket ? 'rocket' : 'bullet'];
-        const w = rocket ? 44 : 32, h = rocket ? 22 : 16;
+        const sniper = b.weapon === 'sniper';
+        const w = rocket ? 44 : sniper ? 48 : 32, h = rocket ? 22 : sniper ? 14 : 16;
         ctx.save();
         ctx.translate(b.x, b.y);
         ctx.rotate(Math.atan2(b.vy, b.vx));
