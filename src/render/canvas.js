@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, BODY_RADIUS, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS,
+  MAX_HP, WEAPONS, COVERS,
 } from '../game/config.js';
 
 const INK = '#30353E';
@@ -10,7 +10,7 @@ const SPARK_TIME = 0.15;
 const EFFECT_TIME = 0.6;
 const EXPLODE_TIME = 0.4;
 // 오른쪽 팀 체력판. 상단은 윗변, 하단은 아랫변 기준으로 캐릭터·체력바와 겹치지 않게 둔다.
-const TEAM_BOX = { isbTop: 190, earthBottom: 590 };
+const TEAM_BOX = { isbTop: RAIL_Y.isb + 98, earthBottom: RAIL_Y.earth - 102, w: 190, right: 20 };
 const HP_BAR = { w: 88, h: 10 };
 
 function hpColor(ratio) {
@@ -155,7 +155,7 @@ export function createRenderer(canvas, wrap, assets) {
   /** 팀별 체력 요약: 팀 이름과 멤버마다 이름·총기·체력바 */
   function drawTeam(team, players) {
     const members = players.filter((p) => p.team === team);
-    const w = 190, h = 40 + members.length * 30, x = 990;
+    const w = TEAM_BOX.w, h = 40 + members.length * 30, x = ARENA_WIDTH - TEAM_BOX.right - w;
     const y = team === 'isb' ? TEAM_BOX.isbTop : TEAM_BOX.earthBottom - h;
     ctx.fillStyle = 'rgba(255,255,255,0.88)';
     ctx.strokeStyle = TEAM_COLOR[team];
@@ -180,6 +180,33 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.fillText(p.alive ? `${p.hp}` : 'KO', x + w - 12, my + 17);
       drawHpBar(ctx, x + 12, my + 12, w - 60, 10, p.hp);
     });
+  }
+
+  /** 엄폐물: 콘크리트 방호벽. 팀 진영 엄폐물은 윗면에 팀 색 띠를 두른다. */
+  function drawCovers() {
+    for (const c of COVERS) {
+      const x = c.x - c.w / 2, y = c.y - c.h / 2;
+      ctx.fillStyle = 'rgba(48,53,62,0.25)';
+      ctx.beginPath();
+      ctx.roundRect(x + 6, y + 8, c.w, c.h, 8);
+      ctx.fill();
+      ctx.fillStyle = '#8F8A80';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(x, y, c.w, c.h, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = c.team ? TEAM_COLOR[c.team] : '#FFD45E';
+      ctx.fillRect(x + 4, y + 4, c.w - 8, 8);
+      ctx.strokeStyle = 'rgba(48,53,62,0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let bx = x + c.w / 4; bx < x + c.w - 1; bx += c.w / 4) {
+        ctx.moveTo(bx, y + 14); ctx.lineTo(bx, y + c.h - 4);
+      }
+      ctx.stroke();
+    }
   }
 
   function drawJet(jet) {
@@ -237,6 +264,8 @@ export function createRenderer(canvas, wrap, assets) {
       }
       ctx.globalAlpha = 1;
 
+      drawCovers();
+
       const paused = match.phase === 'paused';
       for (const p of match.players) {
         if (!paused && recoil[p.id] > 0) recoil[p.id] -= dt;
@@ -244,6 +273,17 @@ export function createRenderer(canvas, wrap, assets) {
       }
 
       for (const b of match.projectiles) {
+        if (b.weapon === 'jet') {
+          // 전투기 기관포탄: 팀 탄과 구분되는 붉은 예광탄
+          ctx.fillStyle = '#D9443A';
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(b.x - 5, b.y - 14, 10, 28, 5);
+          ctx.fill();
+          ctx.stroke();
+          continue;
+        }
         const rocket = b.weapon === 'rpg';
         const { img } = assets[rocket ? 'rocket' : 'bullet'];
         const w = rocket ? 44 : 32, h = rocket ? 22 : 16;

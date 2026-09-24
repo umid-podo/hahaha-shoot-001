@@ -5,7 +5,7 @@ import { createControls } from './input/pointer.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
-import { unlock, setMuted, playEvents } from './audio/synth.js';
+import { unlock, setMuted, playEvents, updateEngine } from './audio/synth.js';
 import { loadSettings, saveSettings } from './storage/settings.js';
 
 const MAX_FRAME_MS = 100;
@@ -113,6 +113,7 @@ function frame(now) {
     accumulator = 0;
   }
   if (match) renderer.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion);
+  updateEngine(match?.phase === 'playing' ? match.jet : null);
   requestAnimationFrame(frame);
 }
 

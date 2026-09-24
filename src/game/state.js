@@ -39,7 +39,7 @@ export const between = (rng, [min, max]) => min + rng() * (max - min);
  */
 export function createMatch(playerCount, loadout = defaultLoadout(playerCount), seed = Date.now()) {
   const players = SLOTS.slice(0, playerCount).map((slot, i) => {
-    const x = playerCount === 2 ? 600 : i < 2 ? 360 : 840;
+    const x = playerCount === 2 ? 800 : i < 2 ? 480 : 1120;
     const pick = loadout[slot.id] ?? {};
     const characterId = pick.characterId ?? slot.characterId;
     const weapon = WEAPONS[pick.weapon] ? pick.weapon : slot.weapon;
