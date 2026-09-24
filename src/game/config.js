@@ -27,7 +27,7 @@ export const WEAPONS = {
   dual: { id: 'dual', name: '쌍권총', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1 },
   rpg: {
     id: 'rpg', name: 'RPG', interval: 1.5, damage: 40, speed: 1800, burst: 1,
-    splash: { damage: 4, radius: 120 }, homing: { turnRate: 1.5 },
+    splash: { damage: 4, radius: 120 }, homing: { turnRate: 0.8 },
   },
 };
 export const WEAPON_IDS = Object.keys(WEAPONS);
