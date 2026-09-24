@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MAX_SPEED, BODY_RADIUS, BULLET_RADIUS,
-  MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, JET,
+  MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, JET, COVERS,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
@@ -17,14 +17,29 @@ export function spawnProjectile(match, player, aim) {
     id: match.nextProjectileId++, ownerId: player.id, team: player.team, weapon: weapon.id,
     x, y, previousX: x, previousY: y,
     vx: Math.cos(aim) * weapon.speed, vy: Math.sin(aim) * weapon.speed,
-    life: BULLET_LIFE,
+    life: BULLET_LIFE, damage: weapon.damage,
   };
   match.projectiles.push(projectile);
   return projectile;
 }
 
-/** 전투기를 움직이고, 화면을 벗어나면 다음 등장까지 무작위로 기다린다. */
-function updateJet(match, dt) {
+/** 전투기 기관포: 위(ISB 쪽)·아래(지구방위 쪽)로 한 발씩. 팀이 'jet'이라 양 팀 모두 맞는다. */
+function fireJet(match, jet, events) {
+  const { gun } = JET;
+  for (const dy of [-1, 1]) {
+    const y = jet.y + dy * gun.offset;
+    match.projectiles.push({
+      id: match.nextProjectileId++, ownerId: 'jet', team: 'jet', weapon: 'jet',
+      x: jet.x, y, previousX: jet.x, previousY: y,
+      vx: 0, vy: dy * gun.speed,
+      life: BULLET_LIFE, damage: gun.damage,
+    });
+  }
+  events.push({ type: 'jet-fire', x: jet.x, y: jet.y });
+}
+
+/** 전투기를 움직이고 화면 안에서는 주기적으로 쏜다. 화면을 벗어나면 다음 등장까지 무작위로 기다린다. */
+function updateJet(match, dt, events) {
   const { jet } = match;
   if (jet) {
     jet.previousX = jet.x;
@@ -33,6 +48,12 @@ function updateJet(match, dt) {
     if (jet.x < -edge || jet.x > ARENA_WIDTH + edge) {
       match.jet = null;
       match.jetTimer = between(match.rng, JET.delay);
+      return;
+    }
+    jet.fireTimer -= dt;
+    if (jet.fireTimer <= 0) {
+      jet.fireTimer += JET.gun.interval;
+      if (jet.x >= 0 && jet.x <= ARENA_WIDTH) fireJet(match, jet, events);
     }
     return;
   }
@@ -40,7 +61,19 @@ function updateJet(match, dt) {
   if (match.jetTimer > 0) return;
   const dir = match.rng() < 0.5 ? 1 : -1;
   const x = dir > 0 ? -JET.length / 2 : ARENA_WIDTH + JET.length / 2;
-  match.jet = { x, previousX: x, y: JET.y, dir };
+  match.jet = { x, previousX: x, y: JET.y, dir, fireTimer: JET.gun.interval };
+}
+
+/** 탄환이 이번 틱에 엄폐물에 닿는 가장 이른 시각. */
+function coverContactTime(b) {
+  let earliest = null;
+  for (const c of COVERS) {
+    const t = segmentRectTime(
+      b.previousX - c.x, b.previousY - c.y, b.x - c.x, b.y - c.y,
+      c.w / 2 + BULLET_RADIUS, c.h / 2 + BULLET_RADIUS);
+    if (t !== null && (earliest === null || t < earliest)) earliest = t;
+  }
+  return earliest;
 }
 
 /** 탄환이 이번 틱에 전투기에 닿는 가장 이른 시각. 전투기 진행 방향에 따라 판정도 좌우 반전된다. */
@@ -79,7 +112,7 @@ function fire(match, p, events) {
 
 /**
  * 고정 틱 한 번. 렌더·사운드용 이벤트 목록을 돌려준다.
- * 순서: 전투기 → 플레이어 이동·자동 발사 → 탄환 이동·충돌 → 쓰러짐·승패.
+ * 순서: 전투기(이동·사격) → 플레이어 이동·자동 발사 → 탄환 이동·충돌(엄폐물·전투기·적) → 쓰러짐·승패.
  */
 export function step(match, inputs, dt = TICK) {
   const events = [];
@@ -91,7 +124,7 @@ export function step(match, inputs, dt = TICK) {
   if (match.phase !== 'playing') return events;
   match.tick++;
 
-  updateJet(match, dt);
+  updateJet(match, dt, events);
 
   for (const p of match.players) {
     p.previousX = p.x;
@@ -125,9 +158,12 @@ export function step(match, inputs, dt = TICK) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.life -= dt;
     let earliest = null;
-    if (match.jet) {
+    const coverT = coverContactTime(b);
+    if (coverT !== null) earliest = { t: coverT, projectile: b, victim: null };
+    // 전투기 자신이 쏜 탄은 전투기에 막히지 않는다.
+    if (match.jet && b.team !== 'jet') {
       const t = jetContactTime(match.jet, b);
-      if (t !== null) earliest = { t, projectile: b, victim: null };
+      if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, projectile: b, victim: null };
     }
     for (const p of match.players) {
       if (!p.alive || p.team === b.team) continue;
@@ -143,9 +179,9 @@ export function step(match, inputs, dt = TICK) {
     removed.add(b);
     const x = b.previousX + (b.x - b.previousX) * t;
     const y = b.previousY + (b.y - b.previousY) * t;
-    if (victim) damage(victim, WEAPONS[b.weapon].damage, b.team, events);
+    if (victim) damage(victim, b.damage, b.team, events);
     else events.push({ type: 'block', x, y });
-    if (WEAPONS[b.weapon].splash) explode(match, b, x, y, victim, events);
+    if (WEAPONS[b.weapon]?.splash) explode(match, b, x, y, victim, events);
   }
 
   // 같은 틱의 피해를 모두 반영한 뒤 쓰러짐을 판정한다.
