@@ -318,14 +318,23 @@ export function createRenderer(canvas, wrap, assets) {
 
       for (const b of match.projectiles) {
         if (b.weapon === 'jet') {
-          // 전투기 기관포탄: 팀 탄과 구분되는 붉은 예광탄
+          // 전투기 미사일: 팀 로켓과 구분되는 붉은 동체 + 흰 테두리, 꼬리 불꽃
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate(Math.atan2(b.vy, b.vx));
+          ctx.fillStyle = '#FFB23F';
+          ctx.beginPath();
+          ctx.moveTo(-16, -5); ctx.lineTo(-30 - Math.random() * 8, 0); ctx.lineTo(-16, 5);
+          ctx.fill();
           ctx.fillStyle = '#D9443A';
           ctx.strokeStyle = '#fff';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.roundRect(b.x - 5, b.y - 14, 10, 28, 5);
+          ctx.moveTo(20, 0); ctx.lineTo(10, -7); ctx.lineTo(-16, -7); ctx.lineTo(-16, 7); ctx.lineTo(10, 7);
+          ctx.closePath();
           ctx.fill();
           ctx.stroke();
+          ctx.restore();
           continue;
         }
         const rocket = b.weapon === 'rpg';

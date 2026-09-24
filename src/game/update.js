@@ -8,6 +8,7 @@ import { between } from './state.js';
 const HIT_RADIUS = BODY_RADIUS + BULLET_RADIUS;
 const OUT_MARGIN = 40;
 const HURT_TIME = 0.2;
+const ENEMY_RAIL = { earth: RAIL_Y.isb, isb: RAIL_Y.earth };
 
 export function spawnProjectile(match, player, aim) {
   const weapon = WEAPONS[player.weapon];
@@ -18,21 +19,26 @@ export function spawnProjectile(match, player, aim) {
     x, y, previousX: x, previousY: y,
     vx: Math.cos(aim) * weapon.speed, vy: Math.sin(aim) * weapon.speed,
     life: BULLET_LIFE, damage: weapon.damage,
+    splash: weapon.splash, homing: weapon.homing, endY: ENEMY_RAIL[player.team],
   };
   match.projectiles.push(projectile);
   return projectile;
 }
 
-/** 전투기 기관포: 위(ISB 쪽)·아래(지구방위 쪽)로 한 발씩. 팀이 'jet'이라 양 팀 모두 맞는다. */
+/**
+ * 전투기 미사일: 위(ISB 쪽)·아래(지구방위 쪽)로 한 발씩. 팀이 'jet'이라 양 팀 모두 맞고,
+ * targetTeam은 유도 대상(향하는 쪽 레일의 팀), overCovers는 엄폐물을 넘어간다는 뜻이다.
+ */
 function fireJet(match, jet, events) {
-  const { gun } = JET;
-  for (const dy of [-1, 1]) {
-    const y = jet.y + dy * gun.offset;
+  const { missile } = JET;
+  for (const [dy, targetTeam] of [[-1, 'isb'], [1, 'earth']]) {
+    const y = jet.y + dy * missile.offset;
     match.projectiles.push({
       id: match.nextProjectileId++, ownerId: 'jet', team: 'jet', weapon: 'jet',
       x: jet.x, y, previousX: jet.x, previousY: y,
-      vx: 0, vy: dy * gun.speed,
-      life: BULLET_LIFE, damage: gun.damage,
+      vx: 0, vy: dy * missile.speed,
+      life: BULLET_LIFE, damage: missile.damage,
+      splash: missile.splash, homing: missile.homing, endY: RAIL_Y[targetTeam], targetTeam, overCovers: true,
     });
   }
   events.push({ type: 'jet-fire', x: jet.x, y: jet.y });
@@ -52,7 +58,7 @@ function updateJet(match, dt, events) {
     }
     jet.fireTimer -= dt;
     if (jet.fireTimer <= 0) {
-      jet.fireTimer += JET.gun.interval;
+      jet.fireTimer += JET.missile.interval;
       if (jet.x >= 0 && jet.x <= ARENA_WIDTH) fireJet(match, jet, events);
     }
     return;
@@ -61,14 +67,14 @@ function updateJet(match, dt, events) {
   if (match.jetTimer > 0) return;
   const dir = match.rng() < 0.5 ? 1 : -1;
   const x = dir > 0 ? -JET.length / 2 : ARENA_WIDTH + JET.length / 2;
-  match.jet = { x, previousX: x, y: JET.y, dir, fireTimer: JET.gun.interval };
+  match.jet = { x, previousX: x, y: JET.y, dir, fireTimer: JET.missile.interval };
 }
 
-/** 유도탄: 가장 가까운 살아있는 적 쪽으로 속도 방향을 turnRate 한도 안에서 꺾는다. 속력은 그대로. */
+/** 유도탄: 가장 가까운 살아있는 목표(targetTeam이 있으면 그 팀, 없으면 적) 쪽으로 turnRate 한도 안에서 꺾는다. 속력은 그대로. */
 function steer(match, b, turnRate, dt) {
   let target = null, best = Infinity;
   for (const p of match.players) {
-    if (!p.alive || p.team === b.team) continue;
+    if (!p.alive || (b.targetTeam ? p.team !== b.targetTeam : p.team === b.team)) continue;
     const d = Math.hypot(p.x - b.x, p.y - b.y);
     if (d < best) { best = d; target = p; }
   }
@@ -82,14 +88,12 @@ function steer(match, b, turnRate, dt) {
   b.vx = Math.cos(next) * speed; b.vy = Math.sin(next) * speed;
 }
 
-const ENEMY_RAIL = { earth: RAIL_Y.isb, isb: RAIL_Y.earth };
-
 /**
- * 아무것도 맞히지 못한 RPG가 경로 끝에 닿았는지. 적 레일 선을 넘은 지점, 경기장 밖으로 나간 지점,
- * 수명이 다한 지점 중 먼저인 곳의 좌표를 돌려준다. 아직이면 null.
+ * 아무것도 맞히지 못한 폭발탄(RPG·전투기 미사일)이 경로 끝에 닿았는지. 목표 레일 선(endY)을 넘은 지점,
+ * 경기장 밖으로 나간 지점, 수명이 다한 지점 중 먼저인 곳의 좌표를 돌려준다. 아직이면 null.
  */
 function rocketEnd(b) {
-  const railY = ENEMY_RAIL[b.team];
+  const railY = b.endY;
   if ((b.previousY - railY) * (b.y - railY) <= 0 && b.previousY !== railY) {
     const t = (railY - b.previousY) / (b.y - b.previousY);
     return { x: b.previousX + (b.x - b.previousX) * t, y: railY };
@@ -122,9 +126,8 @@ function damageCover(cover, amount, events) {
   if (cover.hp === 0) events.push({ type: 'cover-break', coverId: cover.id, x: cover.x, y: cover.y });
 }
 
-/** 탄 한 발이 엄폐물에 주는 피해. 전투기 탄은 0, RPG 직격은 배수 적용. */
+/** 탄 한 발이 엄폐물에 주는 피해. RPG 직격은 배수 적용. */
 function coverDamage(b) {
-  if (b.team === 'jet') return 0;
   return b.weapon === 'rpg' ? b.damage * COVER.rpgMultiplier : b.damage;
 }
 
@@ -149,14 +152,14 @@ function damage(victim, amount, team, events) {
 
 /** RPG 폭발: 직접 맞은 대상을 뺀 주변 살아있는 적과, 범위에 걸친 엄폐물에 범위 피해. */
 function explode(match, b, x, y, directVictim, directCover, events) {
-  const { splash } = WEAPONS[b.weapon];
+  const { splash } = b;
   events.push({ type: 'explode', x, y });
   for (const p of match.players) {
     if (!p.alive || p.team === b.team || p === directVictim) continue;
     if (Math.hypot(p.x - x, p.y - y) <= splash.radius + BODY_RADIUS) damage(p, splash.damage, b.team, events);
   }
   for (const c of match.covers) {
-    if (c.hp <= 0 || c === directCover) continue;
+    if (b.overCovers || c.hp <= 0 || c === directCover) continue;
     // 폭발 중심에서 엄폐물 사각형까지의 최단 거리
     const dx = Math.max(0, Math.abs(x - c.x) - c.w / 2);
     const dy = Math.max(0, Math.abs(y - c.y) - c.h / 2);
@@ -214,12 +217,11 @@ export function step(match, inputs, dt = TICK) {
   const contacts = [];
   for (const b of match.projectiles) {
     b.previousX = b.x; b.previousY = b.y;
-    const homing = WEAPONS[b.weapon]?.homing;
-    if (homing) steer(match, b, homing.turnRate, dt);
+    if (b.homing) steer(match, b, b.homing.turnRate, dt);
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.life -= dt;
     let earliest = null;
-    const coverHit = coverContact(match, b);
+    const coverHit = b.overCovers ? null : coverContact(match, b);
     if (coverHit) earliest = { t: coverHit.t, projectile: b, victim: null, cover: coverHit.cover };
     // 전투기 자신이 쏜 탄은 전투기에 막히지 않는다.
     if (match.jet && b.team !== 'jet') {
@@ -244,12 +246,12 @@ export function step(match, inputs, dt = TICK) {
     if (victim) damage(victim, b.damage, b.team, events);
     else events.push({ type: 'block', x, y });
     if (cover) damageCover(cover, coverDamage(b), events);
-    if (WEAPONS[b.weapon]?.splash) explode(match, b, x, y, victim, cover, events);
+    if (b.splash) explode(match, b, x, y, victim, cover, events);
   }
 
-  // 빗나간 RPG는 경로 끝에서 터져 주변에 폭발 피해를 준다.
+  // 빗나간 RPG·전투기 미사일은 경로 끝에서 터져 주변에 폭발 피해를 준다.
   for (const b of match.projectiles) {
-    if (removed.has(b) || !WEAPONS[b.weapon]?.splash) continue;
+    if (removed.has(b) || !b.splash) continue;
     const end = rocketEnd(b);
     if (!end) continue;
     removed.add(b);

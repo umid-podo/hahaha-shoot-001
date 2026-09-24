@@ -41,7 +41,9 @@ export const CHARACTERS = [
 
 /**
  * 전투기: 경기장 가운데를 가로로 지나가며 양 팀 탄환을 막는다. 판정은 동체·주익 두 사각형.
- * 화면 안에 있는 동안 gun.interval마다 위(ISB)·아래(지구방위) 양쪽으로 한 발씩 쏘며, 양 팀 모두 맞는다.
+ * 화면 안에 있는 동안 missile.interval마다 위(ISB)·아래(지구방위) 양쪽으로 미사일을 한 발씩 쏜다.
+ * 미사일은 RPG처럼 터져 폭발 피해를 주고(양 팀 모두 맞음), 향하는 쪽 레일의 가장 가까운 플레이어를 약하게 유도하며,
+ * 엄폐물 위로 넘어가 막히지도 깎지도 않는다. 빗나가면 목표 레일 선에서 터진다.
  */
 export const JET = {
   y: ARENA_HEIGHT / 2,
@@ -53,7 +55,10 @@ export const JET = {
     { w: 70, h: 190, dx: -15 }, // 주익
   ],
   length: 260,
-  gun: { interval: 1, damage: 20, speed: 640, offset: 60 },
+  missile: {
+    interval: 1, damage: 20, speed: 640, offset: 60,
+    splash: { damage: 8, radius: 120 }, homing: { turnRate: 0.8 },
+  },
 };
 
 /**

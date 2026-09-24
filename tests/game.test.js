@@ -291,11 +291,11 @@ test('엄폐물: 가운데 1개 + 팀마다 1개, 모든 탄을 막고 RPG는 �
   }
 });
 
-test('전투기는 1초마다 위·아래 양쪽으로 20 피해 탄을 쏘고, 양 팀 모두 맞음', () => {
+test('전투기는 1초마다 위·아래 양쪽으로 20 피해 미사일을 쏘고, 양 팀 모두 맞음', () => {
   const { match, inputs, P1, P2 } = playing(2);
   const x = 300; // 엄폐물이 없는 세로줄
   assert.ok(COVERS.every((c) => Math.abs(c.x - x) > c.w / 2 + 40));
-  match.jet = { x, previousX: x, y: JET.y, dir: 1, fireTimer: JET.gun.interval };
+  match.jet = { x, previousX: x, y: JET.y, dir: 1, fireTimer: JET.missile.interval };
   const events = [];
   for (let i = 0; i < 20; i++) { // 전투기를 제자리에 고정하고 사격 주기만 확인
     match.jet.x = match.jet.previousX = x;
@@ -311,12 +311,12 @@ test('전투기는 1초마다 위·아래 양쪽으로 20 피해 탄을 쏘고, 
   assert.equal(volleys, 2, '1초 간격');
   const hits = events.filter((e) => e.type === 'hit' && e.team === 'jet');
   assert.ok(hits.some((e) => e.victimId === 'P1') && hits.some((e) => e.victimId === 'P2'), '위·아래 모두');
-  assert.ok(hits.every((e) => e.damage === JET.gun.damage && e.damage === 20));
+  assert.ok(hits.every((e) => e.damage === JET.missile.damage && e.damage === 20));
   assert.equal(P1.hp, MAX_HP - 20 * volleys);
   assert.equal(P2.hp, MAX_HP - 20 * volleys);
 });
 
-test('전투기 탄은 전투기 자신에게 막히지 않고, 화면 밖에서는 쏘지 않음', () => {
+test('전투기 미사일은 전투기 자신에게 막히지 않고, 화면 밖에서는 쏘지 않음', () => {
   const { match, inputs } = playing(2);
   match.jet = { x: -100, previousX: -100, y: JET.y, dir: 1, fireTimer: 0 };
   const events = step(match, inputs);
@@ -371,7 +371,7 @@ test('내구도가 0이 되면 부서지고, 그 뒤로는 탄이 통과하며 �
   assert.equal(createMatch(2).covers.find((c) => c.id === 'center').hp, COVER.hp, '새 경기는 온전한 엄폐물');
 });
 
-test('RPG 폭발 범위는 근처 엄폐물도 깎음, 전투기 기관포는 막히기만 하고 깎지 않음', () => {
+test('RPG 폭발 범위는 근처 엄폐물도 깎음', () => {
   const { match, inputs, P1 } = playing(2, { P1: { weapon: 'rpg' } });
   const center = coverById(match, 'center');
   const near = coverById(match, 'isb');
@@ -381,13 +381,44 @@ test('RPG 폭발 범위는 근처 엄폐물도 깎음, 전투기 기관포는 �
   assert.equal(center.hp, COVER.hp - WEAPONS.rpg.damage * COVER.rpgMultiplier, '직격은 2배, 폭발 중복 없음');
   assert.equal(near.hp, COVER.hp - WEAPONS.rpg.splash.damage, '옆 엄폐물은 폭발 피해');
   assert.equal(COVERS.find((c) => c.id === 'isb').x, ARENA_WIDTH - 480, '설정값은 그대로');
+});
 
-  const other = playing(2);
-  const c = coverById(other.match, 'isb');
-  other.match.jet = { x: c.x, previousX: c.x, y: JET.y, dir: 1, fireTimer: 0 };
-  const events = run(other.match, other.inputs, 1);
-  assert.equal(c.hp, COVER.hp, '전투기 탄은 내구도 영향 없음');
-  assert.ok(events.some((e) => e.type === 'block'), '그래도 막힘');
+test('전투기 미사일은 엄폐물을 넘어 뒤의 플레이어를 직격하고, 엄폐물은 깎지 않음', () => {
+  const { match, inputs, P2 } = playing(2);
+  const c = coverById(match, 'isb');
+  P2.x = P2.previousX = c.x; // ISB 엄폐물 바로 뒤
+  match.jet = { x: c.x, previousX: c.x, y: JET.y, dir: 1, fireTimer: 0 };
+  const events = step(match, inputs);
+  match.jet = null; // 한 발만 확인
+  events.push(...run(match, inputs, 1));
+  assert.equal(c.hp, COVER.hp, '엄폐물 내구도 그대로');
+  assert.ok(!events.some((e) => e.type === 'block'), '막히지 않음');
+  assert.equal(P2.hp, MAX_HP - JET.missile.damage, '직격 20, 직격 대상은 폭발 중복 없음');
+  assert.ok(events.some((e) => e.type === 'explode'), '맞으면 터짐');
+});
+
+test('전투기 미사일은 향하는 쪽 레일의 플레이어를 살짝 유도, 빗나가면 레일에서 터져 주변 폭발 피해', () => {
+  const { match, inputs, P1, P2 } = playing(2);
+  const x = 300;
+  P2.x = P2.previousX = x + 60; // 직선 경로에서 비껴 있지만 유도로 맞힐 거리
+  P1.x = P1.previousX = x + 400; // 유도 한도 밖
+  match.jet = { x, previousX: x, y: JET.y, dir: 1, fireTimer: 0 };
+  const events = step(match, inputs);
+  match.jet = null;
+  events.push(...run(match, inputs, 1));
+  assert.equal(P2.hp, MAX_HP - JET.missile.damage, '위쪽 미사일은 유도로 직격');
+  assert.equal(P1.hp, MAX_HP, '아래쪽 미사일은 너무 멀어 빗나가고 폭발 범위 밖');
+  const booms = events.filter((e) => e.type === 'explode');
+  assert.equal(booms.length, 2);
+  assert.ok(booms.some((e) => Math.abs(e.y - RAIL_Y.earth) < 1e-6), '빗나간 쪽은 지구방위 레일 선에서 터짐');
+
+  const near = playing(2);
+  near.P1.x = near.P1.previousX = x + 160; // 유도로도 직격은 못 하지만 폭발 범위 안
+  near.match.jet = { x, previousX: x, y: JET.y, dir: 1, fireTimer: 0 };
+  step(near.match, near.inputs);
+  near.match.jet = null;
+  run(near.match, near.inputs, 1);
+  assert.equal(near.P1.hp, MAX_HP - JET.missile.splash.damage, '빗나가도 근처면 폭발 피해');
 });
 
 test('RPG 유도: 비껴 쏴도 가장 가까운 적 쪽으로 휘어 직격', () => {
