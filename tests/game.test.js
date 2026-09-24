@@ -266,8 +266,9 @@ test('카운트다운 중에는 조준해도 발사 없이 3초 뒤 시작', () 
   assert.equal(match.phase, 'playing');
 });
 
-test('RPG 탄속은 다른 총보다 훨씬 빠름', () => {
-  for (const id of ['rifle', 'pistol', 'dual']) assert.ok(WEAPONS.rpg.speed >= WEAPONS[id].speed * 2, id);
+test('RPG 탄속 900, 쿨타임 1초', () => {
+  assert.equal(WEAPONS.rpg.speed, 900);
+  assert.equal(WEAPONS.rpg.interval, 1);
 });
 
 test('엄폐물: 가운데 1개 + 팀마다 1개, 모든 탄을 막고 RPG는 그 자리에서 폭발', () => {
@@ -439,9 +440,9 @@ test('RPG 유도: 비껴 쏴도 가장 가까운 적 쪽으로 휘어 직격', (
 
 test('RPG 유도는 한도가 있어 너무 먼 적은 못 맞힘', () => {
   const { match, inputs, P1, P2 } = playing(2, { P1: { weapon: 'rpg' } });
-  P1.x = P1.previousX = 200; P2.x = P2.previousX = 600; // 400px 옆은 유도로 못 따라가고 폭발 범위 밖
+  P1.x = P1.previousX = 200; P2.x = P2.previousX = 800; // 600px 옆은 유도로 못 따라가고 폭발 범위 밖
   spawnProjectile(match, P1, UP);
-  run(match, inputs, 1);
+  run(match, inputs, 2);
   assert.equal(P2.hp, MAX_HP);
 });
 
@@ -471,4 +472,67 @@ test('레일에 닿기 전에 경기장을 벗어나거나 수명이 다한 RPG�
   const b = spawnProjectile(match, P1, UP);
   b.life = TICK / 2;
   assert.ok(step(match, inputs).some((e) => e.type === 'explode'), '수명 끝');
+});
+
+test('RPG는 조준 중에는 쏘지 않고 손을 뗄 때 한 발, 이후 1초 쿨타임', () => {
+  const { match, inputs } = playing(2, { P1: { weapon: 'rpg' } });
+  inputs.P1.aiming = true;
+  assert.equal(shots(run(match, inputs, 2), 'P1'), 0, '누르고 있는 동안은 발사 없음');
+  inputs.P1.aiming = false;
+  assert.equal(shots(step(match, inputs), 'P1'), 1, '손을 떼면 발사');
+  assert.equal(shots(run(match, inputs, 1), 'P1'), 0, '다시 누르지 않으면 없음');
+
+  // 쿨타임 중에 조준·해제하면 발사 없음
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  const quick = playing(2, { P1: { weapon: 'rpg' } });
+  quick.inputs.P1.aiming = true; step(quick.match, quick.inputs);
+  quick.inputs.P1.aiming = false; step(quick.match, quick.inputs); // 1발
+  quick.inputs.P1.aiming = true; run(quick.match, quick.inputs, 0.5);
+  quick.inputs.P1.aiming = false;
+  assert.equal(shots(step(quick.match, quick.inputs), 'P1'), 0, '0.5초 만에 뗀 건 쿨타임이라 무시');
+  quick.inputs.P1.aiming = true; run(quick.match, quick.inputs, 0.6);
+  quick.inputs.P1.aiming = false;
+  assert.equal(shots(step(quick.match, quick.inputs), 'P1'), 1, '1초가 지난 뒤 떼면 발사');
+});
+
+test('일시정지로 조준이 풀린 것은 발사로 치지 않음', () => {
+  const { match, inputs } = playing(2, { P1: { weapon: 'rpg' } });
+  inputs.P1.aiming = true;
+  step(match, inputs);
+  cancelInputs(inputs);
+  match.phase = 'countdown'; match.countdown = 0.05;
+  const events = run(match, inputs, 1);
+  assert.equal(shots(events, 'P1'), 0);
+});
+
+test('저격총: 한 발 피해 60, 1.5초 간격 자동 발사', () => {
+  assert.ok(WEAPONS.sniper.damage > WEAPONS.rpg.damage);
+  const { match, inputs, P1, P2 } = playing(2, { P1: { weapon: 'sniper' } });
+  bulletNear(match, P1, P2, UP);
+  step(match, inputs);
+  assert.equal(P2.hp, MAX_HP - 60);
+  const other = playing(2, { P1: { weapon: 'sniper' } });
+  other.inputs.P1.aiming = true;
+  assert.equal(shots(run(other.match, other.inputs, 3), 'P1'), 2, '0초·1.5초');
+});
+
+test('경기 중 무기 교체: 다음 무기로 순환, 교체 직후 잠깐 발사 불가, 쓰러지면 교체 불가', () => {
+  const { match, inputs, P1 } = playing(2, { P1: { weapon: 'rifle' } });
+  const order = [];
+  for (let i = 0; i < 5; i++) {
+    inputs.P1.swap = true;
+    const ev = step(match, inputs);
+    assert.ok(ev.some((e) => e.type === 'swap' && e.playerId === 'P1'));
+    assert.equal(inputs.P1.swap, false, '한 번 누르면 한 번만');
+    order.push(P1.weapon);
+  }
+  assert.deepEqual(order, ['pistol', 'dual', 'rpg', 'sniper', 'rifle']);
+  inputs.P1.aiming = true;
+  assert.equal(shots(run(match, inputs, 0.3), 'P1'), 0, '교체 직후 0.4초는 쏘지 못함');
+  assert.ok(shots(run(match, inputs, 0.2), 'P1') >= 1);
+
+  P1.alive = false; P1.hp = 0;
+  inputs.P1.swap = true;
+  step(match, inputs);
+  assert.equal(P1.weapon, 'rifle');
 });

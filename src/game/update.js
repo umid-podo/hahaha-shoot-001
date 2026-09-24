@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, MAX_SPEED, BODY_RADIUS, BULLET_RADIUS,
-  MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, JET, COVER,
+  MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, WEAPON_IDS, SWAP_TIME, JET, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
@@ -167,6 +167,14 @@ function explode(match, b, x, y, directVictim, directCover, events) {
   }
 }
 
+/** 다음 무기로 교체. 점사는 끊기고 SWAP_TIME 동안은 쏘지 못한다. */
+function swapWeapon(p, events) {
+  p.weapon = WEAPON_IDS[(WEAPON_IDS.indexOf(p.weapon) + 1) % WEAPON_IDS.length];
+  p.burstLeft = 0;
+  p.cooldown = Math.max(p.cooldown, SWAP_TIME);
+  events.push({ type: 'swap', playerId: p.id, weapon: p.weapon });
+}
+
 function fire(match, p, events) {
   spawnProjectile(match, p, p.aim);
   events.push({ type: 'fire', playerId: p.id, weapon: p.weapon });
@@ -179,6 +187,8 @@ function fire(match, p, events) {
 export function step(match, inputs, dt = TICK) {
   const events = [];
   if (match.phase === 'countdown') {
+    // 일시정지 해제 등으로 조준이 끊긴 것을 '손을 뗌'으로 보지 않도록 초기화
+    for (const p of match.players) p.wasAiming = false;
     match.countdown -= dt;
     if (match.countdown <= 0) match.phase = 'playing';
     return events;
@@ -193,6 +203,10 @@ export function step(match, inputs, dt = TICK) {
     p.hurt = Math.max(0, p.hurt - dt);
     if (!p.alive) continue;
     const input = inputs[p.id];
+    if (input.swap) {
+      input.swap = false;
+      swapWeapon(p, events);
+    }
     const weapon = WEAPONS[p.weapon];
     p.cooldown = Math.max(0, p.cooldown - dt);
     p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * MAX_SPEED * dt));
@@ -205,12 +219,13 @@ export function step(match, inputs, dt = TICK) {
         p.burstLeft--;
         p.burstTimer += weapon.burstGap;
       }
-    } else if (input.aiming && p.cooldown <= 0) {
+    } else if (p.cooldown <= 0 && (weapon.trigger === 'release' ? p.wasAiming && !input.aiming : input.aiming)) {
       fire(match, p, events);
       p.cooldown = weapon.interval;
       p.burstLeft = weapon.burst - 1;
       p.burstTimer = weapon.burstGap ?? 0;
     }
+    p.wasAiming = input.aiming;
   }
 
   const removed = new Set();
