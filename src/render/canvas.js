@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, BODY_RADIUS, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS, COVERS,
+  MAX_HP, WEAPONS, COVER,
 } from '../game/config.js';
 
 const INK = '#30353E';
@@ -17,8 +17,8 @@ function hpColor(ratio) {
   return ratio > 0.5 ? '#3FAE4A' : ratio > 0.25 ? '#F2B233' : '#D9443A';
 }
 
-function drawHpBar(ctx, x, y, w, h, hp) {
-  const ratio = hp / MAX_HP;
+function drawHpBar(ctx, x, y, w, h, hp, max = MAX_HP) {
+  const ratio = hp / max;
   ctx.fillStyle = 'rgba(48,53,62,0.35)';
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, h / 2);
@@ -35,6 +35,17 @@ function drawHpBar(ctx, x, y, w, h, hp) {
   ctx.roundRect(x, y, w, h, h / 2);
   ctx.stroke();
 }
+
+// 엄폐물 금: 크기에 대한 비율 좌표 폴리라인. 내구도가 75%·50%·25% 아래로 내려갈 때마다 한 줄씩 늘어난다.
+const CRACKS = [
+  [[0.18, 0], [0.24, 0.35], [0.16, 0.6], [0.22, 1]],
+  [[0.62, 0], [0.55, 0.4], [0.66, 0.7], [0.6, 1]],
+  [[0.4, 1], [0.44, 0.55], [0.36, 0.3], [0.42, 0], [0.84, 0.25], [0.9, 0.7]],
+];
+// 부서질 때 흩어지는 파편: [방향 각도, 속도, 크기]
+const DEBRIS = [[-2.6, 160, 14], [-1.9, 220, 10], [-1.2, 190, 16], [-0.4, 150, 12], [0.5, 200, 10],
+  [1.3, 170, 14], [2.1, 210, 12], [2.9, 140, 16]];
+const DEBRIS_TIME = 0.6;
 
 /** manifest와 필수 이미지를 불러온다. 실패하면 파일 경로를 담은 Error를 던진다. */
 export async function loadAssets() {
@@ -182,9 +193,10 @@ export function createRenderer(canvas, wrap, assets) {
     });
   }
 
-  /** 엄폐물: 콘크리트 방호벽. 팀 진영 엄폐물은 윗면에 팀 색 띠를 두른다. */
-  function drawCovers() {
-    for (const c of COVERS) {
+  /** 엄폐물: 콘크리트 방호벽. 팀 진영 엄폐물은 윗면에 팀 색 띠를 두른다. 깎일수록 금이 늘고 위에 내구도 바를 띄운다. */
+  function drawCovers(covers) {
+    for (const c of covers) {
+      if (c.hp <= 0) continue;
       const x = c.x - c.w / 2, y = c.y - c.h / 2;
       ctx.fillStyle = 'rgba(48,53,62,0.25)';
       ctx.beginPath();
@@ -206,7 +218,38 @@ export function createRenderer(canvas, wrap, assets) {
         ctx.moveTo(bx, y + 14); ctx.lineTo(bx, y + c.h - 4);
       }
       ctx.stroke();
+
+      const ratio = c.hp / COVER.hp;
+      const stage = ratio < 0.25 ? 3 : ratio < 0.5 ? 2 : ratio < 0.75 ? 1 : 0;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      for (const crack of CRACKS.slice(0, stage)) {
+        ctx.beginPath();
+        crack.forEach(([u, v], i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, x + u * c.w, y + v * c.h));
+        ctx.stroke();
+      }
+      if (c.hp < COVER.hp) drawHpBar(ctx, x + 10, y - 14, c.w - 20, 8, c.hp, COVER.hp);
     }
+  }
+
+  function drawDebris(fx, reducedMotion) {
+    const k = fx.age / DEBRIS_TIME;
+    ctx.globalAlpha = 1 - k;
+    ctx.fillStyle = '#8F8A80';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
+    for (const [angle, speed, size] of DEBRIS) {
+      const d = reducedMotion ? 20 : speed * fx.age;
+      const px = fx.x + Math.cos(angle) * d, py = fx.y + Math.sin(angle) * d + (reducedMotion ? 0 : 200 * fx.age * fx.age);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(reducedMotion ? angle : angle + fx.age * 8);
+      ctx.fillRect(-size / 2, -size / 2, size, size);
+      ctx.strokeRect(-size / 2, -size / 2, size, size);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
   }
 
   function drawJet(jet) {
@@ -246,6 +289,7 @@ export function createRenderer(canvas, wrap, assets) {
         if (e.type === 'hit') effects.push({ kind: 'hit', x: e.x, y: e.y, damage: e.damage, age: 0 });
         if (e.type === 'block') effects.push({ kind: 'block', x: e.x, y: e.y, age: 0 });
         if (e.type === 'explode') effects.push({ kind: 'explode', x: e.x, y: e.y, age: 0 });
+        if (e.type === 'cover-break') effects.push({ kind: 'debris', x: e.x, y: e.y, age: 0 });
       }
     },
     reset() { effects = []; for (const id of Object.keys(recoil)) delete recoil[id]; },
@@ -264,7 +308,7 @@ export function createRenderer(canvas, wrap, assets) {
       }
       ctx.globalAlpha = 1;
 
-      drawCovers();
+      drawCovers(match.covers);
 
       const paused = match.phase === 'paused';
       for (const p of match.players) {
@@ -274,14 +318,23 @@ export function createRenderer(canvas, wrap, assets) {
 
       for (const b of match.projectiles) {
         if (b.weapon === 'jet') {
-          // 전투기 기관포탄: 팀 탄과 구분되는 붉은 예광탄
+          // 전투기 미사일: 팀 로켓과 구분되는 붉은 동체 + 흰 테두리, 꼬리 불꽃
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate(Math.atan2(b.vy, b.vx));
+          ctx.fillStyle = '#FFB23F';
+          ctx.beginPath();
+          ctx.moveTo(-16, -5); ctx.lineTo(-30 - Math.random() * 8, 0); ctx.lineTo(-16, 5);
+          ctx.fill();
           ctx.fillStyle = '#D9443A';
           ctx.strokeStyle = '#fff';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.roundRect(b.x - 5, b.y - 14, 10, 28, 5);
+          ctx.moveTo(20, 0); ctx.lineTo(10, -7); ctx.lineTo(-16, -7); ctx.lineTo(-16, 7); ctx.lineTo(10, 7);
+          ctx.closePath();
           ctx.fill();
           ctx.stroke();
+          ctx.restore();
           continue;
         }
         const rocket = b.weapon === 'rpg';
@@ -299,6 +352,10 @@ export function createRenderer(canvas, wrap, assets) {
       if (!paused) for (const fx of effects) fx.age += dt;
       effects = effects.filter((fx) => fx.age < EFFECT_TIME);
       for (const fx of effects) {
+        if (fx.kind === 'debris') {
+          if (fx.age < DEBRIS_TIME) drawDebris(fx, reducedMotion);
+          continue;
+        }
         if (fx.kind === 'explode') {
           if (fx.age >= EXPLODE_TIME) continue;
           const k = fx.age / EXPLODE_TIME;
