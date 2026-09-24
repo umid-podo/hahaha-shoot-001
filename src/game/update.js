@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MAX_SPEED, BODY_RADIUS, BULLET_RADIUS,
-  MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, JET, COVERS,
+  MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, JET, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
@@ -64,16 +64,31 @@ function updateJet(match, dt, events) {
   match.jet = { x, previousX: x, y: JET.y, dir, fireTimer: JET.gun.interval };
 }
 
-/** 탄환이 이번 틱에 엄폐물에 닿는 가장 이른 시각. */
-function coverContactTime(b) {
+/** 탄환이 이번 틱에 부서지지 않은 엄폐물에 닿는 가장 이른 접촉 { t, cover }. 없으면 null. */
+function coverContact(match, b) {
   let earliest = null;
-  for (const c of COVERS) {
+  for (const c of match.covers) {
+    if (c.hp <= 0) continue;
     const t = segmentRectTime(
       b.previousX - c.x, b.previousY - c.y, b.x - c.x, b.y - c.y,
       c.w / 2 + BULLET_RADIUS, c.h / 2 + BULLET_RADIUS);
-    if (t !== null && (earliest === null || t < earliest)) earliest = t;
+    if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, cover: c };
   }
   return earliest;
+}
+
+/** 엄폐물 내구도 감소. 0이 되면 부서짐 이벤트를 낸다. */
+function damageCover(cover, amount, events) {
+  if (cover.hp <= 0 || amount <= 0) return;
+  cover.hp = Math.max(0, cover.hp - amount);
+  events.push({ type: 'cover-hit', coverId: cover.id, damage: amount });
+  if (cover.hp === 0) events.push({ type: 'cover-break', coverId: cover.id, x: cover.x, y: cover.y });
+}
+
+/** 탄 한 발이 엄폐물에 주는 피해. 전투기 탄은 0, RPG 직격은 배수 적용. */
+function coverDamage(b) {
+  if (b.team === 'jet') return 0;
+  return b.weapon === 'rpg' ? b.damage * COVER.rpgMultiplier : b.damage;
 }
 
 /** 탄환이 이번 틱에 전투기에 닿는 가장 이른 시각. 전투기 진행 방향에 따라 판정도 좌우 반전된다. */
@@ -95,13 +110,20 @@ function damage(victim, amount, team, events) {
   events.push({ type: 'hit', x: victim.x, y: victim.y, team, damage: amount, victimId: victim.id });
 }
 
-/** RPG 폭발: 직접 맞은 대상을 뺀 주변 살아있는 적에게 범위 피해. */
-function explode(match, b, x, y, directVictim, events) {
+/** RPG 폭발: 직접 맞은 대상을 뺀 주변 살아있는 적과, 범위에 걸친 엄폐물에 범위 피해. */
+function explode(match, b, x, y, directVictim, directCover, events) {
   const { splash } = WEAPONS[b.weapon];
   events.push({ type: 'explode', x, y });
   for (const p of match.players) {
     if (!p.alive || p.team === b.team || p === directVictim) continue;
     if (Math.hypot(p.x - x, p.y - y) <= splash.radius + BODY_RADIUS) damage(p, splash.damage, b.team, events);
+  }
+  for (const c of match.covers) {
+    if (c.hp <= 0 || c === directCover) continue;
+    // 폭발 중심에서 엄폐물 사각형까지의 최단 거리
+    const dx = Math.max(0, Math.abs(x - c.x) - c.w / 2);
+    const dy = Math.max(0, Math.abs(y - c.y) - c.h / 2);
+    if (Math.hypot(dx, dy) <= splash.radius) damageCover(c, splash.damage, events);
   }
 }
 
@@ -112,7 +134,7 @@ function fire(match, p, events) {
 
 /**
  * 고정 틱 한 번. 렌더·사운드용 이벤트 목록을 돌려준다.
- * 순서: 전투기(이동·사격) → 플레이어 이동·자동 발사 → 탄환 이동·충돌(엄폐물·전투기·적) → 쓰러짐·승패.
+ * 순서: 전투기(이동·사격) → 플레이어 이동·자동 발사 → 탄환 이동·충돌(엄폐물·전투기·적, 엄폐물 내구도) → 쓰러짐·승패.
  */
 export function step(match, inputs, dt = TICK) {
   const events = [];
@@ -158,8 +180,8 @@ export function step(match, inputs, dt = TICK) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.life -= dt;
     let earliest = null;
-    const coverT = coverContactTime(b);
-    if (coverT !== null) earliest = { t: coverT, projectile: b, victim: null };
+    const coverHit = coverContact(match, b);
+    if (coverHit) earliest = { t: coverHit.t, projectile: b, victim: null, cover: coverHit.cover };
     // 전투기 자신이 쏜 탄은 전투기에 막히지 않는다.
     if (match.jet && b.team !== 'jet') {
       const t = jetContactTime(match.jet, b);
@@ -175,13 +197,15 @@ export function step(match, inputs, dt = TICK) {
   }
   contacts.sort((a, b) => a.t - b.t || a.projectile.id - b.projectile.id);
 
-  for (const { t, projectile: b, victim } of contacts) {
+  // 같은 틱에 먼저 맞은 탄으로 엄폐물이 부서져도, 이미 그 엄폐물에 닿은 나머지 탄은 막힌 것으로 처리한다.
+  for (const { t, projectile: b, victim, cover } of contacts) {
     removed.add(b);
     const x = b.previousX + (b.x - b.previousX) * t;
     const y = b.previousY + (b.y - b.previousY) * t;
     if (victim) damage(victim, b.damage, b.team, events);
     else events.push({ type: 'block', x, y });
-    if (WEAPONS[b.weapon]?.splash) explode(match, b, x, y, victim, events);
+    if (cover) damageCover(cover, coverDamage(b), events);
+    if (WEAPONS[b.weapon]?.splash) explode(match, b, x, y, victim, cover, events);
   }
 
   // 같은 틱의 피해를 모두 반영한 뒤 쓰러짐을 판정한다.

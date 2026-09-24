@@ -95,6 +95,8 @@ export function playEvents(events) {
     if (e.type === 'hit') tone(880, 0.07, 'square');
     if (e.type === 'block') tone(300, 0.05, 'triangle');
     if (e.type === 'explode') { gunshot({ filter: 250, q: 0.4, decay: 0.6, thump: 90, volume: 1.4 }); tone(60, 0.4, 'square', 0.05); }
+    if (e.type === 'cover-hit') tone(180, 0.04, 'triangle');
+    if (e.type === 'cover-break') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 70, volume: 1.3 }); tone(120, 0.2, 'sawtooth', 0.04); }
     if (e.type === 'down') [660, 440, 220].forEach((f, i) => tone(f, 0.12, 'square', i * 0.1));
     if (e.type === 'result') [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', i * 0.13 + 0.3));
   }

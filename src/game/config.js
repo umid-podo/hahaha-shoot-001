@@ -52,7 +52,12 @@ export const JET = {
   gun: { interval: 1, damage: 20, speed: 640, offset: 60 },
 };
 
-/** 엄폐물: 모든 탄환(아군·적·전투기)을 막는 고정 사각형. 가운데 1개 + 팀 진영마다 1개(점대칭 배치). */
+/**
+ * 엄폐물: 모든 탄환(아군·적·전투기)을 막는 고정 사각형. 가운데 1개 + 팀 진영마다 1개(점대칭 배치).
+ * 내구도 hp가 0이 되면 부서져 그 경기 동안 사라진다. 양 팀 총알과 RPG 폭발 범위가 내구도를 깎고,
+ * RPG 직격은 rpgMultiplier배 피해를 준다. 전투기 기관포는 막히기만 하고 내구도를 깎지 않는다.
+ */
+export const COVER = { hp: 200, rpgMultiplier: 2 };
 export const COVERS = [
   { id: 'center', x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2, w: 200, h: 48 },
   { id: 'earth', team: 'earth', x: 480, y: RAIL_Y.earth - 160, w: 170, h: 44 },

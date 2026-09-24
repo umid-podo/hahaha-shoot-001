@@ -1,4 +1,4 @@
-import { RAIL_Y, COUNTDOWN, MAX_HP, CHARACTERS, WEAPONS, JET } from './config.js';
+import { RAIL_Y, COUNTDOWN, MAX_HP, CHARACTERS, WEAPONS, JET, COVERS, COVER } from './config.js';
 
 // 자리(P1~P4)가 팀을 정한다. 캐릭터·총기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값이다.
 export const SLOTS = [
@@ -55,6 +55,7 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
   return {
     phase: 'countdown', countdown: COUNTDOWN,
     players, projectiles: [], nextProjectileId: 1,
+    covers: COVERS.map((c) => ({ ...c, hp: COVER.hp })),
     jet: null, jetTimer: between(rng, JET.firstDelay), rng,
     tick: 0, winner: null,
   };

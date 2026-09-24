@@ -5,7 +5,7 @@ import { createMatch, createInputs, cancelInputs } from '../src/game/state.js';
 import { step, spawnProjectile } from '../src/game/update.js';
 import { segmentRectTime } from '../src/game/collision.js';
 import { aimFromDrag, moveAxisFromDrag } from '../src/input/pointer.js';
-import { MIN_X, MAX_X, RAIL_Y, TICK, MAX_HP, WEAPONS, JET, COVERS, ARENA_WIDTH } from '../src/game/config.js';
+import { MIN_X, MAX_X, RAIL_Y, TICK, MAX_HP, WEAPONS, JET, COVERS, COVER, ARENA_WIDTH } from '../src/game/config.js';
 
 function playing(count, loadout) {
   const match = createMatch(count, loadout, 1);
@@ -326,4 +326,66 @@ test('전투기 탄은 전투기 자신에게 막히지 않고, 화면 밖에서
   assert.equal(ev.filter((e) => e.type === 'jet-fire').length, 1);
   assert.equal(match.projectiles.filter((b) => b.team === 'jet').length, 2);
   assert.equal(ev.filter((e) => e.type === 'block').length, 0);
+});
+
+/** 엄폐물 바로 아래(지구방위 쪽)에서 위로 날아가는 탄을 놓는다. */
+function bulletBelowCover(match, shooter, cover, dx = 0) {
+  const b = spawnProjectile(match, shooter, UP);
+  b.x = b.previousX = cover.x + dx;
+  b.y = b.previousY = cover.y + cover.h / 2 + 8;
+  return b;
+}
+const coverById = (match, id) => match.covers.find((c) => c.id === id);
+
+test('엄폐물 내구도 200: 총알만큼 깎이고 RPG 직격은 2배', () => {
+  const { match, inputs, P1 } = playing(2, { P1: { weapon: 'rifle' } });
+  const cover = coverById(match, 'center');
+  assert.equal(cover.hp, COVER.hp);
+  assert.equal(COVER.hp, 200);
+  bulletBelowCover(match, P1, cover);
+  const events = step(match, inputs);
+  assert.equal(cover.hp, 200 - 5);
+  assert.ok(events.some((e) => e.type === 'cover-hit' && e.coverId === 'center'));
+  P1.weapon = 'rpg';
+  bulletBelowCover(match, P1, cover);
+  step(match, inputs);
+  assert.equal(cover.hp, 200 - 5 - 80);
+});
+
+test('내구도가 0이 되면 부서지고, 그 뒤로는 탄이 통과하며 다시 생기지 않음', () => {
+  const { match, inputs, P1, P2 } = playing(2, { P1: { weapon: 'rpg' } });
+  const cover = coverById(match, 'center');
+  cover.hp = 60;
+  bulletBelowCover(match, P1, cover);
+  const events = step(match, inputs);
+  assert.equal(cover.hp, 0);
+  assert.ok(events.some((e) => e.type === 'cover-break' && e.coverId === 'center'));
+  P1.weapon = 'pistol';
+  P2.x = P2.previousX = cover.x;
+  const b = bulletBelowCover(match, P1, cover);
+  step(match, inputs);
+  assert.ok(match.projectiles.includes(b), '부서진 자리는 통과');
+  run(match, inputs, 3);
+  assert.equal(P2.hp, MAX_HP - 10, '뒤의 적이 맞음');
+  assert.equal(cover.hp, 0, '재생성 없음');
+  assert.equal(createMatch(2).covers.find((c) => c.id === 'center').hp, COVER.hp, '새 경기는 온전한 엄폐물');
+});
+
+test('RPG 폭발 범위는 근처 엄폐물도 깎음, 전투기 기관포는 막히기만 하고 깎지 않음', () => {
+  const { match, inputs, P1 } = playing(2, { P1: { weapon: 'rpg' } });
+  const center = coverById(match, 'center');
+  const near = coverById(match, 'isb');
+  near.x = center.x + center.w / 2 + near.w / 2 + 60; near.y = center.y; // 경기 상태에서만 옆으로 옮겨 붙인다
+  bulletBelowCover(match, P1, center, center.w / 2 - 10);
+  step(match, inputs);
+  assert.equal(center.hp, COVER.hp - WEAPONS.rpg.damage * COVER.rpgMultiplier, '직격은 2배, 폭발 중복 없음');
+  assert.equal(near.hp, COVER.hp - WEAPONS.rpg.splash.damage, '옆 엄폐물은 폭발 피해');
+  assert.equal(COVERS.find((c) => c.id === 'isb').x, ARENA_WIDTH - 480, '설정값은 그대로');
+
+  const other = playing(2);
+  const c = coverById(other.match, 'isb');
+  other.match.jet = { x: c.x, previousX: c.x, y: JET.y, dir: 1, fireTimer: 0 };
+  const events = run(other.match, other.inputs, 1);
+  assert.equal(c.hp, COVER.hp, '전투기 탄은 내구도 영향 없음');
+  assert.ok(events.some((e) => e.type === 'block'), '그래도 막힘');
 });
