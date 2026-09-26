@@ -1,6 +1,6 @@
 import {
-  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, MAX_SPEED, BULLET_RADIUS,
-  MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, SWAP_TIME, SLOT_ORDER, SLOT_WEAPON, JET, COVER,
+  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, BULLET_RADIUS,
+  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, SLOT_WEAPON, JET, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
@@ -12,16 +12,18 @@ const LASER_LENGTH = 2400;
 // 0.1초 같은 간격이 1/60초 틱의 부동소수 오차로 한 틱 밀리지 않도록 쓰는 여유
 const EPS = 1e-9;
 
-export function spawnProjectile(match, player, aim) {
-  const weapon = WEAPONS[player.weapon];
+export function spawnProjectile(match, player, aim, weaponId = player.weapon) {
+  const weapon = WEAPONS[weaponId];
   const x = player.x + Math.cos(aim) * MUZZLE_OFFSET;
   const y = player.y + Math.sin(aim) * MUZZLE_OFFSET;
   const projectile = {
     id: match.nextProjectileId++, ownerId: player.id, team: player.team, weapon: weapon.id,
     x, y, previousX: x, previousY: y,
     vx: Math.cos(aim) * weapon.speed, vy: Math.sin(aim) * weapon.speed,
-    life: BULLET_LIFE, damage: weapon.damage,
+    life: RULES.bulletLife, damage: weapon.damage,
     splash: weapon.splash, homing: weapon.homing, endY: ENEMY_RAIL[player.team],
+    // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용)
+    connected: false,
     // 던진 무기는 아무것에도 닿지 않고 목표 레일 선에서 터진다. startY는 포물선 표시용.
     thrown: !!weapon.thrown, overCovers: !!weapon.thrown, startY: y,
   };
@@ -41,7 +43,7 @@ function fireJet(match, jet, events) {
       id: match.nextProjectileId++, ownerId: 'jet', team: 'jet', weapon: 'jet',
       x: jet.x, y, previousX: jet.x, previousY: y,
       vx: 0, vy: dy * missile.speed,
-      life: BULLET_LIFE, damage: missile.damage,
+      life: RULES.bulletLife, damage: missile.damage, connected: false,
       splash: missile.splash, endY: RAIL_Y[targetTeam], overCovers: true,
     });
   }
@@ -122,10 +124,20 @@ function coverContact(match, b) {
   return earliest;
 }
 
-/** 엄폐물 내구도 감소. 0이 되면 부서짐 이벤트를 낸다. */
-function damageCover(cover, amount, events) {
+/** 쏜 사람·무기의 통계 칸. 전투기처럼 플레이어가 아니면 null. */
+function weaponStats(match, ownerId, weaponId) {
+  const stats = match.stats?.[ownerId];
+  if (!stats) return null;
+  return (stats.weapons[weaponId] ??= { shots: 0, hits: 0, damage: 0, coverDamage: 0 });
+}
+
+/** 엄폐물 내구도 감소. 0이 되면 부서짐 이벤트를 낸다. shot은 깎은 탄(통계용). */
+function damageCover(match, cover, amount, shot, events) {
   if (cover.steel || cover.hp <= 0 || amount <= 0) return; // 강철 엄폐물은 부서지지 않는다
+  const dealt = Math.min(cover.hp, amount);
   cover.hp = Math.max(0, cover.hp - amount);
+  const ws = weaponStats(match, shot.ownerId, shot.weapon);
+  if (ws) ws.coverDamage += dealt;
   events.push({ type: 'cover-hit', coverId: cover.id, damage: amount });
   if (cover.hp === 0) events.push({ type: 'cover-break', coverId: cover.id, x: cover.x, y: cover.y });
 }
@@ -135,23 +147,27 @@ function coverDamage(b) {
   return b.weapon === 'rpg' ? b.damage * COVER.rpgMultiplier : b.damage;
 }
 
-/** 탄환이 이번 틱에 전투기에 닿는 가장 이른 시각. 전투기 진행 방향에 따라 판정도 좌우 반전된다. */
-function jetContactTime(jet, b) {
-  let earliest = null;
-  for (const box of JET.hitboxes) {
-    const ox = jet.dir * box.dx;
-    const t = segmentRectTime(
-      b.previousX - jet.previousX - ox, b.previousY - jet.y, b.x - jet.x - ox, b.y - jet.y,
-      box.w / 2 + BULLET_RADIUS, box.h / 2 + BULLET_RADIUS);
-    if (t !== null && (earliest === null || t < earliest)) earliest = t;
-  }
-  return earliest;
-}
-
-function damage(victim, amount, team, events) {
+/**
+ * 플레이어 피해. shot은 피해를 준 탄(또는 레이저 한 발) { team, ownerId, weapon, connected }이며,
+ * 쏜 사람의 무기별 피해·명중과 맞은 사람의 받은 피해를 통계에 더한다. 통계의 피해는 실제로 깎인 체력이다.
+ */
+function damage(match, victim, amount, shot, events) {
+  const dealt = Math.min(victim.hp, amount);
   victim.hp = Math.max(0, victim.hp - amount);
   victim.hurt = HURT_TIME;
-  events.push({ type: 'hit', x: victim.x, y: victim.y, team, damage: amount, victimId: victim.id });
+  events.push({ type: 'hit', x: victim.x, y: victim.y, team: shot.team, damage: amount, victimId: victim.id });
+  const ws = weaponStats(match, shot.ownerId, shot.weapon);
+  if (ws) {
+    ws.damage += dealt;
+    if (!shot.connected) ws.hits++;
+  }
+  shot.connected = true;
+  const taken = match.stats?.[victim.id];
+  if (taken) {
+    taken.taken += dealt;
+    taken.takenFrom[shot.ownerId] = (taken.takenFrom[shot.ownerId] ?? 0) + dealt;
+    if (victim.hp <= 0 && !taken.killedBy) taken.killedBy = { ownerId: shot.ownerId, weapon: shot.weapon };
+  }
 }
 
 /** RPG 폭발: 직접 맞은 대상을 뺀 주변 살아있는 적과, 범위에 걸친 엄폐물에 범위 피해. */
@@ -160,7 +176,7 @@ function explode(match, b, x, y, directVictim, directCover, events) {
   events.push({ type: 'explode', x, y, radius: splash.radius });
   for (const p of match.players) {
     if (!p.alive || p.team === b.team || p === directVictim) continue;
-    if (Math.hypot(p.x - x, p.y - y) <= splash.radius + p.radius) damage(p, splash.damage, b.team, events);
+    if (Math.hypot(p.x - x, p.y - y) <= splash.radius + p.radius) damage(match, p, splash.damage, b, events);
   }
   for (const c of match.covers) {
     // 전투기 미사일은 엄폐물을 깎지 않는다. 수류탄은 엄폐물을 넘어 날아가지만 폭발은 엄폐물도 깎는다.
@@ -168,18 +184,34 @@ function explode(match, b, x, y, directVictim, directCover, events) {
     // 폭발 중심에서 엄폐물 사각형까지의 최단 거리
     const dx = Math.max(0, Math.abs(x - c.x) - c.w / 2);
     const dy = Math.max(0, Math.abs(y - c.y) - c.h / 2);
-    if (Math.hypot(dx, dy) <= splash.radius) damageCover(c, splash.damage, events);
+    if (Math.hypot(dx, dy) <= splash.radius) damageCover(match, c, splash.damage, b, events);
   }
 }
 
-/** 다음 무기로 교체. 점사는 끊기고 SWAP_TIME 동안은 쏘지 못한다. */
-/** 주무기 → 보조무기 → 수류탄 → 주무기 순으로 전환. 점사는 끊기고 SWAP_TIME 동안은 쏘지 못한다. */
-function swapWeapon(p, events) {
-  p.slot = SLOT_ORDER[(SLOT_ORDER.indexOf(p.slot) + 1) % SLOT_ORDER.length];
-  p.weapon = p.slot === 'primary' ? p.primary : SLOT_WEAPON[p.slot];
+/** 무기 칸(주무기·보조무기)으로 전환. 이미 든 칸이면 아무 일 없다. 점사는 끊기고 RULES.swapTime 동안은 쏘지 못한다. */
+function selectSlot(p, slot, events) {
+  if (p.slot === slot || !SLOT_ORDER.includes(slot)) return;
+  p.slot = slot;
+  p.weapon = slot === 'primary' ? p.primary : SLOT_WEAPON[slot];
   p.burstLeft = 0;
-  p.cooldown = Math.max(p.cooldown, SWAP_TIME);
+  p.cooldown = Math.max(p.cooldown, RULES.swapTime);
   events.push({ type: 'swap', playerId: p.id, weapon: p.weapon, slot: p.slot });
+}
+
+/** 주무기 ↔ 보조무기 순환 전환 */
+function swapWeapon(p, events) {
+  selectSlot(p, SLOT_ORDER[(SLOT_ORDER.indexOf(p.slot) + 1) % SLOT_ORDER.length], events);
+}
+
+/** 아이템(수류탄): 든 무기와 상관없이 지금 조준 방향으로 바로 던진다. 쿨타임 중이면 무시. */
+function throwGrenade(match, p, events) {
+  if (p.grenadeCooldown > 0) return;
+  const grenade = WEAPONS.grenade;
+  p.grenadeCooldown = grenade.interval;
+  spawnProjectile(match, p, p.aim, grenade.id);
+  const ws = weaponStats(match, p.id, grenade.id);
+  if (ws) ws.shots++;
+  events.push({ type: 'fire', playerId: p.id, weapon: grenade.id });
 }
 
 /** 레이저: 조준 방향으로 즉시 뻗어 가장 먼저 닿는 엄폐물·전투기·적에서 멈춘다. */
@@ -191,10 +223,7 @@ function fireLaser(match, p, weapon, events) {
   let best = { t: 1 };
   const cover = coverContact(match, ray);
   if (cover) best = cover;
-  if (match.jet) {
-    const t = jetContactTime({ ...match.jet, previousX: match.jet.x }, ray);
-    if (t !== null && t < best.t) best = { t, jet: true };
-  }
+  // 전투기는 하늘 높이 날아 레이저도 막지 않는다.
   for (const q of match.players) {
     if (!q.alive || q.team === p.team) continue;
     const t = segmentCircleTime(x0 - q.x, y0 - q.y, x1 - q.x, y1 - q.y, q.radius);
@@ -203,14 +232,17 @@ function fireLaser(match, p, weapon, events) {
   const x = x0 + (x1 - x0) * best.t, y = y0 + (y1 - y0) * best.t;
   events.push({ type: 'fire', playerId: p.id, weapon: weapon.id });
   events.push({ type: 'laser', playerId: p.id, x1: x0, y1: y0, x2: x, y2: y });
-  if (best.victim) damage(best.victim, weapon.damage, p.team, events);
-  else if (best.cover || best.jet) events.push({ type: 'block', x, y });
-  if (best.cover) damageCover(best.cover, weapon.damage, events);
+  const shot = { team: p.team, ownerId: p.id, weapon: weapon.id, connected: false };
+  if (best.victim) damage(match, best.victim, weapon.damage, shot, events);
+  else if (best.cover) events.push({ type: 'block', x, y });
+  if (best.cover) damageCover(match, best.cover, weapon.damage, shot, events);
 }
 
 function fire(match, p, events) {
   const weapon = WEAPONS[p.weapon];
   p.sinceShot = 0;
+  const ws = weaponStats(match, p.id, weapon.id);
+  if (ws) ws.shots++;
   if (weapon.battery) p.battery--;
   if (weapon.heat) {
     p.heat += weapon.interval;
@@ -224,11 +256,10 @@ function fire(match, p, events) {
   events.push({ type: 'fire', playerId: p.id, weapon: p.weapon });
 }
 
-/** 탄약 외 제약(배터리·과열·수류탄 쿨타임) 때문에 지금 쏠 수 없는지. */
+/** 탄약 외 제약(배터리·과열) 때문에 지금 쏠 수 없는지. */
 function blocked(p, weapon) {
   if (weapon.battery) return p.battery <= 0;
   if (weapon.heat) return p.overheat > 0;
-  if (weapon.id === 'grenade') return p.grenadeCooldown > 0;
   return false;
 }
 
@@ -249,7 +280,7 @@ function updateResources(p, firing, dt) {
 
 /**
  * 고정 틱 한 번. 렌더·사운드용 이벤트 목록을 돌려준다.
- * 순서: 전투기(이동·사격) → 플레이어 이동·자동 발사 → 탄환 이동·충돌(엄폐물·전투기·적, 엄폐물 내구도) → 쓰러짐·승패.
+ * 순서: 전투기(이동·사격) → 플레이어 무기 전환·이동·아이템·자동 발사 → 탄환 이동·충돌(엄폐물·적, 엄폐물 내구도) → 쓰러짐·승패.
  */
 export function step(match, inputs, dt = TICK) {
   const events = [];
@@ -270,15 +301,24 @@ export function step(match, inputs, dt = TICK) {
     p.hurt = Math.max(0, p.hurt - dt);
     if (!p.alive) continue;
     const input = inputs[p.id];
+    // 드론은 주무기 하나뿐이고 아이템도 없다
+    if (input.select) {
+      if (!p.drone) selectSlot(p, input.select, events);
+      input.select = null;
+    }
     if (input.swap) {
       input.swap = false;
-      if (!p.drone) swapWeapon(p, events); // 드론은 주무기 하나뿐
+      if (!p.drone) swapWeapon(p, events);
     }
     const weapon = WEAPONS[p.weapon];
     p.cooldown = Math.max(0, p.cooldown - dt);
     updateResources(p, weapon.heat && input.aiming, dt);
-    p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * MAX_SPEED * dt));
+    p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * p.speed * dt));
     p.aim = input.aim;
+    if (input.item) {
+      input.item = false;
+      if (!p.drone) throwGrenade(match, p, events);
+    }
     // 점사 중인 남은 탄은 조준을 풀어도 끝까지 나간다.
     if (p.burstLeft > 0) {
       p.burstTimer -= dt;
@@ -290,8 +330,7 @@ export function step(match, inputs, dt = TICK) {
     } else if (p.cooldown <= EPS && !blocked(p, weapon) &&
       (weapon.trigger === 'release' ? p.wasAiming && !input.aiming : input.aiming)) {
       fire(match, p, events);
-      if (weapon.id === 'grenade') p.grenadeCooldown = weapon.interval;
-      else p.cooldown = weapon.interval;
+      p.cooldown = weapon.interval;
       p.burstLeft = weapon.burst - 1;
       p.burstTimer = weapon.burstGap ?? 0;
     }
@@ -309,11 +348,7 @@ export function step(match, inputs, dt = TICK) {
     if (b.thrown) continue; // 던진 무기는 날아가는 동안 아무것에도 닿지 않는다
     const coverHit = b.overCovers ? null : coverContact(match, b);
     if (coverHit) earliest = { t: coverHit.t, projectile: b, victim: null, cover: coverHit.cover };
-    // 전투기 자신이 쏜 탄은 전투기에 막히지 않는다.
-    if (match.jet && b.team !== 'jet') {
-      const t = jetContactTime(match.jet, b);
-      if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, projectile: b, victim: null };
-    }
+    // 전투기는 하늘 높이 날기 때문에 탄환은 그 밑으로 지나간다(막지 않음).
     for (const p of match.players) {
       if (!p.alive || p.team === b.team) continue;
       const t = segmentCircleTime(
@@ -329,9 +364,9 @@ export function step(match, inputs, dt = TICK) {
     removed.add(b);
     const x = b.previousX + (b.x - b.previousX) * t;
     const y = b.previousY + (b.y - b.previousY) * t;
-    if (victim) damage(victim, b.damage, b.team, events);
+    if (victim) damage(match, victim, b.damage, b, events);
     else events.push({ type: 'block', x, y });
-    if (cover) damageCover(cover, coverDamage(b), events);
+    if (cover) damageCover(match, cover, coverDamage(b), b, events);
     if (b.splash) explode(match, b, x, y, victim, cover, events);
   }
 
@@ -348,6 +383,7 @@ export function step(match, inputs, dt = TICK) {
   for (const p of match.players) {
     if (p.alive && p.hp <= 0) {
       p.alive = false;
+      if (match.stats?.[p.id]) match.stats[p.id].downAt = match.tick * TICK;
       events.push({ type: 'down', playerId: p.id, x: p.x, y: p.y });
     }
   }

@@ -71,7 +71,91 @@ summary { cursor: pointer; font-weight: 700; }
 details ul { margin: 8px 0 0; padding-left: 20px; font-size: 15px; }
 .hint { color: var(--muted); font-size: 14px; }
 .warning { padding: 8px 12px; border-left: 4px solid var(--isb); background: #fff0dc; font-size: 14px; text-align: left; }
-#result-score { font-size: 22px; font-weight: 700; }
+.badge {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #ffd45e;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+h3 { margin: 16px 0 6px; font-size: 17px; }
+
+/* 결과 화면: 플레이어 카드 2장 + 준 피해 비교 막대 + 무기별 표 */
+.result-card { width: min(920px, 100%); }
+.result-players { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; text-align: left; }
+.result-player { padding: 10px 12px; border: 2px solid var(--team); border-radius: 14px; }
+.result-head { display: flex; align-items: center; gap: 10px; }
+.result-head img { width: 56px; height: 56px; object-fit: contain; }
+.result-head div { display: grid; flex: 1; min-width: 0; }
+.result-head b { color: var(--team); font-size: 18px; }
+.result-head small { color: var(--muted); }
+.outcome { padding: 2px 10px; border-radius: 999px; background: var(--line); font-weight: 700; }
+.outcome.win { background: #ffd45e; }
+.hp-line { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; margin: 8px 0; font-size: 14px; }
+.hp-meter { height: 10px; border: 2px solid var(--ink); border-radius: 6px; overflow: hidden; background: rgba(48, 53, 62, 0.2); }
+.hp-meter i { display: block; height: 100%; background: #3fae4a; }
+.facts { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin: 0; font-size: 14px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-weight: 700; text-align: right; }
+.damage-compare { display: flex; height: 28px; margin-top: 12px; border: 2px solid var(--ink); border-radius: 10px; overflow: hidden; }
+.damage-compare .seg {
+  display: grid;
+  place-items: center;
+  flex-basis: 0;
+  min-width: 64px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.table-wrap { overflow-x: auto; }
+.stats-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.stats-table th, .stats-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.stats-table thead th { color: var(--muted); font-weight: 700; }
+.stats-table th:nth-child(-n+2), .stats-table td:nth-child(2) { text-align: left; }
+.stats-table tbody th { color: var(--team); }
+.stats-table .num-strong { font-weight: 700; }
+.stats-table .empty { color: var(--muted); text-align: left; }
+
+/* 밸런스 조정 */
+.balance-card { width: min(1100px, 100%); text-align: left; }
+.balance-card h2, .balance-card > .hint { text-align: center; }
+.sticky-actions { position: sticky; top: -16px; z-index: 1; margin: 0 -24px 8px; padding: 10px 0; background: #fff; }
+.balance-section { margin-top: 10px; border-top: 2px solid var(--line); padding-top: 8px; }
+.balance-section > summary { font-size: 18px; }
+.balance-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; margin-top: 8px; }
+.balance-groups fieldset { margin: 0; padding: 6px 10px 8px; border: 2px solid var(--line); border-radius: 12px; }
+.balance-groups legend { padding: 0 4px; font-weight: 700; }
+.param { display: grid; grid-template-columns: 1fr 84px 18px; align-items: center; gap: 0 6px; padding: 3px 4px; border-radius: 6px; font-size: 14px; }
+.param input {
+  width: 100%;
+  min-height: 34px;
+  padding: 2px 6px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  text-align: right;
+}
+.param input:focus-visible { outline: 3px solid var(--earth); outline-offset: 1px; }
+.param em { color: var(--muted); font-size: 12px; font-style: normal; }
+.param small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.param.changed { background: #fff3c4; }
+.param.changed input { border-color: #e0a800; }
+
+/* 현재 수치 보기: 한 화면 캡처용으로 촘촘하게 */
+.summary-card { width: min(1400px, 100%); padding: 16px; }
+.summary-card h2 { margin-bottom: 2px; font-size: 22px; }
+.summary-grid { columns: 5 210px; column-gap: 10px; text-align: left; }
+.summary-block { break-inside: avoid; margin-bottom: 8px; padding: 4px 8px; border: 1.5px solid var(--line); border-radius: 8px; }
+.summary-block h3 { margin: 0 0 2px; font-size: 13px; }
+.summary-block table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.summary-block th { color: var(--muted); font-weight: 400; text-align: left; }
+.summary-block td { font-weight: 700; text-align: right; white-space: nowrap; }
+.summary-block tr.changed { background: #fff3c4; }
+.summary-block td small { color: var(--muted); font-weight: 400; }
 
 #slot-list {
   display: grid;
@@ -110,33 +194,67 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 15px; }
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-.team-group { display: flex; gap: 8px; }
-/* 이동키와 발사키 사이 간격: 2인은 넓게, 4인은 한 줄에 들어가는 만큼 */
-#controls[data-players="2"] { --stick-gap: clamp(60px, 18vw, 300px); }
-#controls[data-players="4"] { --stick-gap: clamp(20px, 3vw, 60px); }
+#controls { flex-wrap: nowrap; }
+/* 2인 전용: 팀 패널이 화면 절반씩을 채운다. */
+.team-group { display: flex; flex: 1; min-width: 0; }
+/*
+ * 패널: 이동키 | 무기·아이템 버튼 | 발사키. 가운데 칸이 남는 폭을 모두 차지해 이동키와 발사키를 패널 양 끝으로
+ * 최대한 벌린다(손이 서로 겹치지 않게). 버튼은 그 사이 빈 공간에 둔다.
+ */
 .panel {
+  flex: 1;
+  min-width: 0;
   display: grid;
-  grid-template-columns: var(--stick) var(--stick);
-  gap: 4px var(--stick-gap, 12px);
+  grid-template-columns: var(--stick) minmax(0, 1fr) var(--stick);
+  align-items: center;
+  gap: 8px;
   padding: 6px 10px;
   border: 2px solid var(--team);
   border-radius: 14px;
   background: #fff;
 }
-.panel-head { align-self: center; color: var(--team); font-size: 14px; font-weight: 700; text-align: center; }
-/* 무기 교체 버튼: 이름 옆에 두어 패널 높이를 거의 늘리지 않는다. 누를 때마다 다음 무기. */
-.swap-btn {
+.panel-mid {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
   min-width: 0;
-  min-height: 34px;
-  padding: 2px 8px;
+  padding: 0 clamp(0px, 2vw, 40px);
+  container-type: inline-size;
+}
+.panel-head { color: var(--team); font-size: 14px; font-weight: 700; text-align: center; white-space: nowrap; }
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  max-width: 330px;
+}
+/* 무기 선택·아이템 버튼: 누르는 즉시 반응. 든 무기는 팀 색으로 채운다. */
+.weapon-btn, .item-btn {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 52px;
+  padding: 2px 4px;
   border-color: var(--team);
   border-radius: 10px;
   color: var(--team);
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.15;
   touch-action: manipulation;
-  white-space: nowrap;
 }
-.swap-btn::before { content: "⇄ "; }
+.weapon-btn small, .item-btn small { font-size: 10px; font-weight: 400; opacity: 0.8; }
+.weapon-btn span, .item-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weapon-btn[aria-pressed="true"] { background: var(--team); color: #fff; }
+.item-btn { border-style: dashed; background: #fffbea; }
+.item-btn.cooling { color: var(--muted); border-color: var(--line); background: #f2f2f2; }
+/* 가운데 칸이 좁으면(작은 화면) 버튼을 세로 한 줄로 쌓는다. */
+@container (max-width: 230px) {
+  .panel-head { font-size: 12px; }
+  .actions { grid-template-columns: 1fr; gap: 3px; }
+  .weapon-btn, .item-btn { min-height: 28px; font-size: 12px; }
+  .weapon-btn small, .item-btn small { display: none; }
+}
 .stick {
   position: relative;
   width: var(--stick);

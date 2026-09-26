@@ -1,21 +1,20 @@
 import {
-  RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, CHARACTERS, WEAPONS, PRIMARY_IDS, JET, COVERS, COVER, STEEL, STEEL_SPOTS,
+  RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, JET, COVERS, COVER,
+  STEEL, STEEL_SPOTS,
 } from './config.js';
 
-// 자리(P1~P4)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
+// 2인 전용. 자리(P1·P2)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
 export const SLOTS = [
   { id: 'P1', team: 'earth', characterId: 'earth-arrow', weapon: 'dual' },
   { id: 'P2', team: 'isb', characterId: 'isb-agent-1', weapon: 'pistol' },
-  { id: 'P3', team: 'earth', characterId: 'earth-pizza', weapon: 'rifle' },
-  { id: 'P4', team: 'isb', characterId: 'isb-agent-2', weapon: 'rpg' },
 ];
 
 export const characterOf = (id) => CHARACTERS.find((c) => c.id === id);
 export const characterName = (id) => characterOf(id)?.name ?? id;
 
-/** 기본 선택. { P1: { characterId, weapon }, ... } */
-export function defaultLoadout(playerCount) {
-  return Object.fromEntries(SLOTS.slice(0, playerCount).map((s) => [s.id, { characterId: s.characterId, weapon: s.weapon }]));
+/** 기본 선택. { P1: { characterId, weapon }, P2: ... } */
+export function defaultLoadout() {
+  return Object.fromEntries(SLOTS.map((s) => [s.id, { characterId: s.characterId, weapon: s.weapon }]));
 }
 
 export function initialAim(team) {
@@ -37,12 +36,17 @@ export function createRng(seed) {
 export const between = (rng, [min, max]) => min + rng() * (max - min);
 
 /**
- * @param {2|4} playerCount
- * @param {Record<string, {characterId: string, weapon: string}>} [loadout]
+ * 경기 통계. 플레이어마다 무기별 { shots 발사, hits 적에게 피해를 준 발, damage 적에게 준 피해, coverDamage 엄폐물 피해 }와
+ * taken(받은 피해), takenFrom(출처별 받은 피해: 상대 id 또는 'jet'), killedBy(쓰러뜨린 쪽)를 모은다.
  */
-export function createMatch(playerCount, loadout = defaultLoadout(playerCount), seed = Date.now()) {
-  const players = SLOTS.slice(0, playerCount).map((slot, i) => {
-    const x = playerCount === 2 ? 800 : i < 2 ? 480 : 1120;
+function createStats(players) {
+  return Object.fromEntries(players.map((p) => [p.id, { weapons: {}, taken: 0, takenFrom: {}, killedBy: null, downAt: null }]));
+}
+
+/** @param {Record<string, {characterId: string, weapon: string}>} [loadout] */
+export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
+  const players = SLOTS.map((slot) => {
+    const x = ARENA_WIDTH / 2;
     const pick = loadout[slot.id] ?? {};
     const characterId = characterOf(pick.characterId) ? pick.characterId : slot.characterId;
     const character = characterOf(characterId);
@@ -50,7 +54,7 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
     const weapon = character.weapon ?? (PRIMARY_IDS.includes(pick.weapon) ? pick.weapon : slot.weapon);
     return {
       id: slot.id, team: slot.team, characterId, name: character.name, drone: !!character.drone, scale: character.scale ?? 1,
-      radius: character.radius ?? BODY_RADIUS,
+      radius: character.radius ?? BODY_RADIUS, speed: character.speed ?? MAX_SPEED,
       primary: weapon, slot: 'primary', weapon,
       battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
       x, previousX: x, y: RAIL_Y[slot.team],
@@ -65,7 +69,7 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
     players, projectiles: [], nextProjectileId: 1,
     covers: [...COVERS.map((c) => ({ ...c, hp: COVER.hp })), ...steelCovers(players)],
     jet: null, jetTimer: between(rng, JET.firstDelay), rng,
-    tick: 0, winner: null,
+    tick: 0, winner: null, stats: createStats(players),
   };
 }
 
@@ -85,7 +89,8 @@ function steelCovers(players) {
 export function createInputs(players) {
   const inputs = {};
   for (const p of players) {
-    inputs[p.id] = { moveAxis: 0, touchAxis: 0, aim: initialAim(p.team), aiming: false, swap: false };
+    // swap: 주무기↔보조무기 전환, select: 누른 무기 칸('primary'·'secondary')으로 바로 전환, item: 수류탄 던지기
+    inputs[p.id] = { moveAxis: 0, touchAxis: 0, aim: initialAim(p.team), aiming: false, swap: false, select: null, item: false };
   }
   return inputs;
 }
@@ -93,6 +98,6 @@ export function createInputs(players) {
 /** 일시정지·포커스 상실 시 호출. 조준 각도는 유지하고 진행 중인 입력(이동·사격)만 버린다. */
 export function cancelInputs(inputs) {
   for (const f of Object.values(inputs)) {
-    f.moveAxis = 0; f.touchAxis = 0; f.aiming = false; f.swap = false;
+    f.moveAxis = 0; f.touchAxis = 0; f.aiming = false; f.swap = false; f.select = null; f.item = false;
   }
 }

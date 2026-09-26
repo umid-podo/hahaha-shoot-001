@@ -20,7 +20,7 @@
 
   <section id="screen-menu" class="screen">
     <div class="card">
-      <p class="eyebrow">슈팅게임</p>
+      <p class="eyebrow">2인 슈팅게임 <span class="badge">알파</span></p>
       <h1 tabindex="-1">HAHA 2 Shoot</h1>
       <p class="teams">
         <img src="assets/ui/earth-badge.svg" alt=""> 지구방위팀 <span>vs</span> ISB팀 <img src="assets/ui/isb-badge.svg" alt="">
@@ -28,20 +28,23 @@
       <p id="load-status" role="status">에셋을 불러오는 중…</p>
       <button id="retry-btn" type="button" hidden>다시 시도</button>
       <div class="row">
-        <button class="primary count-btn" type="button" data-count="2" disabled>2인 대결</button>
-        <button class="primary count-btn" type="button" data-count="4" disabled>4인 대결</button>
+        <button id="setup-btn" class="primary" type="button" disabled>대결 시작</button>
+        <button id="balance-btn" type="button">밸런스 조정</button>
       </div>
+      <p id="balance-status" class="hint" hidden></p>
       <details>
         <summary>조작법</summary>
         <ul>
-          <li><b>이동키</b> 동그라미를 좌우로 드래그하면 캐릭터가 옥상 레일 위에서 움직입니다.</li>
-          <li><b>발사키</b> 동그라미를 드래그해 조준하면 누르고 있는 동안 자동으로 발사됩니다. RPG·수류탄은 조준한 뒤 손을 떼면 나갑니다.</li>
-          <li><b>무기 전환</b> 자기 패널의 무기 이름 버튼: 주무기 → 보조무기(기관단총) → 수류탄 → 주무기. 주무기 자체는 경기 전에만 고릅니다.</li>
-          <li>체력은 500. 상대 팀을 모두 쓰러뜨리면 우승. 아군은 공격할 수 없습니다.</li>
+          <li>한 화면에서 두 사람이 대결합니다. P1(지구방위팀)은 왼쪽, P2(ISB팀)는 오른쪽 조작 패널을 씁니다.</li>
+          <li><b>이동키</b> 패널 바깥쪽 동그라미를 좌우로 드래그하면 캐릭터가 옥상 레일 위에서 움직입니다.</li>
+          <li><b>발사키</b> 패널 안쪽 동그라미를 드래그해 조준하면 누르고 있는 동안 자동으로 발사됩니다. RPG·저격총은 조준한 뒤 손을 떼면 나갑니다.</li>
+          <li><b>무기·아이템 버튼</b> 두 스틱 사이의 버튼으로 주무기·보조무기(기관단총)를 바로 고르고, 아이템 버튼으로 지금 조준 방향에 수류탄을 던집니다. 주무기 자체는 경기 전에만 고릅니다.</li>
+          <li>체력은 500. 상대를 쓰러뜨리면 우승.</li>
           <li>주무기: 돌격소총(0.2초·7), 권총(0.5초·20), 쌍권총(0.5초 2점사·10), RPG(떼면 발사·쿨타임 1초·40, 폭발 범위 10, 유도), 저격총(떼면 발사·쿨타임 1초·60, 팀 진영에 부서지지 않는 강철 엄폐물).</li>
-          <li>보조무기 기관단총(0.1초·4, 4초 연사하면 2초 과열), 수류탄(떼면 던짐, 반경 240 안 50, 쿨타임 20초).</li>
+          <li>보조무기 기관단총(0.1초·4, 4초 연사하면 2초 과열), 아이템 수류탄(버튼을 누르면 조준 방향으로 던짐, 반경 240 안 50, 쿨타임 20초).</li>
           <li>드론 R-10: 체력 400, 몸집이 커서 잘 맞음, 레이저 캐논만 사용(0.1초·4, 배터리 30발, 쉬면 2초 뒤 완충).</li>
-          <li>엄폐물은 총알을 막지만 맞으면 깎이다 부서집니다. 가끔 지나가는 전투기는 총알을 막고, 위아래로 미사일을 쏩니다.</li>
+          <li>엄폐물은 총알을 막지만 맞으면 깎이다 부서집니다. 가끔 하늘 높이 지나가는 전투기는 총알을 막지 않고(총알은 그 밑으로 지나감), 위아래로 미사일을 쏩니다.</li>
+          <li>수치는 알파 버전 임시값입니다. <b>밸런스 조정</b>에서 바꿔 볼 수 있습니다.</li>
           <li>키보드 조작 키는 다음 화면에서 안내합니다. Esc는 일시정지.</li>
         </ul>
       </details>
@@ -56,12 +59,12 @@
     <div class="card">
       <h2 tabindex="-1">캐릭터·주무기 선택</h2>
       <ul id="slot-list"></ul>
-      <p class="hint">주무기는 경기 중에 바꿀 수 없습니다. 경기 중 무기 전환 버튼으로 주무기 → 보조무기(기관단총) → 수류탄 → 주무기 순으로 전환합니다.</p>
-      <p class="hint">터치: 화면 아래 자기 패널의 이동키·발사키를 사용합니다. 키보드와 함께 써도 됩니다.</p>
+      <p class="hint">주무기는 경기 중에 바꿀 수 없습니다. 경기 중에는 패널 가운데 버튼으로 주무기·보조무기(기관단총)를 고르고, 아이템 버튼으로 수류탄을 던집니다.</p>
+      <p class="hint">터치: 화면 아래 자기 패널의 이동키·발사키·버튼을 사용합니다. 키보드와 함께 써도 됩니다.</p>
       <p id="narrow-warning" class="warning" hidden>화면이 좁아 조작 패널이 작습니다. 가로 화면·더 큰 화면이나 키보드를 사용하세요.</p>
       <div class="row">
         <button id="start-btn" class="primary" type="button">시작</button>
-        <button id="back-btn" type="button">인원 선택</button>
+        <button id="back-btn" type="button">메인 메뉴</button>
       </div>
     </div>
   </section>
@@ -72,20 +75,62 @@
       <div class="column">
         <button id="resume-btn" class="primary" type="button">계속</button>
         <button class="restart-btn" type="button">다시 시작</button>
-        <button class="menu-btn" type="button">인원 선택</button>
+        <button class="setup-again-btn" type="button">캐릭터 선택</button>
+        <button class="menu-btn" type="button">메인 메뉴</button>
         <button class="mute-toggle" type="button" aria-pressed="false">음소거</button>
       </div>
     </div>
   </section>
 
   <section id="screen-result" class="screen overlay" hidden>
-    <div class="card">
+    <div class="card result-card">
+      <p id="result-time" class="eyebrow"></p>
       <h2 id="result-title" tabindex="-1"></h2>
-      <p id="result-score"></p>
+      <div id="result-players" class="result-players"></div>
+      <div id="result-damage" class="damage-compare" role="img"></div>
+      <h3>무기별 통계</h3>
+      <div class="table-wrap">
+        <table id="result-weapons" class="stats-table">
+          <thead>
+            <tr><th scope="col">플레이어</th><th scope="col">무기</th><th scope="col">발사</th><th scope="col">명중</th>
+              <th scope="col">명중률</th><th scope="col">준 피해</th><th scope="col">발당 피해</th><th scope="col">엄폐물 피해</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="hint">명중: 상대에게 피해를 준 발 수(폭발 범위 포함). 피해는 실제로 깎인 체력입니다.</p>
       <div class="row">
         <button class="primary restart-btn" type="button">재대결</button>
-        <button class="menu-btn" type="button">인원 선택</button>
+        <button class="setup-again-btn" type="button">캐릭터 선택</button>
+        <button class="menu-btn" type="button">메인 메뉴</button>
       </div>
+    </div>
+  </section>
+
+  <section id="screen-balance" class="screen" hidden>
+    <div class="card balance-card">
+      <h2 tabindex="-1">밸런스 조정 <span class="badge">알파</span></h2>
+      <p class="hint">바꾼 값은 바로 이 브라우저에 저장되고 다음 경기부터 적용됩니다. 기본값과 다른 칸은 노랗게 표시됩니다.</p>
+      <div class="row sticky-actions">
+        <button id="balance-summary-btn" class="primary" type="button">현재 수치 보기</button>
+        <button id="balance-reset-btn" type="button">모두 기본값으로</button>
+        <button class="balance-close-btn" type="button">메인 메뉴</button>
+      </div>
+      <div id="balance-form"></div>
+    </div>
+  </section>
+
+  <section id="screen-summary" class="screen" hidden>
+    <div class="card summary-card">
+      <h2 tabindex="-1">현재 밸런스 수치</h2>
+      <p id="summary-meta" class="hint"></p>
+      <div id="summary-grid" class="summary-grid"></div>
+      <div class="row">
+        <button id="summary-copy-btn" class="primary" type="button">텍스트로 복사</button>
+        <button id="summary-back-btn" type="button">밸런스 조정</button>
+        <button class="balance-close-btn" type="button">메인 메뉴</button>
+      </div>
+      <p id="summary-copy-status" class="hint" role="status"></p>
     </div>
   </section>
 
