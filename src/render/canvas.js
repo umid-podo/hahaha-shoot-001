@@ -133,11 +133,9 @@ export function createRenderer(canvas, wrap, assets) {
 
     // 현재 조준 방향 눈금(항상) + 발사 준비 중에만 조준선
     const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
-    // 떼면 쏘는 무기(RPG)는 쿨타임 동안 눈금을 회색으로 표시
-    // 떼면 쏘는 무기(RPG·저격총·수류탄)의 쿨타임, 방전, 과열 동안은 눈금을 회색으로 표시
+    // 떼면 쏘는 무기(RPG·저격총)의 쿨타임, 방전, 과열 동안은 눈금을 회색으로 표시
     const weapon = WEAPONS[p.weapon];
     const reloading = (weapon.trigger === 'release' && p.cooldown > 0) ||
-      (weapon.id === 'grenade' && p.grenadeCooldown > 0) ||
       (weapon.battery && p.battery <= 0) || (weapon.heat && p.overheat > 0);
     ctx.fillStyle = reloading ? '#9A9EA5' : color;
     ctx.beginPath();
@@ -175,12 +173,28 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillStyle = '#fff';
     ctx.fillText(label, p.x, p.y + 60);
     drawHpBar(ctx, p.x - HP_BAR.w / 2, p.y + 76, HP_BAR.w, HP_BAR.h, p.hp, p.maxHp);
-    drawGauge(p, p.x - HP_BAR.w / 2, p.y + 76 + HP_BAR.h + 3, HP_BAR.w);
+    const gaugeY = p.y + 76 + HP_BAR.h + 3;
+    const drawn = drawGauge(p, p.x - HP_BAR.w / 2, gaugeY, HP_BAR.w);
+    // 수류탄(아이템) 쿨타임: 던진 뒤 다시 쓸 수 있을 때까지 회색 막대
+    if (!p.drone && p.grenadeCooldown > 0) {
+      bar(p.x - HP_BAR.w / 2, gaugeY + (drawn ? GAUGE_H + 2 : 0), HP_BAR.w,
+        1 - p.grenadeCooldown / WEAPONS.grenade.interval, '#9A9EA5');
+    }
+  }
+
+  function bar(x, y, w, ratio, color) {
+    ctx.fillStyle = 'rgba(48,53,62,0.35)';
+    ctx.fillRect(x, y, w, GAUGE_H);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w * Math.max(0, Math.min(1, ratio)), GAUGE_H);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, GAUGE_H);
   }
 
   /**
-   * 체력바 아래 무기 상태 막대. 레이저는 배터리(빨강), 기관단총은 열(주황, 과열 중엔 빨강 깜빡임),
-   * 수류탄은 쿨타임 동안 남은 비율(회색). 해당 없으면 그리지 않는다.
+   * 체력바 아래 무기 상태 막대. 레이저는 배터리(빨강), 기관단총은 열(주황, 과열 중엔 빨강).
+   * 해당 없으면 그리지 않고 false를 돌려준다.
    */
   function drawGauge(p, x, y, w) {
     const weapon = WEAPONS[p.weapon];
@@ -190,18 +204,11 @@ export function createRenderer(canvas, wrap, assets) {
     } else if (weapon.heat && (p.heat > 0 || p.overheat > 0)) {
       ratio = p.overheat > 0 ? 1 : p.heat / weapon.heat.max;
       color = p.overheat > 0 ? '#D9443A' : '#F2A33A';
-    } else if (weapon.id === 'grenade') {
-      ratio = 1 - p.grenadeCooldown / weapon.interval; color = p.grenadeCooldown > 0 ? '#9A9EA5' : '#3FAE4A';
     } else {
-      return;
+      return false;
     }
-    ctx.fillStyle = 'rgba(48,53,62,0.35)';
-    ctx.fillRect(x, y, w, GAUGE_H);
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, w * Math.max(0, Math.min(1, ratio)), GAUGE_H);
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x, y, w, GAUGE_H);
+    bar(x, y, w, ratio, color);
+    return true;
   }
 
   /** 팀별 체력 요약: 팀 이름과 멤버마다 이름·총기·체력바 */
@@ -335,7 +342,7 @@ export function createRenderer(canvas, wrap, assets) {
   function drawJet(jet) {
     const { img } = assets['fighter-jet'];
     const w = 260, h = 200;
-    // 그림자: 옥상 위를 날고 있다는 느낌
+    // 그림자: 옥상 위 하늘 높이 날고 있다는 느낌(탄환은 그 밑으로 지나가므로 전투기는 탄환 위에 그린다)
     ctx.save();
     ctx.translate(jet.x + 30, jet.y + 40);
     ctx.scale(jet.dir, 1);

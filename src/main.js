@@ -3,17 +3,20 @@ import { SLOTS, createMatch, createInputs, cancelInputs, defaultLoadout } from '
 import { step } from './game/update.js';
 import { createControls } from './input/pointer.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
+import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
 import { unlock, setMuted, playEvents, updateEngine } from './audio/synth.js';
-import { loadSettings, saveSettings } from './storage/settings.js';
+import { loadSettings, saveSettings, loadBalance, saveBalance } from './storage/settings.js';
+import { applyOverrides, overrides } from './game/balance.js';
 
 const MAX_FRAME_MS = 100;
 const MAX_STEPS_PER_FRAME = 6;
 
 const settings = loadSettings();
-let playerCount = 2;
-let loadout = defaultLoadout(4);
+// 밸런스 메뉴에서 바꿔 저장해 둔 수치를 가장 먼저 적용한다.
+applyOverrides(loadBalance());
+const loadout = defaultLoadout();
 let match = null;
 let inputs = null;
 let controls = null;
@@ -29,10 +32,9 @@ function cancelAllInput() {
 
 function startMatch() {
   unlock();
-  match = createMatch(playerCount, loadout);
+  match = createMatch(loadout);
   inputs = createInputs(match.players);
   clearKeys();
-  document.querySelector('#controls').dataset.players = String(match.players.length);
   controls = createControls(
     { earth: document.querySelector('#controls-earth'), isb: document.querySelector('#controls-isb') },
     match.players, inputs);
@@ -61,10 +63,10 @@ function toggle(key) {
 }
 
 const screens = createScreens({
-  onSelectCount(count) {
+  onSetup() {
     unlock();
-    playerCount = count;
-    screens.showReady(SLOTS.slice(0, count), loadout);
+    match = null;
+    screens.showReady(SLOTS, loadout);
   },
   onPick(slotId, key, value) {
     loadout[slotId] = { ...loadout[slotId], [key]: value };
@@ -76,10 +78,16 @@ const screens = createScreens({
   onRetryLoad: boot,
   onToggleMute: () => toggle('muted'),
   onToggleMotion: () => toggle('reducedMotion'),
+  onBalanceChange(values) {
+    saveBalance(values);
+    screens.setBalanceStatus(Object.keys(values).length);
+  },
 });
+screens.setBalanceStatus(Object.keys(overrides()).length);
 setMuted(settings.muted);
 screens.syncSettings(settings);
 
+blockBrowserGestures(document.querySelector('#game'));
 attachKeyboard(() => (active() ? inputs : null), () => (match?.phase === 'paused' ? resume() : pause()));
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 window.addEventListener('blur', pause);
@@ -100,7 +108,6 @@ function frame(now) {
       renderer.addEvents(events);
       playEvents(events);
       for (const e of events) {
-        if (e.type === 'swap') controls.setWeapon(e.playerId, e.weapon, e.slot);
         if (e.type !== 'down') continue;
         const p = match.players.find((pl) => pl.id === e.playerId);
         screens.announce(`${TEAM_NAME[p.team]} ${p.id} ${p.name} 쓰러짐`);
@@ -114,7 +121,10 @@ function frame(now) {
   } else {
     accumulator = 0;
   }
-  if (match) renderer.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion);
+  if (match) {
+    renderer.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion);
+    controls.sync(match.players);
+  }
   updateEngine(match?.phase === 'playing' ? match.jet : null);
   requestAnimationFrame(frame);
 }
