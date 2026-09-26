@@ -10,7 +10,8 @@ export function weaponInfo(w) {
   if (w.thrown) return `떼면 던짐 · 반경 ${w.splash.radius} 폭발 ${w.splash.damage} · 쿨타임 ${w.interval}초`;
   if (w.trigger === 'release') {
     const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';
-    return `조준 후 떼면 발사 · 쿨타임 ${w.interval}초 · 한 발 ${w.damage}${splash}`;
+    const note = w.note ? ` · ${w.note}` : '';
+    return `조준 후 떼면 발사 · 쿨타임 ${w.interval}초 · 한 발 ${w.damage}${splash}${note}`;
   }
   const shots = w.burst > 1 ? `${w.burst}점사 ` : '';
   const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- R-4: 레이저 발사기 2개와 아래 카메라를 단 전투 드론. 다른 캐릭터처럼 오른쪽을 본다. -->
+  <!-- R-10: 레이저 발사기 2개와 아래 카메라를 단 전투 드론. 다른 캐릭터처럼 오른쪽을 본다. -->
   <defs>
     <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#8A94A3"/>
@@ -54,5 +54,5 @@
   <circle cx="254" cy="376" r="6" fill="#FFFFFF" fill-opacity="0.85"/>
   <circle cx="226" cy="360" r="5" fill="#FF3B30"/>
   <!-- 이름 -->
-  <text x="196" y="290" font-family="system-ui, sans-serif" font-size="44" font-weight="800" fill="#FFFFFF" stroke="#1E2229" stroke-width="3" paint-order="stroke" text-anchor="middle">R-4</text>
+  <text x="196" y="290" font-family="system-ui, sans-serif" font-size="40" font-weight="800" fill="#FFFFFF" stroke="#1E2229" stroke-width="3" paint-order="stroke" text-anchor="middle">R-10</text>
 </svg>

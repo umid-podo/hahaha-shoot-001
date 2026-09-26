@@ -114,20 +114,20 @@
       "frames": 1
     },
     {
-      "id": "r4",
-      "name": "R-4",
-      "path": "characters/r4.svg",
+      "id": "r10",
+      "name": "R-10",
+      "path": "characters/r10.svg",
       "width": 512,
       "height": 512,
-      "bytes": 3338,
+      "bytes": 3340,
       "format": "svg",
       "source": "hand-written SVG",
       "kind": "static-character",
       "bodyAnchor": [
         0.5,
-        0.5
+        0.6
       ],
-      "anchorStatus": "drawn centered",
+      "anchorStatus": "몸통이 판정 원보다 조금 위에 뜨도록",
       "frames": 1
     },
     {

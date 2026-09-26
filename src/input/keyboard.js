@@ -7,7 +7,7 @@ export const KEYMAP = {
   P3: { left: 'KeyJ', right: 'KeyL', aimLeft: 'KeyI', aimRight: 'KeyK', fire: 'KeyH', swap: 'KeyU' },
   P4: { left: 'Numpad4', right: 'Numpad6', aimLeft: 'Numpad8', aimRight: 'Numpad5', fire: 'Numpad0', swap: 'NumpadAdd' },
 };
-const FIRE_HINT = '누르고 있으면 연사(RPG·수류탄은 떼면 발사)';
+const FIRE_HINT = '누르고 있으면 연사(RPG·저격총·수류탄은 떼면 발사)';
 export const KEY_LABELS = {
   P1: `A/D 이동 · W/S 조준 · F ${FIRE_HINT} · E 무기 전환`,
   P2: `←/→ 이동 · ↑/↓ 조준 · Enter ${FIRE_HINT} · 오른쪽 Shift 무기 전환`,
