@@ -89,8 +89,8 @@ test('입력 취소 후 발사 없음, 이동 0', () => {
   assert.equal(P1.x, x);
 });
 
-test('총기별 피해: 돌격소총 7, 권총 10, 쌍권총 10, RPG 40', () => {
-  for (const [weapon, dmg] of [['rifle', 7], ['pistol', 10], ['dual', 10], ['rpg', 40]]) {
+test('총기별 피해: 돌격소총 7, 권총 20, 쌍권총 10, RPG 40', () => {
+  for (const [weapon, dmg] of [['rifle', 7], ['pistol', 20], ['dual', 10], ['rpg', 40]]) {
     const { match, inputs, P1, P2 } = playing(2, { P1: { weapon } });
     bulletNear(match, P1, P2, UP);
     step(match, inputs);
@@ -116,7 +116,7 @@ test('적 둘을 관통할 경로여도 가장 이른 한 명만 적중', () => 
   const b = spawnProjectile(match, P1, 0);
   b.x = b.previousX = 440; b.y = b.previousY = P2.y;
   for (let i = 0; i < 20; i++) step(match, inputs);
-  assert.equal(P2.hp, MAX_HP - 10);
+  assert.equal(P2.hp, MAX_HP - 20);
   assert.equal(P4.hp, MAX_HP);
   assert.equal(match.projectiles.length, 0);
 });
@@ -195,7 +195,7 @@ test('큰 dt와 이동 중인 대상에도 연속 충돌로 적중', () => {
   inputs.P2.moveAxis = -1;
   step(match, inputs, 0.15);
   assert.ok(Math.hypot(b.x - P2.x, b.y - P2.y) > 35);
-  assert.equal(P2.hp, MAX_HP - 10);
+  assert.equal(P2.hp, MAX_HP - 20);
 });
 
 test('전투기는 무작위로 나타나 가운데를 가로질러 지나가고 사라짐', () => {
@@ -367,7 +367,7 @@ test('내구도가 0이 되면 부서지고, 그 뒤로는 탄이 통과하며 �
   step(match, inputs);
   assert.ok(match.projectiles.includes(b), '부서진 자리는 통과');
   run(match, inputs, 3);
-  assert.equal(P2.hp, MAX_HP - 10, '뒤의 적이 맞음');
+  assert.equal(P2.hp, MAX_HP - 20, '뒤의 적이 맞음');
   assert.equal(cover.hp, 0, '재생성 없음');
   assert.equal(createMatch(2).covers.find((c) => c.id === 'center').hp, COVER.hp, '새 경기는 온전한 엄폐물');
 });
@@ -668,4 +668,15 @@ test('레이저는 엄폐물에 막히고 엄폐물을 4씩 깎음', () => {
   assert.ok(Math.abs(laser.y2 - (cover.y + cover.h / 2)) <= 6, '엄폐물 아래 면에서 멈춤');
   assert.equal(cover.hp, COVER.hp - 4);
   assert.equal(P2.hp, MAX_HP);
+});
+
+test('R-10은 판정 반지름이 48로 커서, 사람은 빗나갈 거리의 탄도 맞음', () => {
+  const { match, inputs, P1, P2 } = playing(2, { P1: { weapon: 'pistol' }, P2: { characterId: 'r10' } });
+  assert.equal(P2.radius, 48);
+  assert.equal(P1.radius, BODY_RADIUS);
+  const b = spawnProjectile(match, P1, UP);
+  b.x = b.previousX = P2.x + 45; // 사람(30+5)이면 빗나가는 거리
+  b.y = b.previousY = P2.y + 60;
+  run(match, inputs, 0.2);
+  assert.equal(P2.hp, 400 - 20);
 });

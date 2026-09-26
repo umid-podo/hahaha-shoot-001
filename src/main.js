@@ -32,6 +32,7 @@ function startMatch() {
   match = createMatch(playerCount, loadout);
   inputs = createInputs(match.players);
   clearKeys();
+  document.querySelector('#controls').dataset.players = String(match.players.length);
   controls = createControls(
     { earth: document.querySelector('#controls-earth'), isb: document.querySelector('#controls-isb') },
     match.players, inputs);

@@ -1,5 +1,5 @@
 import {
-  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, BODY_RADIUS, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
+  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
   MAX_HP, WEAPONS, COVER,
 } from '../game/config.js';
 
@@ -113,7 +113,7 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.strokeStyle = hurt ? '#D9443A' : color;
     ctx.globalAlpha = hurt ? 1 : 0.45;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, BODY_RADIUS + (hurt ? 6 : 0), 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, p.radius + (hurt ? 6 : 0), 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
 
@@ -141,7 +141,7 @@ export function createRenderer(canvas, wrap, assets) {
       (weapon.battery && p.battery <= 0) || (weapon.heat && p.overheat > 0);
     ctx.fillStyle = reloading ? '#9A9EA5' : color;
     ctx.beginPath();
-    ctx.arc(p.x + cos * BODY_RADIUS, p.y + sin * BODY_RADIUS, 5, 0, Math.PI * 2);
+    ctx.arc(p.x + cos * p.radius, p.y + sin * p.radius, 5, 0, Math.PI * 2);
     ctx.fill();
     if (input.aiming) {
       const reach = p.weapon === 'sniper' ? 420 : 190; // 저격총은 긴 조준선

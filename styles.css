@@ -111,10 +111,13 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 15px; }
   -webkit-touch-callout: none;
 }
 .team-group { display: flex; gap: 8px; }
+/* 이동키와 발사키 사이 간격: 2인은 넓게, 4인은 한 줄에 들어가는 만큼 */
+#controls[data-players="2"] { --stick-gap: clamp(60px, 18vw, 300px); }
+#controls[data-players="4"] { --stick-gap: clamp(20px, 3vw, 60px); }
 .panel {
   display: grid;
   grid-template-columns: var(--stick) var(--stick);
-  gap: 4px 12px;
+  gap: 4px var(--stick-gap, 12px);
   padding: 6px 10px;
   border: 2px solid var(--team);
   border-radius: 14px;
@@ -131,6 +134,7 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 15px; }
   color: var(--team);
   font-size: 14px;
   touch-action: manipulation;
+  white-space: nowrap;
 }
 .swap-btn::before { content: "⇄ "; }
 .stick {
