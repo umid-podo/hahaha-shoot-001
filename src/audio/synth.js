@@ -81,8 +81,26 @@ const SHOT = {
   dual: { filter: 1500, decay: 0.12, thump: 180, volume: 0.9 },
   rpg: { filter: 500, q: 0.5, decay: 0.45, thump: 110, volume: 1.2 },
   sniper: { filter: 2400, q: 1.2, decay: 0.35, thump: 230, volume: 1.4 },
+  smg: { filter: 2000, decay: 0.06, thump: 170, volume: 0.6 },
+  grenade: { filter: 350, q: 0.4, decay: 0.15, thump: 80, volume: 0.5 }, // 던지는 휙 소리
   jet: { filter: 700, q: 0.5, decay: 0.35, thump: 110, volume: 1.1 },
 };
+
+/** 레이저: 높은 음에서 빠르게 떨어지는 톱니파 '피융' */
+function laserZap() {
+  if (!ctx || muted) return;
+  const start = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(1800, start);
+  osc.frequency.exponentialRampToValueAtTime(500, start + 0.08);
+  gain.gain.setValueAtTime(GAIN * 0.7, start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + 0.1);
+}
 
 export function playEvents(events) {
   // 돌격소총 연사처럼 한 틱에 같은 소리가 겹치면 한 번만 낸다.
@@ -91,7 +109,9 @@ export function playEvents(events) {
     const key = e.type === 'fire' ? `fire-${e.weapon}` : e.type;
     if (played.has(key)) continue;
     played.add(key);
-    if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
+    if (e.type === 'fire' && e.weapon === 'laser') laserZap();
+    else if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
+    if (e.type === 'overheat') [700, 500, 300].forEach((f, i) => tone(f, 0.08, 'sawtooth', i * 0.07)); // 과열 경고
     if (e.type === 'jet-fire') gunshot(SHOT.jet); // 미사일 발사음
     if (e.type === 'swap') { tone(1200, 0.03, 'square'); tone(900, 0.04, 'square', 0.05); } // 철컥
     if (e.type === 'hit') tone(880, 0.07, 'square');

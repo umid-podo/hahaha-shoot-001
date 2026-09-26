@@ -27,7 +27,7 @@
       "path": "characters/earth-arrow.png",
       "width": 1254,
       "height": 1254,
-      "bytes": 622692,
+      "bytes": 562353,
       "format": "png",
       "hasAlphaChannel": true,
       "alphaInspection": {
@@ -35,7 +35,7 @@
         "max": 255,
         "fullyTransparentPixels": 1162599
       },
-      "source": "built-in image_gen",
+      "source": "built-in image_gen, edited: 온이름 머리 + 요원 1 쌍권총 몸, 넥타이 파랑",
       "kind": "static-character",
       "bodyAnchor": [
         0.48,
@@ -73,7 +73,7 @@
       "path": "characters/isb-agent-1.png",
       "width": 1254,
       "height": 1254,
-      "bytes": 749305,
+      "bytes": 657118,
       "format": "png",
       "hasAlphaChannel": true,
       "alphaInspection": {
@@ -81,7 +81,7 @@
         "max": 255,
         "fullyTransparentPixels": 1092696
       },
-      "source": "built-in image_gen",
+      "source": "built-in image_gen, edited: 들어 올린 권총 제거(권총 1자루)",
       "kind": "static-character",
       "bodyAnchor": [
         0.48,
@@ -111,6 +111,23 @@
         0.65
       ],
       "anchorStatus": "initial visual estimate",
+      "frames": 1
+    },
+    {
+      "id": "r4",
+      "name": "R-4",
+      "path": "characters/r4.svg",
+      "width": 512,
+      "height": 512,
+      "bytes": 3338,
+      "format": "svg",
+      "source": "hand-written SVG",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.5,
+        0.5
+      ],
+      "anchorStatus": "drawn centered",
       "frames": 1
     },
     {

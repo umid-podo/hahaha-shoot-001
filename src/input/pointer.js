@@ -1,4 +1,4 @@
-import { DEADZONE, TEAM_NAME, WEAPONS } from '../game/config.js';
+import { DEADZONE, TEAM_NAME, WEAPONS, SLOT_NAME } from '../game/config.js';
 
 /** 이동 스틱: X 변위만 사용. 데드존 안은 0, 바깥은 ±1까지 선형 보간. */
 export function moveAxisFromDrag(dx, radius) {
@@ -59,13 +59,20 @@ function stickElement(kind, label) {
   return el;
 }
 
+/** 무기 전환 버튼 글자: 지금 든 무기 이름. 읽기용 이름에는 칸(주무기·보조무기·수류탄)도 넣는다. */
+function setSwapLabel(btn, playerId, weaponId, slot) {
+  btn.textContent = WEAPONS[weaponId].name;
+  btn.setAttribute('aria-label', `${playerId} 무기 전환, 현재 ${SLOT_NAME[slot]} ${WEAPONS[weaponId].name}`);
+}
+
 /**
  * 플레이어별 조작 패널을 만들고 입력 프레임에 연결한다. cancelAll()은 모든 스틱을 놓아 사격을 멈추고,
- * setWeapon(playerId, weaponId)은 무기 교체 버튼의 표시를 바꾼다.
+ * setWeapon(playerId, weaponId, slot)은 무기 전환 버튼의 표시를 바꾼다.
  */
 export function createControls(groups, players, inputs) {
   const cancels = [];
   const swapButtons = {};
+  const label = (id, weapon, slot) => setSwapLabel(swapButtons[id], id, weapon, slot);
   for (const team of ['earth', 'isb']) {
     groups[team].replaceChildren();
     for (const p of players.filter((pl) => pl.team === team)) {
@@ -81,11 +88,11 @@ export function createControls(groups, players, inputs) {
       const swap = document.createElement('button');
       swap.type = 'button';
       swap.className = 'swap-btn';
-      swap.textContent = WEAPONS[p.weapon].name;
-      swap.setAttribute('aria-label', `${p.id} 무기 교체, 현재 ${WEAPONS[p.weapon].name}`);
+      swap.disabled = p.drone; // 드론은 전환할 무기가 없다
+      swapButtons[p.id] = swap;
+      label(p.id, p.weapon, p.slot);
       swap.addEventListener('pointerdown', (e) => { e.preventDefault(); frame.swap = true; });
       swap.addEventListener('click', (e) => { if (e.detail === 0) frame.swap = true; }); // 키보드로 누른 경우
-      swapButtons[p.id] = swap;
       panel.append(header, swap, move, aim);
       groups[team].append(panel);
 
@@ -109,11 +116,8 @@ export function createControls(groups, players, inputs) {
   }
   return {
     cancelAll() { for (const cancel of cancels) cancel(); },
-    setWeapon(playerId, weaponId) {
-      const btn = swapButtons[playerId];
-      if (!btn) return;
-      btn.textContent = WEAPONS[weaponId].name;
-      btn.setAttribute('aria-label', `${playerId} 무기 교체, 현재 ${WEAPONS[weaponId].name}`);
+    setWeapon(playerId, weaponId, slot) {
+      if (swapButtons[playerId]) label(playerId, weaponId, slot);
     },
   };
 }

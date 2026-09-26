@@ -1,14 +1,15 @@
-import { RAIL_Y, COUNTDOWN, MAX_HP, CHARACTERS, WEAPONS, JET, COVERS, COVER } from './config.js';
+import { RAIL_Y, COUNTDOWN, MAX_HP, CHARACTERS, WEAPONS, PRIMARY_IDS, JET, COVERS, COVER } from './config.js';
 
-// 자리(P1~P4)가 팀을 정한다. 캐릭터·총기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값이다.
+// 자리(P1~P4)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
 export const SLOTS = [
-  { id: 'P1', team: 'earth', characterId: 'earth-arrow', weapon: 'rifle' },
-  { id: 'P2', team: 'isb', characterId: 'isb-agent-1', weapon: 'dual' },
-  { id: 'P3', team: 'earth', characterId: 'earth-pizza', weapon: 'pistol' },
+  { id: 'P1', team: 'earth', characterId: 'earth-arrow', weapon: 'dual' },
+  { id: 'P2', team: 'isb', characterId: 'isb-agent-1', weapon: 'pistol' },
+  { id: 'P3', team: 'earth', characterId: 'earth-pizza', weapon: 'rifle' },
   { id: 'P4', team: 'isb', characterId: 'isb-agent-2', weapon: 'rpg' },
 ];
 
-export const characterName = (id) => CHARACTERS.find((c) => c.id === id)?.name ?? id;
+export const characterOf = (id) => CHARACTERS.find((c) => c.id === id);
+export const characterName = (id) => characterOf(id)?.name ?? id;
 
 /** 기본 선택. { P1: { characterId, weapon }, ... } */
 export function defaultLoadout(playerCount) {
@@ -41,10 +42,14 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
   const players = SLOTS.slice(0, playerCount).map((slot, i) => {
     const x = playerCount === 2 ? 800 : i < 2 ? 480 : 1120;
     const pick = loadout[slot.id] ?? {};
-    const characterId = pick.characterId ?? slot.characterId;
-    const weapon = WEAPONS[pick.weapon] ? pick.weapon : slot.weapon;
+    const characterId = characterOf(pick.characterId) ? pick.characterId : slot.characterId;
+    const character = characterOf(characterId);
+    // 드론은 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
+    const weapon = character.weapon ?? (PRIMARY_IDS.includes(pick.weapon) ? pick.weapon : slot.weapon);
     return {
-      id: slot.id, team: slot.team, characterId, name: characterName(characterId), weapon,
+      id: slot.id, team: slot.team, characterId, name: character.name, drone: !!character.drone,
+      primary: weapon, slot: 'primary', weapon,
+      battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
       x, previousX: x, y: RAIL_Y[slot.team],
       aim: initialAim(slot.team),
       hp: MAX_HP, alive: true, hurt: 0,

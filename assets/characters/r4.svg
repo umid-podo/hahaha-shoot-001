@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- R-4: 레이저 발사기 2개와 아래 카메라를 단 전투 드론. 다른 캐릭터처럼 오른쪽을 본다. -->
+  <defs>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8A94A3"/>
+      <stop offset="0.55" stop-color="#5B6472"/>
+      <stop offset="1" stop-color="#3C434E"/>
+    </linearGradient>
+    <radialGradient id="lens" cx="0.4" cy="0.38" r="0.7">
+      <stop offset="0" stop-color="#9FE3FF"/>
+      <stop offset="0.35" stop-color="#2E7FB8"/>
+      <stop offset="1" stop-color="#0D2236"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFE3E3"/>
+      <stop offset="0.35" stop-color="#FF3B30"/>
+      <stop offset="1" stop-color="#FF3B30" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g stroke="#1E2229" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+    <!-- 프로펠러 팔 -->
+    <path d="M170 196 L112 130 M342 196 L400 130" fill="none" stroke-width="18"/>
+    <path d="M170 196 L112 130 M342 196 L400 130" fill="none" stroke="#6E7887" stroke-width="8"/>
+    <rect x="96" y="112" width="32" height="30" rx="8" fill="#4A525E"/>
+    <rect x="384" y="112" width="32" height="30" rx="8" fill="#4A525E"/>
+    <!-- 회전하는 프로펠러(흐린 원판) -->
+    <ellipse cx="112" cy="108" rx="84" ry="14" fill="#C9D3DE" fill-opacity="0.55" stroke-width="5"/>
+    <ellipse cx="400" cy="108" rx="84" ry="14" fill="#C9D3DE" fill-opacity="0.55" stroke-width="5"/>
+    <path d="M40 108 H184 M328 108 H472" stroke="#1E2229" stroke-width="5" stroke-opacity="0.7"/>
+
+    <!-- 레이저 발사기 2개 (위·아래) -->
+    <rect x="300" y="208" width="140" height="30" rx="10" fill="#3C434E"/>
+    <rect x="300" y="268" width="140" height="30" rx="10" fill="#3C434E"/>
+    <rect x="420" y="202" width="34" height="42" rx="8" fill="#2A2F37"/>
+    <rect x="420" y="262" width="34" height="42" rx="8" fill="#2A2F37"/>
+
+    <!-- 몸통 -->
+    <path d="M110 214 Q110 168 170 164 H330 Q392 168 392 216 V282 Q392 330 330 334 H172 Q110 330 110 284 Z" fill="url(#hull)"/>
+    <path d="M140 196 H362" stroke="#B5BFCC" stroke-width="6" fill="none"/>
+    <!-- 눈(센서) 띠 -->
+    <rect x="286" y="224" width="86" height="34" rx="14" fill="#1E2229" stroke-width="6"/>
+    <!-- 카메라 짐벌 -->
+    <path d="M226 330 V352 H286 V330" fill="#4A525E"/>
+    <circle cx="256" cy="382" r="44" fill="#2A2F37"/>
+    <circle cx="262" cy="384" r="28" fill="url(#lens)" stroke-width="6"/>
+  </g>
+  <!-- 발사구 불빛·센서 불빛·녹화 표시 -->
+  <circle cx="458" cy="223" r="26" fill="url(#glow)"/>
+  <circle cx="458" cy="283" r="26" fill="url(#glow)"/>
+  <circle cx="452" cy="223" r="8" fill="#FF3B30"/>
+  <circle cx="452" cy="283" r="8" fill="#FF3B30"/>
+  <circle cx="352" cy="241" r="9" fill="#FF3B30"/>
+  <circle cx="330" cy="241" r="5" fill="#FF8A80"/>
+  <circle cx="254" cy="376" r="6" fill="#FFFFFF" fill-opacity="0.85"/>
+  <circle cx="226" cy="360" r="5" fill="#FF3B30"/>
+  <!-- 이름 -->
+  <text x="196" y="290" font-family="system-ui, sans-serif" font-size="44" font-weight="800" fill="#FFFFFF" stroke="#1E2229" stroke-width="3" paint-order="stroke" text-anchor="middle">R-4</text>
+</svg>

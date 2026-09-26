@@ -99,7 +99,7 @@ function frame(now) {
       renderer.addEvents(events);
       playEvents(events);
       for (const e of events) {
-        if (e.type === 'swap') controls.setWeapon(e.playerId, e.weapon);
+        if (e.type === 'swap') controls.setWeapon(e.playerId, e.weapon, e.slot);
         if (e.type !== 'down') continue;
         const p = match.players.find((pl) => pl.id === e.playerId);
         screens.announce(`${TEAM_NAME[p.team]} ${p.id} ${p.name} 쓰러짐`);
