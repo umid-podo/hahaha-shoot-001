@@ -1,5 +1,5 @@
 import {
-  RAIL_Y, COUNTDOWN, MAX_HP, CHARACTERS, WEAPONS, PRIMARY_IDS, JET, COVERS, COVER, STEEL, STEEL_SPOTS,
+  RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, CHARACTERS, WEAPONS, PRIMARY_IDS, JET, COVERS, COVER, STEEL, STEEL_SPOTS,
 } from './config.js';
 
 // 자리(P1~P4)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
@@ -50,6 +50,7 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
     const weapon = character.weapon ?? (PRIMARY_IDS.includes(pick.weapon) ? pick.weapon : slot.weapon);
     return {
       id: slot.id, team: slot.team, characterId, name: character.name, drone: !!character.drone, scale: character.scale ?? 1,
+      radius: character.radius ?? BODY_RADIUS,
       primary: weapon, slot: 'primary', weapon,
       battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
       x, previousX: x, y: RAIL_Y[slot.team],

@@ -27,7 +27,7 @@ export const TICK = 1 / 60;
  */
 export const WEAPONS = {
   rifle: { id: 'rifle', name: '돌격소총', interval: 0.2, damage: 7, speed: 760, burst: 1 },
-  pistol: { id: 'pistol', name: '권총', interval: 0.5, damage: 10, speed: 720, burst: 1 },
+  pistol: { id: 'pistol', name: '권총', interval: 0.5, damage: 20, speed: 720, burst: 1 },
   dual: { id: 'dual', name: '쌍권총', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1 },
   rpg: {
     id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release',
@@ -58,14 +58,14 @@ export const SLOT_NAME = { primary: '주무기', secondary: '보조무기', gren
 
 /**
  * drone: 보조무기·수류탄을 쓸 수 없고 주무기는 weapon 하나로 고정된다.
- * maxHp는 캐릭터별 최대 체력(없으면 MAX_HP), scale은 그림 크기 배율(판정 크기는 그대로).
+ * maxHp는 캐릭터별 최대 체력(없으면 MAX_HP), scale은 그림 크기 배율, radius는 몸 판정 반지름(없으면 BODY_RADIUS).
  */
 export const CHARACTERS = [
   { id: 'earth-arrow', name: '온이름' },
   { id: 'earth-pizza', name: '피자럭스' },
   { id: 'isb-agent-1', name: '요원 1' },
   { id: 'isb-agent-2', name: '요원 2' },
-  { id: 'r10', name: 'R-10', drone: true, weapon: 'laser', maxHp: 400, scale: 1.4, image: 'assets/characters/r10.svg' },
+  { id: 'r10', name: 'R-10', drone: true, weapon: 'laser', maxHp: 400, scale: 1.4, radius: 48, image: 'assets/characters/r10.svg' },
 ];
 
 /**

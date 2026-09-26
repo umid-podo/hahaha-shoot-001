@@ -1,11 +1,10 @@
 import {
-  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, MAX_SPEED, BODY_RADIUS, BULLET_RADIUS,
+  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, MAX_SPEED, BULLET_RADIUS,
   MUZZLE_OFFSET, BULLET_LIFE, TICK, WEAPONS, SWAP_TIME, SLOT_ORDER, SLOT_WEAPON, JET, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
 
-const HIT_RADIUS = BODY_RADIUS + BULLET_RADIUS;
 const OUT_MARGIN = 40;
 const HURT_TIME = 0.2;
 const ENEMY_RAIL = { earth: RAIL_Y.isb, isb: RAIL_Y.earth };
@@ -161,7 +160,7 @@ function explode(match, b, x, y, directVictim, directCover, events) {
   events.push({ type: 'explode', x, y, radius: splash.radius });
   for (const p of match.players) {
     if (!p.alive || p.team === b.team || p === directVictim) continue;
-    if (Math.hypot(p.x - x, p.y - y) <= splash.radius + BODY_RADIUS) damage(p, splash.damage, b.team, events);
+    if (Math.hypot(p.x - x, p.y - y) <= splash.radius + p.radius) damage(p, splash.damage, b.team, events);
   }
   for (const c of match.covers) {
     // 전투기 미사일은 엄폐물을 깎지 않는다. 수류탄은 엄폐물을 넘어 날아가지만 폭발은 엄폐물도 깎는다.
@@ -198,7 +197,7 @@ function fireLaser(match, p, weapon, events) {
   }
   for (const q of match.players) {
     if (!q.alive || q.team === p.team) continue;
-    const t = segmentCircleTime(x0 - q.x, y0 - q.y, x1 - q.x, y1 - q.y, BODY_RADIUS);
+    const t = segmentCircleTime(x0 - q.x, y0 - q.y, x1 - q.x, y1 - q.y, q.radius);
     if (t !== null && t < best.t) best = { t, victim: q };
   }
   const x = x0 + (x1 - x0) * best.t, y = y0 + (y1 - y0) * best.t;
@@ -318,7 +317,7 @@ export function step(match, inputs, dt = TICK) {
     for (const p of match.players) {
       if (!p.alive || p.team === b.team) continue;
       const t = segmentCircleTime(
-        b.previousX - p.previousX, b.previousY - p.y, b.x - p.x, b.y - p.y, HIT_RADIUS);
+        b.previousX - p.previousX, b.previousY - p.y, b.x - p.x, b.y - p.y, p.radius + BULLET_RADIUS);
       if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, projectile: b, victim: p };
     }
     if (earliest) contacts.push(earliest);
