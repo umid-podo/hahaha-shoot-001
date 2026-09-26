@@ -1,4 +1,4 @@
-// 논리 단위는 1600×1000 경기장 기준 (docs/02-game-design.md 초기 밸런스 설정)
+// 논리 단위는 1600×1000 경기장 기준 (docs/02-game-design.md 기본 수치)
 export const ARENA_WIDTH = 1600;
 export const ARENA_HEIGHT = 1000;
 export const RAIL_Y = { isb: 92, earth: 892 };
