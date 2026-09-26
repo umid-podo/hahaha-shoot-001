@@ -209,6 +209,8 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
   -webkit-touch-callout: none;
 }
 #controls { flex-wrap: nowrap; }
+/* P1·P2 패널 사이: 두 사람의 손이 부딪히지 않게 일시정지 버튼 양옆을 넓게 띄운다. 좁은 화면에서는 패널 폭을 위해 줄어든다. */
+#pause-btn { flex: none; margin: 0 clamp(0px, 14vw - 100px, 220px); }
 /* 2인 전용: 팀 패널이 화면 절반씩을 채운다. */
 .team-group { display: flex; flex: 1; min-width: 0; }
 /*
@@ -232,7 +234,7 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
   justify-items: center;
   gap: 4px;
   min-width: 0;
-  padding: 0 clamp(0px, 2vw, 40px);
+  padding: 0 clamp(0px, 3vw - 16px, 40px);
   container-type: inline-size;
 }
 .panel-head { color: var(--team); font-size: 14px; font-weight: 700; text-align: center; white-space: nowrap; }
