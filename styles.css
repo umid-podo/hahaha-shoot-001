@@ -10,6 +10,8 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+/* 페이지 전체: 더블탭 확대 없이 탭 즉시 반응(스크롤·핀치는 메뉴에서만 허용). 당겨서 새로고침·바운스 방지. */
+html { touch-action: manipulation; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   background: var(--paper);
@@ -137,6 +139,7 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
   border: 2px solid var(--line);
   border-radius: 8px;
   font: inherit;
+  font-size: 16px; /* iOS Safari는 16px 미만 입력칸에 포커스하면 자동 확대한다 */
   text-align: right;
 }
 .param input:focus-visible { outline: 3px solid var(--earth); outline-offset: 1px; }
@@ -179,7 +182,18 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 .team-isb { --team: var(--isb); }
 
 /* 경기: 3:2 경기장 + 경기장 외부의 조작 패널 */
-#game { display: flex; flex-direction: column; height: 100dvh; }
+#game {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  /* 경기 화면 전체(경기장·빈 여백 포함)에서 브라우저 핀치 확대·더블탭 확대·스크롤을 끈다. JS 보강은 src/input/gestures.js */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#game * { touch-action: none; }
 #arena-wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
 #arena { display: block; border-radius: 8px; }
 #controls {
@@ -241,7 +255,7 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
   color: var(--team);
   font-size: 13px;
   line-height: 1.15;
-  touch-action: manipulation;
+  touch-action: none;
 }
 .weapon-btn small, .item-btn small { font-size: 10px; font-weight: 400; opacity: 0.8; }
 .weapon-btn span, .item-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

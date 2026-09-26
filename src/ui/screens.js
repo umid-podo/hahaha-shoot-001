@@ -80,7 +80,10 @@ export function createScreens(handlers) {
   $('#retry-btn').addEventListener('click', handlers.onRetryLoad);
   $('#start-btn').addEventListener('click', handlers.onStart);
   $('#back-btn').addEventListener('click', handlers.onMenu);
-  $('#pause-btn').addEventListener('click', handlers.onPause);
+  // 경기 중 버튼은 누르는 즉시 반응: 더블탭 확대 방지로 빠른 두 번째 탭의 click이 사라질 수 있다(src/input/gestures.js).
+  const pauseBtn = $('#pause-btn');
+  pauseBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); handlers.onPause(); });
+  pauseBtn.addEventListener('click', (e) => { if (e.detail === 0) handlers.onPause(); }); // 키보드로 누른 경우
   $('#resume-btn').addEventListener('click', handlers.onResume);
   for (const btn of document.querySelectorAll('.restart-btn')) btn.addEventListener('click', handlers.onStart);
   for (const btn of document.querySelectorAll('.menu-btn')) btn.addEventListener('click', handlers.onMenu);

@@ -3,6 +3,7 @@ import { SLOTS, createMatch, createInputs, cancelInputs, defaultLoadout } from '
 import { step } from './game/update.js';
 import { createControls } from './input/pointer.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
+import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
 import { unlock, setMuted, playEvents, updateEngine } from './audio/synth.js';
@@ -86,6 +87,7 @@ screens.setBalanceStatus(Object.keys(overrides()).length);
 setMuted(settings.muted);
 screens.syncSettings(settings);
 
+blockBrowserGestures(document.querySelector('#game'));
 attachKeyboard(() => (active() ? inputs : null), () => (match?.phase === 'paused' ? resume() : pause()));
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 window.addEventListener('blur', pause);
