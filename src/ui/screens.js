@@ -1,6 +1,8 @@
 import { TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, TICK } from '../game/config.js';
 import { KEY_LABELS } from '../input/keyboard.js';
 import { createBalanceScreens } from './balance.js';
+import { createSingleSetup } from './single.js';
+import { weaponInfo, choiceButton } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
 // 2인 조작 패널 한 개(이동키 + 버튼 + 발사키)가 들어가려면 필요한 대략의 화면 폭
@@ -27,31 +29,64 @@ function totals(stats) {
   return t;
 }
 
-export function weaponInfo(w) {
-  if (w.beam) return `${w.interval}초마다 ${w.damage} · 배터리 ${w.battery.shots}발, 쉬면 ${w.battery.recharge}초 뒤 완충`;
-  if (w.heat) return `${w.interval}초마다 ${w.damage} · ${w.heat.max}초 연사하면 과열 ${w.heat.cooldown}초`;
-  if (w.thrown) return `아이템 버튼으로 던짐 · 반경 ${w.splash.radius} 폭발 ${w.splash.damage} · 쿨타임 ${w.interval}초`;
-  if (w.trigger === 'release') {
-    const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';
-    const note = w.note ? ` · ${w.note}` : '';
-    return `조준 후 떼면 발사 · 쿨타임 ${w.interval}초 · 한 발 ${w.damage}${splash}${note}`;
-  }
-  const shots = w.burst > 1 ? `${w.burst}점사 ` : '';
-  const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';
-  return `${w.interval}초마다 ${shots}· 한 발 ${w.damage}${splash}`;
-}
+/**
+ * 자리 하나의 캐릭터·주무기 선택 목록(li). 고를 때마다 onPick(slotId, key, value).
+ * heading을 주면 자리 이름 대신 쓴다.
+ */
+function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}`) {
+  const pick = loadout[s.id];
+  const li = document.createElement('li');
+  li.className = `team-${s.team}`;
+  const title = document.createElement('b');
+  title.textContent = heading;
 
-function choiceButton(label, pressed, onClick) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'choice';
-  btn.setAttribute('aria-pressed', String(pressed));
-  btn.addEventListener('click', () => {
-    for (const b of btn.parentElement.children) b.setAttribute('aria-pressed', String(b === btn));
-    onClick();
-  });
-  if (typeof label === 'string') btn.textContent = label; else btn.append(...label);
-  return btn;
+  const chars = document.createElement('div');
+  chars.className = 'choices characters';
+  chars.setAttribute('role', 'group');
+  chars.setAttribute('aria-label', `${s.id} 캐릭터`);
+  for (const c of CHARACTERS) {
+    const img = document.createElement('img');
+    img.src = c.image ?? `assets/characters/${c.id}.png`;
+    img.alt = '';
+    const name = document.createElement('span');
+    name.textContent = c.name;
+    chars.append(choiceButton([img, name], pick.characterId === c.id, () => {
+      onPick(s.id, 'characterId', c.id);
+      syncWeapons();
+    }));
+  }
+
+  const weapons = document.createElement('div');
+  weapons.className = 'choices weapons';
+  weapons.setAttribute('role', 'group');
+  weapons.setAttribute('aria-label', `${s.id} 총기`);
+  for (const id of PRIMARY_IDS) {
+    const name = document.createElement('span');
+    name.textContent = WEAPONS[id].name;
+    const info = document.createElement('small');
+    info.textContent = weaponInfo(WEAPONS[id]);
+    weapons.append(choiceButton([name, info], pick.weapon === id,
+      () => onPick(s.id, 'weapon', id)));
+  }
+
+  // 드론을 고르면 주무기 선택 대신 전용 무기 안내
+  const droneNote = document.createElement('small');
+  droneNote.className = 'drone-note';
+  function syncWeapons() {
+    const character = CHARACTERS.find((c) => c.id === loadout[s.id].characterId);
+    weapons.hidden = !!character?.drone;
+    droneNote.hidden = !character?.drone;
+    if (character?.drone) {
+      const w = WEAPONS[character.weapon];
+      droneNote.textContent = `${character.name} 전용: ${w.name} (${weaponInfo(w)}) · 보조무기·수류탄 없음`;
+    }
+  }
+  syncWeapons();
+
+  const keys = document.createElement('small');
+  keys.textContent = `키보드: ${KEY_LABELS[s.id]}`;
+  li.append(title, chars, weapons, droneNote, keys);
+  return li;
 }
 
 /** 메뉴·준비·일시정지·결과 DOM 화면. 'pause'와 'result'는 경기 화면 위에 겹친다. */
@@ -59,7 +94,7 @@ export function createScreens(handlers) {
   const game = $('#game');
   const screens = {
     menu: $('#screen-menu'), ready: $('#screen-ready'), pause: $('#screen-pause'), result: $('#screen-result'),
-    balance: $('#screen-balance'), summary: $('#screen-summary'),
+    balance: $('#screen-balance'), summary: $('#screen-summary'), single: $('#screen-single'),
   };
 
   function show(name) {
@@ -69,7 +104,10 @@ export function createScreens(handlers) {
     screens[name]?.querySelector('[tabindex="-1"]').focus();
   }
 
-  $('#setup-btn').addEventListener('click', handlers.onSetup);
+  $('#setup-btn').addEventListener('click', handlers.onVersus);
+  $('#single-btn').addEventListener('click', handlers.onSingle);
+  $('#single-start-btn').addEventListener('click', handlers.onStart);
+  const singleSetup = createSingleSetup(handlers.onSingleChange);
   for (const btn of document.querySelectorAll('.setup-again-btn')) btn.addEventListener('click', handlers.onSetup);
   const balance = createBalanceScreens({
     show,
@@ -104,71 +142,24 @@ export function createScreens(handlers) {
     setLoaded() {
       $('#load-status').hidden = true;
       $('#setup-btn').disabled = false;
+      $('#single-btn').disabled = false;
     },
     /** 메인 메뉴에 밸런스 변경 여부를 알린다. */
     setBalanceStatus(changedCount) {
       $('#balance-status').hidden = changedCount === 0;
       $('#balance-status').textContent = `밸런스 수치 ${changedCount}개가 기본값과 다릅니다.`;
     },
-    /** 자리마다 캐릭터(4명 중 자유)와 총기를 고른다. 고를 때마다 handlers.onPick(slotId, key, value) */
+    /** 2인 대결: 자리마다 캐릭터(5명 중 자유)와 주무기를 고른다. 고를 때마다 handlers.onPick(slotId, key, value) */
     showReady(slots, loadout) {
-      $('#slot-list').replaceChildren(...slots.map((s) => {
-        const pick = loadout[s.id];
-        const li = document.createElement('li');
-        li.className = `team-${s.team}`;
-        const title = document.createElement('b');
-        title.textContent = `${s.id} · ${TEAM_NAME[s.team]}`;
-
-        const chars = document.createElement('div');
-        chars.className = 'choices characters';
-        chars.setAttribute('role', 'group');
-        chars.setAttribute('aria-label', `${s.id} 캐릭터`);
-        for (const c of CHARACTERS) {
-          const img = document.createElement('img');
-          img.src = c.image ?? `assets/characters/${c.id}.png`;
-          img.alt = '';
-          const name = document.createElement('span');
-          name.textContent = c.name;
-          chars.append(choiceButton([img, name], pick.characterId === c.id, () => {
-            handlers.onPick(s.id, 'characterId', c.id);
-            syncWeapons();
-          }));
-        }
-
-        const weapons = document.createElement('div');
-        weapons.className = 'choices weapons';
-        weapons.setAttribute('role', 'group');
-        weapons.setAttribute('aria-label', `${s.id} 총기`);
-        for (const id of PRIMARY_IDS) {
-          const name = document.createElement('span');
-          name.textContent = WEAPONS[id].name;
-          const info = document.createElement('small');
-          info.textContent = weaponInfo(WEAPONS[id]);
-          weapons.append(choiceButton([name, info], pick.weapon === id,
-            () => handlers.onPick(s.id, 'weapon', id)));
-        }
-
-        // 드론을 고르면 주무기 선택 대신 전용 무기 안내
-        const droneNote = document.createElement('small');
-        droneNote.className = 'drone-note';
-        function syncWeapons() {
-          const character = CHARACTERS.find((c) => c.id === loadout[s.id].characterId);
-          weapons.hidden = !!character?.drone;
-          droneNote.hidden = !character?.drone;
-          if (character?.drone) {
-            const w = WEAPONS[character.weapon];
-            droneNote.textContent = `${character.name} 전용: ${w.name} (${weaponInfo(w)}) · 보조무기·수류탄 없음`;
-          }
-        }
-        syncWeapons();
-
-        const keys = document.createElement('small');
-        keys.textContent = `키보드: ${KEY_LABELS[s.id]}`;
-        li.append(title, chars, weapons, droneNote, keys);
-        return li;
-      }));
+      $('#slot-list').replaceChildren(...slots.map((s) => slotItem(s, loadout, handlers.onPick)));
       $('#narrow-warning').hidden = window.innerWidth / slots.length >= MIN_PANEL_WIDTH;
       show('ready');
+    },
+    /** 싱글 플레이 설정: 플레이어(P1) 캐릭터·주무기와 AI 설정 */
+    showSingle(slot, loadout, single) {
+      $('#single-player').replaceChildren(slotItem(slot, loadout, handlers.onPick, `플레이어 · ${TEAM_NAME[slot.team]}`));
+      singleSetup.open(single);
+      show('single');
     },
     showResult(match) {
       const { winner, players, stats } = match;
@@ -176,6 +167,7 @@ export function createScreens(handlers) {
       $('#result-time').textContent = `경기 시간 ${formatTime(time)}`;
       const winnerPlayer = players.find((p) => p.team === winner);
       $('#result-title').textContent = winner === 'draw' ? '무승부'
+        : winnerPlayer.ai ? `${winnerPlayer.name} 승리…`
         : `${winnerPlayer.id} ${winnerPlayer.name} (${TEAM_NAME[winner]}) 승리!`;
 
       // 플레이어 카드: 승패, 남은 체력, 핵심 수치

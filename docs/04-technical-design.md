@@ -4,7 +4,7 @@
 
 ## 구성
 
-첫 버전은 정적 웹앱으로 배포할 수 있는 로컬 **2인 전용** 게임이다(슬롯은 P1·P2 두 개). TypeScript를 사용할 수 있으며 빌드 도구와 버전은 구현 착수 때 고정한다. 로그인·백엔드·외부 API는 필요하지 않다. 게임의 논리 상태는 렌더링과 분리한다.
+첫 버전은 정적 웹앱으로 배포할 수 있는 로컬 게임이다(슬롯은 P1·P2 두 개, 싱글 플레이에서는 P2를 AI가 조작). TypeScript를 사용할 수 있으며 빌드 도구와 버전은 구현 착수 때 고정한다. 로그인·백엔드·외부 API는 필요하지 않다. 게임의 논리 상태는 렌더링과 분리한다.
 
 ```text
 src/
@@ -13,12 +13,15 @@ src/
   game/update.ts        # 고정 틱 업데이트
   game/collision.ts     # 연속 충돌, 팀 필터
   game/balance.ts       # 밸런스 메뉴에서 조정하는 수치 목록·저장
+  game/ai.ts            # 싱글 플레이 AI(조준·탄 피하기·사격·무기 전환)
   input/pointer.ts      # 포인터 소유권과 취소, 무기·아이템 버튼
   input/keyboard.ts     # 키 매핑과 발사 엣지 (P1·P2)
   input/gestures.ts     # 브라우저 확대/축소·스크롤 제스처 차단
   render/canvas.ts      # 이미지, 조준선, 효과
   ui/screens.ts        # 메뉴, 준비, 결과(통계), 접근성
   ui/balance.ts        # 밸런스 조정·현재 수치 보기 화면
+  ui/single.ts         # 싱글 플레이 AI 설정
+  ui/widgets.ts        # 선택 버튼 등 공용 DOM 조각
   audio/synth.ts        # 짧은 합성 효과음
   storage/settings.ts  # 음소거, 키 매핑, 동작 줄이기
 assets/                # 현재 생성된 이미지·SVG

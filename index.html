@@ -28,14 +28,16 @@
       <p id="load-status" role="status">에셋을 불러오는 중…</p>
       <button id="retry-btn" type="button" hidden>다시 시도</button>
       <div class="row">
-        <button id="setup-btn" class="primary" type="button" disabled>대결 시작</button>
+        <button id="single-btn" class="primary" type="button" disabled>싱글 플레이 (vs AI)</button>
+        <button id="setup-btn" class="primary" type="button" disabled>2인 대결</button>
         <button id="balance-btn" type="button">밸런스 조정</button>
       </div>
       <p id="balance-status" class="hint" hidden></p>
       <details>
         <summary>조작법</summary>
         <ul>
-          <li>한 화면에서 두 사람이 대결합니다. P1(지구방위팀)은 왼쪽, P2(ISB팀)는 오른쪽 조작 패널을 씁니다.</li>
+          <li><b>싱글 플레이</b> 혼자서 AI(ISB팀 요원)와 대결합니다. AI의 무기·체력·탄속·피해와 난이도를 정할 수 있습니다.</li>
+          <li><b>2인 대결</b> 한 화면에서 두 사람이 대결합니다. P1(지구방위팀)은 왼쪽, P2(ISB팀)는 오른쪽 조작 패널을 씁니다.</li>
           <li><b>이동키</b> 패널 바깥쪽 동그라미를 좌우로 드래그하면 캐릭터가 옥상 레일 위에서 움직입니다.</li>
           <li><b>발사키</b> 패널 안쪽 동그라미를 드래그해 조준하면 누르고 있는 동안 자동으로 발사됩니다. RPG·저격총은 조준한 뒤 손을 떼면 나갑니다.</li>
           <li><b>무기·아이템 버튼</b> 두 스틱 사이의 버튼으로 주무기·보조무기(기관단총)를 바로 고르고, 아이템 버튼으로 지금 조준 방향에 수류탄을 던집니다. 주무기 자체는 경기 전에만 고릅니다.</li>
@@ -65,6 +67,36 @@
       <div class="row">
         <button id="start-btn" class="primary" type="button">시작</button>
         <button id="back-btn" type="button">메인 메뉴</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-single" class="screen" hidden>
+    <div class="card single-card">
+      <h2 tabindex="-1">싱글 플레이 (vs AI)</h2>
+      <div class="single-grid">
+        <ul id="single-player" class="slot-list"></ul>
+        <section class="ai-setup team-isb" aria-labelledby="ai-setup-title">
+          <b id="ai-setup-title">AI · ISB팀</b>
+          <p class="hint">AI 캐릭터는 요원 1·요원 2 중에서 경기마다 무작위로 정해집니다. AI는 언제나 플레이어를 조준하고, 날아오는 탄을 움직여 피합니다.</p>
+          <div class="field-label">난이도</div>
+          <div id="ai-difficulty" class="choices difficulty" role="group" aria-label="난이도"></div>
+          <div class="field-label">AI 주무기</div>
+          <div id="ai-weapon" class="choices weapons" role="group" aria-label="AI 주무기"></div>
+          <div class="ai-numbers">
+            <label class="param">AI 체력 <input id="ai-hp" type="number" inputmode="numeric" min="1" max="9999" step="10"><em></em></label>
+            <label class="param">AI 탄속 <input id="ai-speed" type="number" inputmode="numeric" min="25" max="300" step="5"><em>%</em></label>
+            <label class="param">주무기 피해 <input id="ai-dmg-primary" type="number" inputmode="numeric" min="0" max="999" step="1"><em></em></label>
+            <label class="param">보조무기 피해 <input id="ai-dmg-secondary" type="number" inputmode="numeric" min="0" max="999" step="1"><em></em></label>
+            <label class="param">수류탄 피해 <input id="ai-dmg-grenade" type="number" inputmode="numeric" min="0" max="999" step="1"><em></em></label>
+          </div>
+          <p id="ai-defaults" class="hint"></p>
+          <button id="ai-reset-btn" type="button">AI 설정 기본값으로</button>
+        </section>
+      </div>
+      <div class="row">
+        <button id="single-start-btn" class="primary" type="button">시작</button>
+        <button class="menu-btn" type="button">메인 메뉴</button>
       </div>
     </div>
   </section>
