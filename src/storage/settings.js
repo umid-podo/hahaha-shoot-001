@@ -34,3 +34,30 @@ export function saveBalance(values) {
     else localStorage.removeItem(BALANCE_KEY);
   } catch { /* 저장 불가 환경은 무시 */ }
 }
+
+const SINGLE_KEY = 'haha2.single.v1';
+
+/**
+ * 싱글플레이 설정. aiDamage의 null은 '무기 기본 피해'를 뜻한다.
+ * aiBulletSpeed는 탄속 배율(%)이다.
+ */
+export function defaultSingle() {
+  return {
+    aiWeapon: 'pistol', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100,
+    aiDamage: { primary: null, secondary: null, grenade: null },
+  };
+}
+
+export function loadSingle() {
+  const defaults = defaultSingle();
+  try {
+    const saved = JSON.parse(localStorage.getItem(SINGLE_KEY)) ?? {};
+    return { ...defaults, ...saved, aiDamage: { ...defaults.aiDamage, ...saved.aiDamage } };
+  } catch {
+    return defaults;
+  }
+}
+
+export function saveSingle(single) {
+  try { localStorage.setItem(SINGLE_KEY, JSON.stringify(single)); } catch { /* 저장 불가 환경은 무시 */ }
+}

@@ -12,16 +12,41 @@ const LASER_LENGTH = 2400;
 // 0.1초 같은 간격이 1/60초 틱의 부동소수 오차로 한 틱 밀리지 않도록 쓰는 여유
 const EPS = 1e-9;
 
+/** 무기 칸 이름: 수류탄은 'grenade', 고른 주무기는 'primary', 그 밖(기관단총)은 'secondary'. */
+function slotOf(player, weaponId) {
+  if (weaponId === 'grenade') return 'grenade';
+  return weaponId === player.primary ? 'primary' : 'secondary';
+}
+
+/**
+ * 이 플레이어가 이 무기로 주는 피해 { damage, splash }. 싱글플레이 AI처럼 player.damage[칸]이 있으면 그 값을 쓴다.
+ * 수류탄은 폭발 피해를, RPG처럼 직격+폭발 무기는 직격 피해를 바꾸고 폭발 피해는 같은 비율로 맞춘다.
+ */
+export function weaponDamage(player, weaponId) {
+  const weapon = WEAPONS[weaponId];
+  const override = player.damage?.[slotOf(player, weaponId)];
+  if (!Number.isFinite(override)) return { damage: weapon.damage, splash: weapon.splash };
+  if (weapon.thrown) return { damage: 0, splash: { ...weapon.splash, damage: override } };
+  const splash = weapon.splash && {
+    ...weapon.splash,
+    damage: weapon.damage > 0 ? Math.round((weapon.splash.damage * override) / weapon.damage) : weapon.splash.damage,
+  };
+  return { damage: override, splash };
+}
+
 export function spawnProjectile(match, player, aim, weaponId = player.weapon) {
   const weapon = WEAPONS[weaponId];
+  const { damage, splash } = weaponDamage(player, weaponId);
+  // bulletSpeedScale: 싱글플레이 AI 탄속 배율(기본 1)
+  const speed = weapon.speed * (player.bulletSpeedScale ?? 1);
   const x = player.x + Math.cos(aim) * MUZZLE_OFFSET;
   const y = player.y + Math.sin(aim) * MUZZLE_OFFSET;
   const projectile = {
     id: match.nextProjectileId++, ownerId: player.id, team: player.team, weapon: weapon.id,
     x, y, previousX: x, previousY: y,
-    vx: Math.cos(aim) * weapon.speed, vy: Math.sin(aim) * weapon.speed,
-    life: RULES.bulletLife, damage: weapon.damage,
-    splash: weapon.splash, homing: weapon.homing, endY: ENEMY_RAIL[player.team],
+    vx: Math.cos(aim) * speed, vy: Math.sin(aim) * speed,
+    life: RULES.bulletLife, damage,
+    splash, homing: weapon.homing, endY: ENEMY_RAIL[player.team],
     // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용)
     connected: false,
     // 던진 무기는 아무것에도 닿지 않고 목표 레일 선에서 터진다. startY는 포물선 표시용.
@@ -233,9 +258,10 @@ function fireLaser(match, p, weapon, events) {
   events.push({ type: 'fire', playerId: p.id, weapon: weapon.id });
   events.push({ type: 'laser', playerId: p.id, x1: x0, y1: y0, x2: x, y2: y });
   const shot = { team: p.team, ownerId: p.id, weapon: weapon.id, connected: false };
-  if (best.victim) damage(match, best.victim, weapon.damage, shot, events);
+  const amount = weaponDamage(p, weapon.id).damage;
+  if (best.victim) damage(match, best.victim, amount, shot, events);
   else if (best.cover) events.push({ type: 'block', x, y });
-  if (best.cover) damageCover(match, best.cover, weapon.damage, shot, events);
+  if (best.cover) damageCover(match, best.cover, amount, shot, events);
 }
 
 function fire(match, p, events) {

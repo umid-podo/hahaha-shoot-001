@@ -160,7 +160,7 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 .summary-block tr.changed { background: #fff3c4; }
 .summary-block td small { color: var(--muted); font-weight: 400; }
 
-#slot-list {
+#slot-list, .slot-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 8px;
@@ -169,15 +169,15 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
   list-style: none;
   text-align: left;
 }
-#slot-list li {
+#slot-list li, .slot-list li {
   display: grid;
   gap: 8px;
   padding: 8px 12px;
   border: 2px solid var(--team);
   border-radius: 12px;
 }
-#slot-list li > b { color: var(--team); }
-#slot-list li > small { color: var(--muted); }
+#slot-list li > b, .slot-list li > b { color: var(--team); }
+#slot-list li > small, .slot-list li > small { color: var(--muted); }
 .team-earth { --team: var(--earth); }
 .team-isb { --team: var(--isb); }
 
@@ -311,3 +311,19 @@ button.choice {
 button.choice small { color: var(--muted); font-size: 11px; font-weight: 400; }
 button.choice[aria-pressed="true"] { border-color: var(--team); background: color-mix(in srgb, var(--team) 14%, #fff); }
 .choices.characters img { width: 52px; height: 52px; object-fit: contain; }
+
+/* 싱글 플레이 설정: 왼쪽 플레이어 선택, 오른쪽 AI 설정 */
+.single-card { width: min(1100px, 100%); }
+.single-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; align-items: start; text-align: left; }
+.ai-setup { display: grid; gap: 6px; padding: 8px 12px; border: 2px solid var(--team); border-radius: 12px; }
+.ai-setup > b { color: var(--team); }
+.ai-setup .hint { margin: 0; }
+.field-label { margin-top: 4px; font-size: 14px; font-weight: 700; }
+.choices.difficulty { grid-template-columns: repeat(3, 1fr); }
+.ai-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2px 12px; margin-top: 4px; }
+.ai-numbers .param { grid-template-columns: 1fr 84px 18px; }
+#ai-reset-btn { justify-self: start; min-height: 36px; padding: 4px 12px; font-size: 14px; }
+
+/* 싱글 플레이 경기: AI 자리 조작 패널 대신 이름·난이도 */
+.ai-panel { display: grid; grid-template-columns: 1fr; place-items: center; align-content: center; min-height: calc(var(--stick) + 16px); color: var(--team); }
+.ai-panel small { color: var(--muted); }
