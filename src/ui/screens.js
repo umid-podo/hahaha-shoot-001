@@ -1,10 +1,13 @@
-import { TEAM_NAME, CHARACTERS, WEAPONS, WEAPON_IDS } from '../game/config.js';
+import { TEAM_NAME, CHARACTERS, WEAPONS, PRIMARY_IDS } from '../game/config.js';
 import { KEY_LABELS } from '../input/keyboard.js';
 
 const $ = (selector) => document.querySelector(selector);
 const MIN_PANEL_WIDTH = 220;
 
-function weaponInfo(w) {
+export function weaponInfo(w) {
+  if (w.beam) return `${w.interval}초마다 ${w.damage} · 배터리 ${w.battery.shots}발, 쉬면 ${w.battery.recharge}초 뒤 완충`;
+  if (w.heat) return `${w.interval}초마다 ${w.damage} · ${w.heat.max}초 연사하면 과열 ${w.heat.cooldown}초`;
+  if (w.thrown) return `떼면 던짐 · 반경 ${w.splash.radius} 폭발 ${w.splash.damage} · 쿨타임 ${w.interval}초`;
   if (w.trigger === 'release') {
     const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';
     return `조준 후 떼면 발사 · 쿨타임 ${w.interval}초 · 한 발 ${w.damage}${splash}`;
@@ -82,19 +85,21 @@ export function createScreens(handlers) {
         chars.setAttribute('aria-label', `${s.id} 캐릭터`);
         for (const c of CHARACTERS) {
           const img = document.createElement('img');
-          img.src = `assets/characters/${c.id}.png`;
+          img.src = c.image ?? `assets/characters/${c.id}.png`;
           img.alt = '';
           const name = document.createElement('span');
           name.textContent = c.name;
-          chars.append(choiceButton([img, name], pick.characterId === c.id,
-            () => handlers.onPick(s.id, 'characterId', c.id)));
+          chars.append(choiceButton([img, name], pick.characterId === c.id, () => {
+            handlers.onPick(s.id, 'characterId', c.id);
+            syncWeapons();
+          }));
         }
 
         const weapons = document.createElement('div');
         weapons.className = 'choices weapons';
         weapons.setAttribute('role', 'group');
         weapons.setAttribute('aria-label', `${s.id} 총기`);
-        for (const id of WEAPON_IDS) {
+        for (const id of PRIMARY_IDS) {
           const name = document.createElement('span');
           name.textContent = WEAPONS[id].name;
           const info = document.createElement('small');
@@ -103,9 +108,23 @@ export function createScreens(handlers) {
             () => handlers.onPick(s.id, 'weapon', id)));
         }
 
+        // 드론을 고르면 주무기 선택 대신 전용 무기 안내
+        const droneNote = document.createElement('small');
+        droneNote.className = 'drone-note';
+        function syncWeapons() {
+          const character = CHARACTERS.find((c) => c.id === loadout[s.id].characterId);
+          weapons.hidden = !!character?.drone;
+          droneNote.hidden = !character?.drone;
+          if (character?.drone) {
+            const w = WEAPONS[character.weapon];
+            droneNote.textContent = `${character.name} 전용: ${w.name} (${weaponInfo(w)}) · 보조무기·수류탄 없음`;
+          }
+        }
+        syncWeapons();
+
         const keys = document.createElement('small');
         keys.textContent = `키보드: ${KEY_LABELS[s.id]}`;
-        li.append(title, chars, weapons, keys);
+        li.append(title, chars, weapons, droneNote, keys);
         return li;
       }));
       $('#narrow-warning').hidden = window.innerWidth / slots.length >= MIN_PANEL_WIDTH;
