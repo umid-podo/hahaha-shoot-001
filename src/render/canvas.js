@@ -84,6 +84,7 @@ export function createRenderer(canvas, wrap, assets) {
   function drawPlayer(p, input, time, reducedMotion) {
     // 무기별 그림(manifest id '<캐릭터>@<무기>')이 있으면 그것을, 없으면 기본 그림을 쓴다.
     const { img, anchor } = assets[`${p.characterId}@${p.weapon}`] ?? assets[p.characterId];
+    const size = SPRITE_SIZE * p.scale; // 드론처럼 크게 그리는 캐릭터도 판정 원은 같다
     const color = TEAM_COLOR[p.team];
     const hurt = p.hurt > 0;
 
@@ -94,7 +95,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.rotate(Math.PI / 2);
       ctx.globalAlpha = 0.45;
       ctx.filter = 'grayscale(1)';
-      ctx.drawImage(img, -anchor[0] * SPRITE_SIZE, -anchor[1] * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE);
+      ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
       ctx.restore();
       ctx.font = 'bold 30px system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -127,13 +128,13 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.translate(p.x + shake, p.y + bounce);
     ctx.scale(facing * squash, squash);
     ctx.globalAlpha = hurt ? 0.7 : 1;
-    ctx.drawImage(img, -anchor[0] * SPRITE_SIZE, -anchor[1] * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE);
+    ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
     ctx.restore();
 
     // 현재 조준 방향 눈금(항상) + 발사 준비 중에만 조준선
     const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
     // 떼면 쏘는 무기(RPG)는 쿨타임 동안 눈금을 회색으로 표시
-    // 떼면 쏘는 무기(RPG·수류탄)의 쿨타임, 방전, 과열 동안은 눈금을 회색으로 표시
+    // 떼면 쏘는 무기(RPG·저격총·수류탄)의 쿨타임, 방전, 과열 동안은 눈금을 회색으로 표시
     const weapon = WEAPONS[p.weapon];
     const reloading = (weapon.trigger === 'release' && p.cooldown > 0) ||
       (weapon.id === 'grenade' && p.grenadeCooldown > 0) ||
@@ -173,7 +174,7 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.fillText(label, p.x, p.y + 60);
-    drawHpBar(ctx, p.x - HP_BAR.w / 2, p.y + 76, HP_BAR.w, HP_BAR.h, p.hp);
+    drawHpBar(ctx, p.x - HP_BAR.w / 2, p.y + 76, HP_BAR.w, HP_BAR.h, p.hp, p.maxHp);
     drawGauge(p, p.x - HP_BAR.w / 2, p.y + 76 + HP_BAR.h + 3, HP_BAR.w);
   }
 
@@ -229,7 +230,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.fillText(`${p.id} ${p.name} · ${WEAPONS[p.weapon].name}`, x + 12, my + 2);
       ctx.textAlign = 'right';
       ctx.fillText(p.alive ? `${p.hp}` : 'KO', x + w - 12, my + 17);
-      drawHpBar(ctx, x + 12, my + 12, w - 60, 10, p.hp);
+      drawHpBar(ctx, x + 12, my + 12, w - 60, 10, p.hp, p.maxHp);
     });
   }
 
@@ -237,6 +238,7 @@ export function createRenderer(canvas, wrap, assets) {
   function drawCovers(covers) {
     for (const c of covers) {
       if (c.hp <= 0) continue;
+      if (c.steel) { drawSteel(c); continue; }
       const x = c.x - c.w / 2, y = c.y - c.h / 2;
       ctx.fillStyle = 'rgba(48,53,62,0.25)';
       ctx.beginPath();
@@ -271,6 +273,44 @@ export function createRenderer(canvas, wrap, assets) {
       }
       if (c.hp < COVER.hp) drawHpBar(ctx, x + 10, y - 14, c.w - 20, 8, c.hp, COVER.hp);
     }
+  }
+
+  /** 강철 엄폐물: 파란빛 도는 금속판 + 리벳 + 팀 색 띠. 금·내구도 바 없음. */
+  function drawSteel(c) {
+    const x = c.x - c.w / 2, y = c.y - c.h / 2;
+    ctx.fillStyle = 'rgba(48,53,62,0.3)';
+    ctx.beginPath();
+    ctx.roundRect(x + 6, y + 8, c.w, c.h, 6);
+    ctx.fill();
+    const grad = ctx.createLinearGradient(0, y, 0, y + c.h);
+    grad.addColorStop(0, '#C7D0DB');
+    grad.addColorStop(0.5, '#7D8A99');
+    grad.addColorStop(1, '#56626F');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(x, y, c.w, c.h, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = TEAM_COLOR[c.team];
+    ctx.fillRect(x + 4, y + 4, c.w - 8, 6);
+    ctx.fillStyle = '#E6EBF1';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.5;
+    for (const rx of [x + 12, x + c.w - 12]) {
+      for (const ry of [y + 18, y + c.h - 9]) {
+        ctx.beginPath();
+        ctx.arc(rx, ry, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = INK;
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('STEEL', c.x, c.y + 5);
   }
 
   function drawDebris(fx, reducedMotion) {

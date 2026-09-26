@@ -31,11 +31,14 @@ export const WEAPONS = {
   dual: { id: 'dual', name: '쌍권총', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1 },
   rpg: {
     id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release',
-    splash: { damage: 4, radius: 120 }, homing: { turnRate: 0.8 },
+    splash: { damage: 10, radius: 120 }, homing: { turnRate: 0.8 },
   },
-  sniper: { id: 'sniper', name: '저격총', interval: 1.5, damage: 60, speed: 1600, burst: 1 },
-  // 드론(R-4) 전용 주무기
-  laser: { id: 'laser', name: '레이저 캐논', interval: 0.1, damage: 5, burst: 1, beam: true, battery: { shots: 30, recharge: 2 } },
+  sniper: {
+    id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release',
+    note: '팀 진영에 강철 엄폐물',
+  },
+  // 드론(R-10) 전용 주무기
+  laser: { id: 'laser', name: '레이저 캐논', interval: 0.1, damage: 4, burst: 1, beam: true, battery: { shots: 30, recharge: 2 } },
   // 보조무기
   smg: { id: 'smg', name: '기관단총', interval: 0.1, damage: 4, speed: 800, burst: 1, heat: { max: 4, cooldown: 2, decay: 1 } },
   // 수류탄: interval은 한 번 던진 뒤의 쿨타임
@@ -53,13 +56,16 @@ export const SLOT_ORDER = ['primary', 'secondary', 'grenade'];
 export const SLOT_WEAPON = { secondary: 'smg', grenade: 'grenade' };
 export const SLOT_NAME = { primary: '주무기', secondary: '보조무기', grenade: '수류탄' };
 
-/** drone: 보조무기·수류탄을 쓸 수 없고 주무기는 weapon 하나로 고정된다. */
+/**
+ * drone: 보조무기·수류탄을 쓸 수 없고 주무기는 weapon 하나로 고정된다.
+ * maxHp는 캐릭터별 최대 체력(없으면 MAX_HP), scale은 그림 크기 배율(판정 크기는 그대로).
+ */
 export const CHARACTERS = [
   { id: 'earth-arrow', name: '온이름' },
   { id: 'earth-pizza', name: '피자럭스' },
   { id: 'isb-agent-1', name: '요원 1' },
   { id: 'isb-agent-2', name: '요원 2' },
-  { id: 'r4', name: 'R-4', drone: true, weapon: 'laser', image: 'assets/characters/r4.svg' },
+  { id: 'r10', name: 'R-10', drone: true, weapon: 'laser', maxHp: 400, scale: 1.4, image: 'assets/characters/r10.svg' },
 ];
 
 /**
@@ -90,11 +96,20 @@ export const JET = {
  * RPG 직격은 rpgMultiplier배 피해를 준다. 전투기 기관포는 막히기만 하고 내구도를 깎지 않는다.
  */
 export const COVER = { hp: 200, rpgMultiplier: 2 };
+/**
+ * 강철 엄폐물: 주무기로 저격총을 고른 플레이어마다 그 팀 진영에 경기 내내 하나씩 생긴다.
+ * 부서지지 않고 양 팀 총알을 모두 막는다. 팀 엄폐물과 겹치지 않게 진영 반대쪽부터 채운다.
+ */
+export const STEEL = { w: 160, h: 44 };
 export const COVERS = [
   { id: 'center', x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2, w: 200, h: 48 },
   { id: 'earth', team: 'earth', x: 480, y: RAIL_Y.earth - 160, w: 170, h: 44 },
   { id: 'isb', team: 'isb', x: ARENA_WIDTH - 480, y: RAIL_Y.isb + 160, w: 170, h: 44 },
 ];
+export const STEEL_SPOTS = {
+  earth: [{ x: ARENA_WIDTH - 480, y: RAIL_Y.earth - 160 }, { x: ARENA_WIDTH / 2, y: RAIL_Y.earth - 160 }],
+  isb: [{ x: 480, y: RAIL_Y.isb + 160 }, { x: ARENA_WIDTH / 2, y: RAIL_Y.isb + 160 }],
+};
 
 export const TEAM_COLOR = { earth: '#247BDB', isb: '#D56A26' };
 export const TEAM_NAME = { earth: '지구방위팀', isb: 'ISB팀' };

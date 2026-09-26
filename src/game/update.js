@@ -125,7 +125,7 @@ function coverContact(match, b) {
 
 /** 엄폐물 내구도 감소. 0이 되면 부서짐 이벤트를 낸다. */
 function damageCover(cover, amount, events) {
-  if (cover.hp <= 0 || amount <= 0) return;
+  if (cover.steel || cover.hp <= 0 || amount <= 0) return; // 강철 엄폐물은 부서지지 않는다
   cover.hp = Math.max(0, cover.hp - amount);
   events.push({ type: 'cover-hit', coverId: cover.id, damage: amount });
   if (cover.hp === 0) events.push({ type: 'cover-break', coverId: cover.id, x: cover.x, y: cover.y });

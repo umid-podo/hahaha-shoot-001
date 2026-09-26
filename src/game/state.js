@@ -1,4 +1,6 @@
-import { RAIL_Y, COUNTDOWN, MAX_HP, CHARACTERS, WEAPONS, PRIMARY_IDS, JET, COVERS, COVER } from './config.js';
+import {
+  RAIL_Y, COUNTDOWN, MAX_HP, CHARACTERS, WEAPONS, PRIMARY_IDS, JET, COVERS, COVER, STEEL, STEEL_SPOTS,
+} from './config.js';
 
 // 자리(P1~P4)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
 export const SLOTS = [
@@ -47,12 +49,12 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
     // 드론은 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
     const weapon = character.weapon ?? (PRIMARY_IDS.includes(pick.weapon) ? pick.weapon : slot.weapon);
     return {
-      id: slot.id, team: slot.team, characterId, name: character.name, drone: !!character.drone,
+      id: slot.id, team: slot.team, characterId, name: character.name, drone: !!character.drone, scale: character.scale ?? 1,
       primary: weapon, slot: 'primary', weapon,
       battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
       x, previousX: x, y: RAIL_Y[slot.team],
       aim: initialAim(slot.team),
-      hp: MAX_HP, alive: true, hurt: 0,
+      hp: character.maxHp ?? MAX_HP, maxHp: character.maxHp ?? MAX_HP, alive: true, hurt: 0,
       cooldown: 0, burstLeft: 0, burstTimer: 0, wasAiming: false,
     };
   });
@@ -60,10 +62,23 @@ export function createMatch(playerCount, loadout = defaultLoadout(playerCount), 
   return {
     phase: 'countdown', countdown: COUNTDOWN,
     players, projectiles: [], nextProjectileId: 1,
-    covers: COVERS.map((c) => ({ ...c, hp: COVER.hp })),
+    covers: [...COVERS.map((c) => ({ ...c, hp: COVER.hp })), ...steelCovers(players)],
     jet: null, jetTimer: between(rng, JET.firstDelay), rng,
     tick: 0, winner: null,
   };
+}
+
+/** 저격총을 주무기로 고른 플레이어마다 그 팀 진영의 빈 강철 자리에 부서지지 않는 엄폐물 하나. */
+function steelCovers(players) {
+  const used = { earth: 0, isb: 0 };
+  const covers = [];
+  for (const p of players) {
+    if (p.primary !== 'sniper') continue;
+    const spot = STEEL_SPOTS[p.team][used[p.team]++];
+    if (!spot) continue;
+    covers.push({ id: `steel-${p.id}`, team: p.team, steel: true, ...spot, ...STEEL, hp: Infinity });
+  }
+  return covers;
 }
 
 export function createInputs(players) {
