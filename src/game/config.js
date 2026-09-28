@@ -30,6 +30,7 @@ export const TICK = 1 / 60;
  *   닿으면 damage 피해(기본 9999 = 즉사)를 준다. 엄폐물·무적은 무시한다. 경기 시작 readyAfter초 뒤부터 쓸 수 있고,
  *   쏜 뒤 interval초(쿨타임)가 지나면 다시 쓸 수 있다(제작자 전용).
  *   beamWidth는 레이저 굵기(명중 판정 여유).
+ * hidden: 선택 목록에 보이지 않는 숨겨진 무기. unlockFrom 무기 버튼을 빠르게 unlockTaps번 누르면 그 자리에 나타난다.
  * thrown: 던지는 무기. 엄폐물·플레이어 위로 날아가 목표 레일 선에서 터진다(직격 없음, 폭발 피해만).
  */
 export const WEAPONS = {
@@ -40,8 +41,12 @@ export const WEAPONS = {
     id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release',
     splash: { damage: 10, radius: 120 }, homing: { turnRate: 0.8 },
   },
-  // 아킴보 석궁: 권총 손잡이가 달린 작은 석궁 두 자루. 연사는 조금 느리지만 탄속이 빠르고 화살 2개가 나란히 날아간다.
-  crossbow: { id: 'crossbow', name: '아킴보 석궁', interval: 0.7, damage: 12, speed: 1500, burst: 1, arrows: 2, arrowGap: 26 },
+  // 아킴보 석궁(숨겨진 무기): 권총 손잡이가 달린 작은 석궁 두 자루. 연사는 조금 느리지만 탄속이 빠르고 화살 2개가 나란히 날아간다.
+  // 무기 선택에서 쌍권총 버튼을 빠르게 2번 누르면 나타난다.
+  crossbow: {
+    id: 'crossbow', name: '아킴보 석궁', interval: 0.7, damage: 12, speed: 1500, burst: 1, arrows: 2, arrowGap: 26,
+    hidden: true, unlockFrom: 'dual', unlockTaps: 2,
+  },
   sniper: {
     id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release',
     note: '팀 진영에 강철 엄폐물',
@@ -78,7 +83,7 @@ export const WEAPONS = {
 export const RULES = { swapTime: 0.4, bulletLife: 2 };
 export const WEAPON_IDS = Object.keys(WEAPONS);
 /**
- * 준비 화면에서 고르는 주무기·보조무기. 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,
+ * 준비 화면에서 고르는 주무기·보조무기(숨겨진 무기 포함, 목록에는 hidden이 아닌 것만 보인다). 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,
  * 수류탄은 아이템 버튼으로 바로 던진다.
  */
 export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow'];

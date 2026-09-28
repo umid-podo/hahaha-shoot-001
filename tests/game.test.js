@@ -925,8 +925,11 @@ test('아킴보 석궁(모든 캐릭터 주무기): 0.7초마다 화살 2개가 
   assert.equal(P2.hp, MAX_HP - 12 * 6, '세 번 쏴서 6발 적중');
 });
 
-test('아킴보 석궁은 모든 일반 캐릭터가 주무기로 고를 수 있다', () => {
-  assert.ok(PRIMARY_IDS.includes('crossbow'));
+test('아킴보 석궁은 숨겨진 무기(쌍권총 2번)이고, 모든 일반 캐릭터가 주무기로 쓸 수 있다', () => {
+  assert.ok(PRIMARY_IDS.includes('crossbow'), '경기에서는 주무기로 인정');
+  assert.equal(WEAPONS.crossbow.hidden, true, '목록에는 안 보임');
+  assert.equal(WEAPONS.crossbow.unlockFrom, 'dual');
+  assert.equal(WEAPONS.crossbow.unlockTaps, 2);
   for (const c of CHARACTERS.filter((ch) => !ch.weapon)) {
     const { P1 } = playing({ P1: { characterId: c.id, weapon: 'crossbow' } });
     assert.equal(P1.weapon, 'crossbow', c.name);

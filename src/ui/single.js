@@ -1,7 +1,7 @@
 import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
-import { weaponLabel, choiceButton } from './widgets.js';
+import { weaponLabel, choiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -57,12 +57,11 @@ export function createSingleSetup(onChange) {
       info.textContent = DIFFICULTY_HINT[id];
       return choiceButton([name, info], single.difficulty === id, () => { single.difficulty = id; changed(); });
     }));
-    $('#ai-weapon').replaceChildren(...PRIMARY_IDS.map((id) => {
-      return choiceButton(weaponLabel(WEAPONS[id]), single.aiWeapon === id, () => {
-        single.aiWeapon = id;
-        single.aiDamage.primary = null; // 무기를 바꾸면 주무기 피해는 새 무기 기본값부터
-        changed();
-      });
+    // 숨겨진 무기(아킴보 석궁)는 쌍권총 버튼을 빠르게 2번 눌러 부른다
+    $('#ai-weapon').replaceChildren(...weaponButtons(WEAPONS, PRIMARY_IDS, single.aiWeapon, (id) => {
+      if (single.aiWeapon !== id) single.aiDamage.primary = null; // 무기를 바꾸면 주무기 피해는 새 무기 기본값부터
+      single.aiWeapon = id;
+      changed();
     }));
   }
 

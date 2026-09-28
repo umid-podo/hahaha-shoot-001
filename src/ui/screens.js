@@ -4,13 +4,11 @@ import {
 import { KEY_LABELS } from '../input/keyboard.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
-import { weaponInfo, weaponLabel, choiceButton } from './widgets.js';
+import { weaponInfo, secretChoiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
 // 2인 조작 패널 한 개(이동키 + 버튼 + 발사키)가 들어가려면 필요한 대략의 화면 폭
 const MIN_PANEL_WIDTH = 380;
-// 숨겨진 캐릭터를 부르는 연타: 앞 누름과 이 시간(ms) 안에 다시 누르면 '빠른 연타'로 센다
-const FAST_TAP_MS = 400;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -53,32 +51,18 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     // 온이름은 2번 아크 트루퍼, 3번 제작자.
     // 숨겨진 캐릭터가 된 버튼을 (연타가 아니게) 한 번 누르면 원래 캐릭터로 돌아온다.
     const secrets = CHARACTERS.filter((h) => h.hidden && h.unlockFrom === c.id);
-    let shown = secrets.find((h) => h.id === pick.characterId) ?? c;
-    let count = 0, lastTap = -Infinity;
-    const img = document.createElement('img');
-    img.alt = '';
-    const name = document.createElement('span');
-    const draw = () => {
-      img.src = shown.image ?? `assets/characters/${shown.id}.png`;
-      name.textContent = shown.name;
+    const label = (ch) => {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = ch.image ?? `assets/characters/${ch.id}.png`;
+      const name = document.createElement('span');
+      name.textContent = ch.name;
+      return [img, name];
     };
-    draw();
-    const btn = choiceButton([img, name], pick.characterId === shown.id, () => {
-      if (secrets.length) {
-        const now = performance.now();
-        count = now - lastTap < FAST_TAP_MS ? count + 1 : 1;
-        lastTap = now;
-        const unlocked = secrets.find((h) => (h.unlockTaps ?? 3) === count);
-        if (unlocked) shown = unlocked;
-        else if (count === 1 && shown !== c) shown = c; // 숨겨진 캐릭터를 다시 누르면 원래대로
-        draw();
-        btn.classList.toggle('secret', shown !== c);
-      }
-      onPick(s.id, 'characterId', shown.id);
+    chars.append(secretChoiceButton(c, secrets, pick.characterId, label, (ch) => {
+      onPick(s.id, 'characterId', ch.id);
       syncWeapons();
-    });
-    btn.classList.toggle('secret', shown !== c);
-    chars.append(btn);
+    }));
   }
 
   // 무기 선택: 주무기 줄과 보조무기 줄
@@ -87,9 +71,8 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     row.className = 'choices weapons';
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', `${s.id} ${label}`);
-    for (const id of ids) {
-      row.append(choiceButton(weaponLabel(WEAPONS[id]), current === id, () => onPick(s.id, key, id)));
-    }
+    // 숨겨진 무기(아킴보 석궁)는 쌍권총 버튼을 빠르게 2번 눌러 부른다
+    row.append(...weaponButtons(WEAPONS, ids, current, (id) => onPick(s.id, key, id)));
     const heading = document.createElement('div');
     heading.className = 'field-label';
     heading.textContent = label;
