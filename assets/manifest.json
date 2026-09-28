@@ -232,19 +232,20 @@
     {
       "id": "arc-trooper",
       "name": "아크 트루퍼",
-      "path": "characters/arc-trooper.svg",
-      "width": 512,
-      "height": 512,
-      "bytes": 3158,
-      "format": "svg",
-      "source": "hand-written SVG(참고 그림의 분위기만 살려 새로 그림)",
+      "path": "characters/arc-trooper.png",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 255607,
+      "format": "png",
+      "source": "직접 그린 하얀 갑옷 몸통 SVG에 온이름(earth-arrow.png) 머리를 합성. 권총이 겹친 머리 테두리는 반대쪽 테두리를 뒤집어 채움",
       "kind": "static-character",
       "bodyAnchor": [
         0.5,
-        0.64
+        0.7125
       ],
-      "anchorStatus": "허리띠 높이 초기값",
-      "frames": 1
+      "anchorStatus": "몸통 허리띠 높이(머리·화살표 때문에 그림판 위쪽을 넓힘)",
+      "frames": 1,
+      "hasAlphaChannel": true
     },
     {
       "id": "creator",

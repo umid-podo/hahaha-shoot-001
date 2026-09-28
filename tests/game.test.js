@@ -1070,3 +1070,41 @@ test('아크 트루퍼는 제트팩으로 다른 캐릭터보다 빠르게 움�
   assert.ok(Math.abs(P1.x - 400 - 420) < 8, `아크 트루퍼 ${P1.x - 400}`);
   assert.ok(Math.abs(P2.x - 400 - 300) < 8, `다른 캐릭터 ${P2.x - 400}`);
 });
+
+test('즉사기 피해·유도 각도 조절: 피해를 줄이면 그만큼만, 유도가 작으면 빗나감', () => {
+  const byId = Object.fromEntries(PARAMS.map((p) => [p.id, p]));
+  assert.equal(WEAPONS.instakill.damage, 9999, '기본은 즉사');
+  assert.equal(WEAPONS.instakill.homing, 180, '기본은 무조건 명중');
+  const ready = (loadout) => {
+    const o = playing(loadout);
+    o.match.tick = Math.ceil(WEAPONS.instakill.readyAfter / TICK);
+    o.P1.x = o.P1.previousX = 300; o.P2.x = o.P2.previousX = 300;
+    return o;
+  };
+  try {
+    setValue(byId['weapons.instakill.damage'], 120);
+    const a = ready({ P1: { characterId: 'creator' } });
+    a.inputs.P1.aim = UP; a.inputs.P1.aiming = true;
+    step(a.match, a.inputs);
+    assert.equal(a.P2.hp, MAX_HP - 120, '피해 120만');
+    assert.equal(a.P2.alive, true);
+
+    setValue(byId['weapons.instakill.homing'], 10);
+    const miss = ready({ P1: { characterId: 'creator' } });
+    miss.inputs.P1.aim = -Math.PI / 2 + 0.6; // 상대에서 약 34도 비껴 겨눔
+    miss.inputs.P1.aiming = true;
+    const ev = step(miss.match, miss.inputs);
+    assert.equal(ev.find((e) => e.type === 'megalaser').hit, false);
+    assert.equal(miss.P2.hp, MAX_HP, '유도 10도로는 못 맞힘');
+    assert.equal(miss.P1.instakillUsed, true, '빗나가도 한 번 쓴 것');
+
+    setValue(byId['weapons.instakill.homing'], 45);
+    const bend = ready({ P1: { characterId: 'creator' } });
+    bend.inputs.P1.aim = -Math.PI / 2 + 0.6;
+    bend.inputs.P1.aiming = true;
+    step(bend.match, bend.inputs);
+    assert.equal(bend.P2.hp, MAX_HP - 120, '유도 45도면 휘어서 맞음');
+  } finally {
+    resetAll();
+  }
+});

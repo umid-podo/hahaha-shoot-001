@@ -325,8 +325,10 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.quadraticCurveTo(cx, cy, fx.x2, fx.y2);
       ctx.stroke();
     }
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.beginPath(); ctx.arc(fx.x2, fx.y2, 70 * (1 - k * 0.6), 0, Math.PI * 2); ctx.fill();
+    if (fx.hit) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath(); ctx.arc(fx.x2, fx.y2, 70 * (1 - k * 0.6), 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -499,7 +501,7 @@ export function createRenderer(canvas, wrap, assets) {
         if (e.type === 'hit') effects.push({ kind: 'hit', x: e.x, y: e.y, damage: e.damage, age: 0 });
         if (e.type === 'block') effects.push({ kind: 'block', x: e.x, y: e.y, age: 0 });
         if (e.type === 'explode') effects.push({ kind: 'explode', x: e.x, y: e.y, radius: e.radius, age: 0 });
-        if (e.type === 'megalaser') effects.push({ kind: 'megalaser', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, aim: e.aim, age: 0 });
+        if (e.type === 'megalaser') effects.push({ kind: 'megalaser', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, aim: e.aim, hit: e.hit, age: 0 });
         if (e.type === 'laser') effects.push({ kind: 'laser', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, age: 0 });
         if (e.type === 'cover-break') effects.push({ kind: 'debris', x: e.x, y: e.y, age: 0 });
       }
