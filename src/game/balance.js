@@ -24,7 +24,8 @@ const hp = (id, name) => [
   param(name, '이동 속도(초당)', ['characters', id, 'speed'], { min: 20, max: 1500, step: 10 }),
 ];
 const gun = (id, extra = []) => [
-  param(WEAPONS[id].name, '한 발 피해', ['weapons', id, 'damage'], { max: 1000, step: 1 }),
+  param(WEAPONS[id].name, WEAPONS[id].dash ? '돌진 피해' : WEAPONS[id].pellets ? '총알 1개 피해' : '한 발 피해',
+    ['weapons', id, 'damage'], { max: 1000, step: 1 }),
   param(WEAPONS[id].name, WEAPONS[id].trigger === 'release' ? '쿨타임' : '발사 간격', ['weapons', id, 'interval'],
     { min: 0.02, max: 30, step: 0.01, unit: SEC }),
   ...(WEAPONS[id].speed ? [param(WEAPONS[id].name, '탄속(초당)', ['weapons', id, 'speed'], { min: 50, max: 5000, step: 10 })] : []),
@@ -45,6 +46,7 @@ export const SECTIONS = [
         ['유도 회전(rad/초)', ['homing', 'turnRate'], { max: 10, step: 0.1 }],
       ]),
       ...gun('sniper'),
+      ...gun('crossbow', [['두 화살 간격', ['arrowGap'], { max: 120, step: 1 }]]),
     ],
   },
   {
@@ -58,6 +60,11 @@ export const SECTIONS = [
         ['과열까지 연사', ['heat', 'max'], { min: 0.1, max: 30, step: 0.1, unit: SEC }],
         ['과열 시 대기', ['heat', 'cooldown'], { max: 30, step: 0.1, unit: SEC }],
         ['초당 식는 양', ['heat', 'decay'], { max: 10, step: 0.1 }],
+      ]),
+      ...gun('dagger', [['돌진 속도(초당)', ['dash', 'speed'], { min: 200, max: 8000, step: 50 }]]),
+      ...gun('shotgun', [
+        ['총알 개수', ['pellets'], { min: 1, max: 20 }],
+        ['부채꼴 각도(도)', ['spread'], { max: 180, step: 1 }],
       ]),
       param('수류탄', '쿨타임', ['weapons', 'grenade', 'interval'], { min: 0.5, max: 120, step: 0.5, unit: SEC }),
       param('수류탄', '던지는 속도(초당)', ['weapons', 'grenade', 'speed'], { min: 50, max: 3000, step: 10 }),

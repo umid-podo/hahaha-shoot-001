@@ -153,3 +153,23 @@ test('카운트다운·쓰러짐 중에는 AI가 쏘거나 움직이지 않음',
   assert.equal(inputs.P2.aiming, false);
   assert.ok(P2.x >= MIN_X && P2.x <= MAX_X);
 });
+
+test('AI 보조무기(단검·샷건)도 쓰고, 보조무기 피해 설정이 적용', () => {
+  for (const secondary of ['dagger', 'shotgun']) {
+    const { match, inputs, P1, P2 } = single({ weapon: 'pistol', secondary, damage: { secondary: 25 } }, {}, 11);
+    assert.equal(P2.secondary, secondary);
+    P1.hp = P1.maxHp = 99999;
+    const brain = createAI('P2', 'hard', 11);
+    run(match, inputs, brain, 40);
+    const used = match.stats.P2.weapons[secondary];
+    assert.ok(used?.shots > 0, `${secondary} 사용`);
+    if (used.hits > 0) assert.equal(used.damage % 25, 0, '보조무기 피해 25씩');
+    assert.ok(!match.stats.P2.weapons.smg, '기관단총은 안 씀');
+  }
+});
+
+test('AI 히트박스 반지름을 설정할 수 있다', () => {
+  const { P2 } = single({ radius: 70 });
+  assert.equal(P2.radius, 70);
+  assert.equal(single().P2.radius, 30, '기본은 캐릭터 값');
+});

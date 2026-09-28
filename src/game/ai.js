@@ -56,6 +56,7 @@ const velocityX = (p) => (p.x - p.previousX) / TICK;
 /** 무기 탄속(레이저처럼 즉시 닿으면 Infinity) */
 function projectileSpeed(me, weaponId) {
   const w = WEAPONS[weaponId];
+  if (w.dash) return w.dash.speed;
   return w.speed ? w.speed * (me.bulletSpeedScale ?? 1) : Infinity;
 }
 
@@ -104,6 +105,19 @@ function threats(ai, match, me) {
     const direct = b.thrown ? 0 : me.radius + BULLET_RADIUS;
     const reach = Math.max(direct, b.splash ? b.splash.radius + me.radius : 0) + DODGE_MARGIN;
     list.push({ t, x: b.x + b.vx * t, reach });
+  }
+  // 상대의 단검 돌진도 날아오는 탄처럼 피한다(몸끼리 닿는 거리)
+  for (const q of match.players) {
+    const d = q.dash;
+    if (!d || d.returning || q.team === me.team) continue;
+    const key = `dash-${q.id}`;
+    seen.add(key);
+    const dy = me.y - q.y;
+    if (dy * d.vy <= 0 || d.age < ai.diff.reaction) continue;
+    if (!ai.dodgeDecisions.has(key)) ai.dodgeDecisions.set(key, ai.rng() < ai.diff.dodge);
+    if (!ai.dodgeDecisions.get(key)) continue;
+    const t = dy / d.vy;
+    list.push({ t, x: q.x + d.vx * t, reach: me.radius + q.radius + DODGE_MARGIN });
   }
   for (const id of ai.dodgeDecisions.keys()) if (!seen.has(id)) ai.dodgeDecisions.delete(id);
   return list;
@@ -171,14 +185,16 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   }
   frame.moveAxis = axis * ai.diff.move;
 
-  // 무기 전환: 가끔 주무기 ↔ 기관단총. 기관단총이 과열되면 바로 주무기로.
+  // 무기 전환: 가끔 주무기 ↔ 보조무기. 기관단총이 과열되거나 단검·샷건이 쿨타임이면 바로 주무기로,
+  // 쿨타임 중인 보조무기로는 바꾸지 않는다.
   ai.swapTimer -= dt;
   if (!me.drone) {
     const smgHot = me.weapon === 'smg' && (me.overheat > 0 || me.heat > WEAPONS.smg.heat.max * 0.85);
-    if (smgHot) {
+    const secondaryCooling = WEAPONS[me.secondary].ownCooldown && (me.cooldowns[me.secondary] ?? 0) > 0;
+    if ((smgHot || (me.slot === 'secondary' && secondaryCooling)) && ai.charge === null) {
       frame.select = 'primary';
       ai.swapTimer = between(ai.rng, ai.diff.swap);
-    } else if (ai.swapTimer <= 0 && ai.charge === null) {
+    } else if (ai.swapTimer <= 0 && ai.charge === null && !(me.slot === 'primary' && secondaryCooling)) {
       frame.select = me.slot === 'primary' ? 'secondary' : 'primary';
       ai.swapTimer = between(ai.rng, ai.diff.swap);
     }
@@ -197,7 +213,7 @@ export function updateAI(ai, match, inputs, dt = TICK) {
     ai.blockedFor = blocked ? ai.blockedFor + dt : 0;
     const clear = !blocked || ai.blockedFor >= BLOCKED_PATIENCE;
     if (ai.charge === null) {
-      if (me.cooldown <= 0 && clear) {
+      if (me.cooldown <= 0 && !((me.cooldowns[weapon.id] ?? 0) > 0) && clear) {
         ai.blockedFor = 0;
         ai.charge = between(ai.rng, ai.diff.charge);
         frame.aiming = true;

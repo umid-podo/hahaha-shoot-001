@@ -210,6 +210,17 @@
       "source": "project-authored vector",
       "kind": "effect",
       "bytes": 739
+    },
+    {
+      "id": "akimbo-crossbow",
+      "name": "아킴보 석궁",
+      "path": "ui/akimbo-crossbow.svg",
+      "width": 64,
+      "height": 52,
+      "bytes": 851,
+      "format": "svg",
+      "source": "project-authored vector",
+      "kind": "ui"
     }
   ]
 }

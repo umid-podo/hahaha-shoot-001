@@ -800,3 +800,125 @@ test('밸런스: 수치를 바꾸면 게임에 바로 반영되고, 기본값으
     resetAll();
   }
 });
+
+test('보조무기 선택: 기관단총(기본) 또는 단검, 경기 중 보조무기 칸은 고른 무기', () => {
+  assert.equal(createMatch().players[0].secondary, 'smg', '기본은 기관단총');
+  assert.equal(createMatch({ P1: { secondary: 'rpg' } }).players[0].secondary, 'smg', '보조무기가 아니면 기본값');
+  const { match, inputs, P1 } = playing({ P1: { weapon: 'rifle', secondary: 'dagger' } });
+  assert.equal(P1.secondary, 'dagger');
+  inputs.P1.select = 'secondary';
+  assert.ok(step(match, inputs).some((e) => e.type === 'swap' && e.weapon === 'dagger'));
+  inputs.P1.swap = true;
+  step(match, inputs);
+  assert.equal(P1.weapon, 'rifle', '다시 주무기');
+});
+
+test('단검: 조준 후 떼면 매우 빠르게 돌진, 상대에 닿으면 100 피해, 돌아온 뒤 10초 쿨타임(주무기는 바로 사용)', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'pistol', secondary: 'dagger' } });
+  P1.x = P1.previousX = 300; P2.x = P2.previousX = 300; // 엄폐물 없는 줄
+  P1.slot = 'secondary'; P1.weapon = 'dagger';
+  inputs.P1.aim = UP;
+  inputs.P1.aiming = true;
+  assert.equal(shots(run(match, inputs, 0.3), 'P1'), 0, '누르는 동안은 안 나감');
+  inputs.P1.aiming = false;
+  const events = step(match, inputs);
+  assert.ok(events.some((e) => e.type === 'dash' && e.playerId === 'P1'));
+  assert.ok(P1.dash, '돌진 중');
+  inputs.P1.moveAxis = 1; // 돌진 중 이동 입력은 무시
+  let t = 0;
+  while (P1.dash && t < 2) { step(match, inputs); t += TICK; }
+  assert.equal(P2.hp, MAX_HP - 100, '닿으면 100');
+  assert.ok(t < 1, `빠르게 다녀옴 (${t.toFixed(2)}초)`);
+  assert.equal(P1.x, 300, '원래 자리로 돌아옴');
+  assert.equal(P1.y, RAIL_Y.earth);
+  assert.deepEqual(match.stats.P1.weapons.dagger, { shots: 1, hits: 1, damage: 100, coverDamage: 0 });
+  inputs.P1.moveAxis = 0;
+
+  // 쿨타임 동안 단검은 못 쓰지만 주무기는 바로 쏜다
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  assert.ok(!step(match, inputs).some((e) => e.type === 'dash'), '단검 쿨타임');
+  inputs.P1.select = 'primary';
+  run(match, inputs, 0.5);
+  inputs.P1.aiming = true;
+  assert.ok(shots(run(match, inputs, 0.2), 'P1') >= 1, '주무기는 쿨타임과 상관없음');
+  inputs.P1.aiming = false;
+  run(match, inputs, 10);
+  inputs.P1.select = 'secondary';
+  run(match, inputs, 0.5);
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  assert.ok(step(match, inputs).some((e) => e.type === 'dash'), '10초 뒤 다시 돌진');
+});
+
+test('단검 돌진은 엄폐물에 막혀 돌아오고, 빗나가면 상대 레일에서 돌아옴', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { secondary: 'dagger' } });
+  const cover = coverById(match, 'center');
+  P1.x = P1.previousX = cover.x; P2.x = P2.previousX = cover.x;
+  P1.slot = 'secondary'; P1.weapon = 'dagger';
+  inputs.P1.aim = UP;
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  let minY = Infinity, t = 0;
+  while ((P1.dash || t === 0) && t < 2) { step(match, inputs); minY = Math.min(minY, P1.y); t += TICK; }
+  assert.ok(minY > cover.y, '엄폐물 앞에서 멈춤');
+  assert.equal(P2.hp, MAX_HP);
+
+  const o = playing({ P1: { secondary: 'dagger' } });
+  o.P1.x = o.P1.previousX = 300; o.P2.x = o.P2.previousX = 1400;
+  o.P1.slot = 'secondary'; o.P1.weapon = 'dagger';
+  o.inputs.P1.aim = UP;
+  o.inputs.P1.aiming = true; step(o.match, o.inputs); o.inputs.P1.aiming = false;
+  let top = Infinity; t = 0;
+  while ((o.P1.dash || t === 0) && t < 2) { step(o.match, o.inputs); top = Math.min(top, o.P1.y); t += TICK; }
+  assert.ok(Math.abs(top - RAIL_Y.isb) < 45, '상대 레일까지 갔다가');
+  assert.equal(o.P1.y, RAIL_Y.earth, '돌아옴');
+  assert.equal(o.P2.hp, MAX_HP);
+});
+
+test('샷건: 조준 후 떼면 부채꼴로 5발, 1발 40, 10초 쿨타임, 명중은 방아쇠 한 번당 1', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { secondary: 'shotgun' } });
+  P1.x = P1.previousX = 300; P2.x = P2.previousX = 300;
+  P1.slot = 'secondary'; P1.weapon = 'shotgun';
+  inputs.P1.aim = UP;
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  step(match, inputs);
+  const pellets = match.projectiles.filter((b) => b.weapon === 'shotgun');
+  assert.equal(pellets.length, 5);
+  const angles = pellets.map((b) => Math.atan2(b.vy, b.vx)).sort((a, b) => a - b);
+  assert.ok(Math.abs(angles[4] - angles[0] - (40 * Math.PI) / 180) < 1e-6, '부채꼴 40도');
+  assert.ok(Math.abs(angles[2] - UP) < 1e-6, '가운데는 조준 방향');
+  run(match, inputs, 1.5);
+  assert.equal(P2.hp, MAX_HP - 40, '가운데 한 발만 맞는 거리');
+  assert.deepEqual(match.stats.P1.weapons.shotgun, { shots: 1, hits: 1, damage: 40, coverDamage: 0 });
+
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  assert.equal(shots(step(match, inputs), 'P1'), 0, '10초 쿨타임');
+  run(match, inputs, 10);
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  assert.equal(shots(step(match, inputs), 'P1'), 1);
+
+  // 가까이서 쏘면 여러 발이 맞음
+  const c = playing({ P1: { secondary: 'shotgun' } });
+  c.P1.x = c.P1.previousX = 300; c.P2.x = c.P2.previousX = 300; c.P2.radius = 320; // 800px 거리에서 바깥 두 발은 약 290px 옆
+  c.P1.slot = 'secondary'; c.P1.weapon = 'shotgun';
+  c.inputs.P1.aim = UP;
+  c.inputs.P1.aiming = true; step(c.match, c.inputs); c.inputs.P1.aiming = false;
+  run(c.match, c.inputs, 1.5);
+  assert.equal(c.P2.hp, MAX_HP - 200, '넓은 판정이면 5발 모두 40씩');
+  assert.equal(c.match.stats.P1.weapons.shotgun.hits, 1);
+});
+
+test('아킴보 석궁(주무기): 0.7초마다 화살 2개가 나란히, 탄속 1500, 한 발 12', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'crossbow' } });
+  P1.x = P1.previousX = 300; P2.x = P2.previousX = 300; P2.radius = 60;
+  inputs.P1.aim = UP;
+  inputs.P1.aiming = true;
+  const first = step(match, inputs);
+  assert.equal(shots(first, 'P1'), 1);
+  const arrows = match.projectiles.filter((b) => b.weapon === 'crossbow');
+  assert.equal(arrows.length, 2);
+  assert.ok(Math.abs(Math.abs(arrows[0].x - arrows[1].x) - WEAPONS.crossbow.arrowGap) < 1e-6, '나란히');
+  assert.ok(arrows.every((b) => Math.abs(b.vy + 1500) < 1e-6), '같은 방향·탄속');
+  assert.equal(shots(run(match, inputs, 1.4 - TICK / 2), 'P1'), 2, '0.7초 간격');
+  inputs.P1.aiming = false;
+  run(match, inputs, 1);
+  assert.equal(P2.hp, MAX_HP - 12 * 6, '세 번 쏴서 6발 적중');
+});

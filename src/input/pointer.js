@@ -1,4 +1,4 @@
-import { DEADZONE, TEAM_NAME, WEAPONS, SLOT_NAME, SLOT_WEAPON } from '../game/config.js';
+import { DEADZONE, TEAM_NAME, WEAPONS, SLOT_NAME } from '../game/config.js';
 
 /** 이동 스틱: X 변위만 사용. 데드존 안은 0, 바깥은 ±1까지 선형 보간. */
 export function moveAxisFromDrag(dx, radius) {
@@ -71,7 +71,7 @@ function actionButton(className, onPress) {
 
 /**
  * 플레이어별 조작 패널: 이동키 | 가운데 무기·아이템 버튼 | 발사키. 패널이 화면 절반을 채우고 두 스틱을 양 끝에 둬
- * 이동키와 발사키 사이를 최대한 벌린다. 가운데 빈 곳에는 주무기·보조무기 바로 선택과 수류탄(아이템) 던지기 버튼.
+ * 이동키와 발사키 사이를 최대한 벌린다. 가운데 빈 곳에는 고른 주무기·보조무기 바로 선택과 수류탄(아이템) 던지기 버튼.
  * cancelAll()은 모든 스틱을 놓아 사격을 멈추고, sync(players)는 매 프레임 버튼 상태(든 무기·수류탄 쿨타임)를 맞춘다.
  */
 export function createControls(groups, players, inputs) {
@@ -102,7 +102,7 @@ export function createControls(groups, players, inputs) {
         return btn;
       };
       const primary = slotBtn('primary', p.primary);
-      const secondary = slotBtn('secondary', SLOT_WEAPON.secondary);
+      const secondary = slotBtn('secondary', p.secondary);
       const item = actionButton('item-btn', () => { frame.item = true; });
       item.innerHTML = '<small>아이템</small><span></span>';
       item.setAttribute('aria-label', `${p.id} 수류탄 던지기`);
@@ -146,6 +146,14 @@ export function createControls(groups, players, inputs) {
           b.slot = p.slot;
           b.primary.setAttribute('aria-pressed', String(p.slot === 'primary'));
           b.secondary.setAttribute('aria-pressed', String(p.slot === 'secondary'));
+        }
+        // 단검·샷건: 쿨타임 동안 보조무기 버튼에 남은 초
+        const left = WEAPONS[p.secondary]?.ownCooldown ? p.cooldowns[p.secondary] ?? 0 : 0;
+        const secondaryText = left > 0 ? `${Math.ceil(left)}초` : WEAPONS[p.secondary].name;
+        if (b.secondaryText !== secondaryText) {
+          b.secondaryText = secondaryText;
+          b.secondary.lastChild.textContent = secondaryText;
+          b.secondary.classList.toggle('cooling', left > 0);
         }
         const ready = p.alive && p.grenadeCooldown <= 0;
         const text = p.drone ? '없음' : ready ? '수류탄' : `${Math.ceil(p.grenadeCooldown)}초`;
