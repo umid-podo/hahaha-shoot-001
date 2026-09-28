@@ -122,6 +122,20 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.globalAlpha = 1;
     }
 
+    // 단검 돌진 중에는 무적: 흰 빛 테두리
+    if (p.dash) {
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 6;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius + 12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#FFD45E';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     // 판정 위치를 알려주는 몸 중심 팀 링. 피격 직후에는 빨갛게 번쩍인다.
     ctx.lineWidth = hurt ? 5 : 3;
     ctx.strokeStyle = hurt ? '#D9443A' : color;

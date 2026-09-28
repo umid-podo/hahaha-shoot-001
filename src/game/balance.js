@@ -20,6 +20,8 @@ function param(group, label, path, { min = 0, max, step = 1, unit = '' } = {}) {
 
 const hp = (id, name) => [
   param(name, '체력', ['characters', id, 'maxHp'], { min: 1, max: 5000, step: 10 }),
+  ...(CHARACTERS.find((c) => c.id === id).bonusDamage !== undefined
+    ? [param(name, '추가 피해(맞힐 때마다)', ['characters', id, 'bonusDamage'], { max: 200 })] : []),
   param(name, '히트 박스 반지름', ['characters', id, 'radius'], { min: 5, max: 150, step: 1 }),
   param(name, '이동 속도(초당)', ['characters', id, 'speed'], { min: 20, max: 1500, step: 10 }),
 ];

@@ -9,8 +9,8 @@ import { weaponInfo, weaponLabel, choiceButton } from './widgets.js';
 const $ = (selector) => document.querySelector(selector);
 // 2인 조작 패널 한 개(이동키 + 버튼 + 발사키)가 들어가려면 필요한 대략의 화면 폭
 const MIN_PANEL_WIDTH = 380;
-// 숨겨진 캐릭터를 부르는 3번 누르기의 시간 창(ms)
-const SECRET_TAP_MS = 800;
+// 숨겨진 캐릭터를 부르는 연타의 시간 창(ms): 3번은 0.8초, 2번은 0.5초 안
+const secretWindow = (taps) => (taps >= 3 ? 800 : 500);
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -49,7 +49,8 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
   chars.setAttribute('role', 'group');
   chars.setAttribute('aria-label', `${s.id} 캐릭터`);
   for (const c of CHARACTERS.filter((ch) => !ch.hidden)) {
-    // 숨겨진 캐릭터: 이 버튼을 빠르게 3번 누르면 버튼이 숨겨진 캐릭터로 바뀐다(다시 3번 누르면 돌아옴).
+    // 숨겨진 캐릭터: 이 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 버튼이 숨겨진 캐릭터로 바뀐다(다시 누르면 돌아옴).
+    // 아크 트루퍼는 온이름 2번, 에스가라 케스가라의 분신은 R-10 3번.
     const secret = CHARACTERS.find((h) => h.hidden && h.unlockFrom === c.id);
     let shown = secret && pick.characterId === secret.id ? secret : c;
     let taps = [];
@@ -64,8 +65,9 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     const btn = choiceButton([img, name], pick.characterId === shown.id, () => {
       if (secret) {
         const now = performance.now();
-        taps = [...taps.filter((t) => now - t < SECRET_TAP_MS), now];
-        if (taps.length >= 3) {
+        const need = secret.unlockTaps ?? 3;
+        taps = [...taps.filter((t) => now - t < secretWindow(need)), now];
+        if (taps.length >= need) {
           taps = [];
           shown = shown === c ? secret : c;
           draw();

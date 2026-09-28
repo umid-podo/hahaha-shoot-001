@@ -82,7 +82,8 @@ export const SLOT_NAME = { primary: '주무기', secondary: '보조무기' };
 /**
  * weapon이 있는 캐릭터는 주무기가 그 무기로 고정되고 보조무기·수류탄을 쓸 수 없다(R-10, 에스가라 케스가라의 분신).
  * drone: 떠 있는 드론(둥실 뜨는 모습). hidden: 선택 화면에 보이지 않는 숨겨진 캐릭터로,
- * unlockFrom 캐릭터 버튼을 빠르게 3번 누르면 그 자리에 나타난다.
+ * unlockFrom 캐릭터 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 그 자리에 나타난다.
+ * bonusDamage: 상대 플레이어에게 피해를 줄 때마다 더하는 추가 피해.
  * maxHp는 최대 체력, radius는 몸 판정(히트 박스) 반지름, speed는 초당 이동 속도, scale은 그림 크기 배율.
  * maxHp·radius·speed는 밸런스 메뉴에서 캐릭터별로 조정한다.
  */
@@ -94,6 +95,11 @@ export const CHARACTERS = [
   {
     id: 'r10', name: 'R-10', drone: true, weapon: 'laser', maxHp: 400, radius: 48, speed: MAX_SPEED, scale: 1.4,
     image: 'assets/characters/r10.svg',
+  },
+  // 숨겨진 캐릭터: 온이름 버튼을 빠르게 2번 누르면 온이름 대신 나타난다. 모든 피해에 +5.
+  {
+    id: 'arc-trooper', name: '아크 트루퍼', hidden: true, unlockFrom: 'earth-arrow', unlockTaps: 2, bonusDamage: 5,
+    maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, image: 'assets/characters/arc-trooper.svg',
   },
   // 숨겨진 캐릭터: R-10 버튼을 빠르게 3번 누르면 R-10 대신 나타난다. 아킴보 석궁 전용.
   {

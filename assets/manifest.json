@@ -228,6 +228,23 @@
       "anchorStatus": "이름표와 겹치지 않도록 허리 조금 아래",
       "frames": 1,
       "hasAlphaChannel": true
+    },
+    {
+      "id": "arc-trooper",
+      "name": "아크 트루퍼",
+      "path": "characters/arc-trooper.svg",
+      "width": 512,
+      "height": 512,
+      "bytes": 3158,
+      "format": "svg",
+      "source": "hand-written SVG(참고 그림의 분위기만 살려 새로 그림)",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.5,
+        0.64
+      ],
+      "anchorStatus": "허리띠 높이 초기값",
+      "frames": 1
     }
   ]
 }

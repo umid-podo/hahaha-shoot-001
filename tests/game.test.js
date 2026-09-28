@@ -944,3 +944,58 @@ test('숨겨진 캐릭터 에스가라 케스가라의 분신: 아킴보 석궁 
   assert.equal(hidden.hidden, true);
   assert.equal(hidden.unlockFrom, 'r10');
 });
+
+test('단검 돌진 중(가고 돌아오는 동안)에는 무적: 탄·폭발이 통과하고 피해 없음', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { secondary: 'dagger' }, P2: { weapon: 'rpg' } });
+  P1.x = P1.previousX = 300; P2.x = P2.previousX = 1400; // 빗나가는 돌진(상대 레일까지 갔다 옴)
+  P1.slot = 'secondary'; P1.weapon = 'dagger';
+  inputs.P1.aim = UP;
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  step(match, inputs);
+  assert.ok(P1.dash);
+  let t = 0, hitWhileDashing = 0;
+  while (P1.dash && t < 2) {
+    // 매 틱 돌진하는 P1 바로 앞에 권총탄과 RPG를 놓는다
+    const b = spawnProjectile(match, P2, DOWN, 'pistol');
+    b.x = b.previousX = P1.x; b.y = b.previousY = P1.y - 20;
+    const r = spawnProjectile(match, P2, DOWN, 'rpg');
+    r.x = r.previousX = P1.x; r.y = r.previousY = P1.y - 20;
+    const hp = P1.hp;
+    step(match, inputs);
+    if (P1.dash && P1.hp < hp) hitWhileDashing++; // 돌아와 돌진이 끝난 틱부터는 다시 맞는다
+    t += TICK;
+  }
+  assert.equal(hitWhileDashing, 0, '돌진 중 피해 없음');
+  assert.equal(P1.y, RAIL_Y.earth, '돌아옴');
+  match.projectiles = [];
+  P1.hp = MAX_HP;
+  const b = bulletNear(match, P2, P1, DOWN);
+  step(match, inputs);
+  assert.ok(P1.hp < MAX_HP, '돌진이 끝나면 다시 맞음');
+  assert.ok(!match.projectiles.includes(b));
+});
+
+test('숨겨진 캐릭터 아크 트루퍼: 온이름 자리 비밀(2번), 모든 피해에 +5, 무기는 자유 선택', () => {
+  const arc = CHARACTERS.find((c) => c.id === 'arc-trooper');
+  assert.equal(arc.hidden, true);
+  assert.equal(arc.unlockFrom, 'earth-arrow');
+  assert.equal(arc.unlockTaps, 2);
+  const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'arc-trooper', weapon: 'pistol', secondary: 'shotgun' } });
+  assert.equal(P1.name, '아크 트루퍼');
+  assert.equal(P1.weapon, 'pistol');
+  assert.equal(P1.secondary, 'shotgun');
+  assert.equal(P1.primaryOnly, false);
+  bulletNear(match, P1, P2, UP);
+  step(match, inputs);
+  assert.equal(P2.hp, MAX_HP - WEAPONS.pistol.damage - 5, '권총 20 + 5');
+  assert.equal(match.stats.P1.weapons.pistol.damage, 25);
+  // 수류탄 폭발에도 +5
+  P2.x = P2.previousX = 300; P1.x = P1.previousX = 300;
+  inputs.P1.aim = UP; inputs.P1.item = true;
+  run(match, inputs, 2);
+  assert.equal(P2.hp, MAX_HP - 25 - (WEAPONS.grenade.splash.damage + 5));
+  // 상대가 쏜 피해에는 더하지 않음
+  bulletNear(match, P2, P1, DOWN);
+  step(match, inputs);
+  assert.equal(P1.hp, MAX_HP - WEAPONS.pistol.damage);
+});
