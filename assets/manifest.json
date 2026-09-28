@@ -228,6 +228,41 @@
       "anchorStatus": "이름표와 겹치지 않도록 허리 조금 아래",
       "frames": 1,
       "hasAlphaChannel": true
+    },
+    {
+      "id": "arc-trooper",
+      "name": "아크 트루퍼",
+      "path": "characters/arc-trooper.svg",
+      "width": 512,
+      "height": 512,
+      "bytes": 3158,
+      "format": "svg",
+      "source": "hand-written SVG(참고 그림의 분위기만 살려 새로 그림)",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.5,
+        0.64
+      ],
+      "anchorStatus": "허리띠 높이 초기값",
+      "frames": 1
+    },
+    {
+      "id": "creator",
+      "name": "제작자",
+      "path": "characters/creator.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 542545,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "source": "earth-arrow.png에 빨간 '제작자' 글씨를 몸에 덧씀(WenQuanYi Zen Hei)",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.48,
+        0.68
+      ],
+      "anchorStatus": "온이름과 같음",
+      "frames": 1
     }
   ]
 }

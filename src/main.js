@@ -15,6 +15,7 @@ import { applyOverrides, overrides } from './game/balance.js';
 
 const MAX_FRAME_MS = 100;
 const MAX_STEPS_PER_FRAME = 6;
+const RESULT_DELAY_MS = 900;
 
 const settings = loadSettings();
 // 밸런스 메뉴에서 바꿔 저장해 둔 수치를 가장 먼저 적용한다.
@@ -160,7 +161,9 @@ function frame(now) {
       }
       if (match.phase === 'result') {
         cancelAllInput();
-        screens.showResult(match);
+        // 마지막 한 방(즉사기 레이저 등)이 보이도록 결과 화면은 조금 뒤에 띄운다
+        const ended = match;
+        setTimeout(() => { if (match === ended) screens.showResult(ended); }, RESULT_DELAY_MS);
       }
     }
     if (steps === MAX_STEPS_PER_FRAME) accumulator = 0;
@@ -169,7 +172,7 @@ function frame(now) {
   }
   if (match) {
     renderer.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion);
-    controls.sync(match.players);
+    controls.sync(match.players, match.tick * TICK);
   }
   updateEngine(match?.phase === 'playing' ? match.jet : null);
   requestAnimationFrame(frame);

@@ -112,7 +112,9 @@ export function playEvents(events) {
     const key = e.type === 'fire' ? `fire-${e.weapon}` : e.type;
     if (played.has(key)) continue;
     played.add(key);
-    if (e.type === 'fire' && e.weapon === 'laser') laserZap();
+    if (e.type === 'megalaser') { gunshot({ filter: 300, q: 0.4, decay: 1.2, thump: 50, volume: 1.8 }); [880, 660, 440, 220].forEach((f, i) => tone(f, 0.25, 'sawtooth', i * 0.06)); }
+    if (e.type === 'fire' && e.weapon === 'instakill') { /* 소리는 megalaser에서 */ }
+    else if (e.type === 'fire' && e.weapon === 'laser') laserZap();
     else if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
     if (e.type === 'overheat') [700, 500, 300].forEach((f, i) => tone(f, 0.08, 'sawtooth', i * 0.07)); // 과열 경고
     if (e.type === 'jet-fire') gunshot(SHOT.jet); // 미사일 발사음

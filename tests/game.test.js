@@ -944,3 +944,129 @@ test('숨겨진 캐릭터 에스가라 케스가라의 분신: 아킴보 석궁 
   assert.equal(hidden.hidden, true);
   assert.equal(hidden.unlockFrom, 'r10');
 });
+
+test('단검 돌진 중(가고 돌아오는 동안)에는 무적: 탄·폭발이 통과하고 피해 없음', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { secondary: 'dagger' }, P2: { weapon: 'rpg' } });
+  P1.x = P1.previousX = 300; P2.x = P2.previousX = 1400; // 빗나가는 돌진(상대 레일까지 갔다 옴)
+  P1.slot = 'secondary'; P1.weapon = 'dagger';
+  inputs.P1.aim = UP;
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  step(match, inputs);
+  assert.ok(P1.dash);
+  let t = 0, hitWhileDashing = 0;
+  while (P1.dash && t < 2) {
+    // 매 틱 돌진하는 P1 바로 앞에 권총탄과 RPG를 놓는다
+    const b = spawnProjectile(match, P2, DOWN, 'pistol');
+    b.x = b.previousX = P1.x; b.y = b.previousY = P1.y - 20;
+    const r = spawnProjectile(match, P2, DOWN, 'rpg');
+    r.x = r.previousX = P1.x; r.y = r.previousY = P1.y - 20;
+    const hp = P1.hp;
+    step(match, inputs);
+    if (P1.dash && P1.hp < hp) hitWhileDashing++; // 돌아와 돌진이 끝난 틱부터는 다시 맞는다
+    t += TICK;
+  }
+  assert.equal(hitWhileDashing, 0, '돌진 중 피해 없음');
+  assert.equal(P1.y, RAIL_Y.earth, '돌아옴');
+  match.projectiles = [];
+  P1.hp = MAX_HP;
+  const b = bulletNear(match, P2, P1, DOWN);
+  step(match, inputs);
+  assert.ok(P1.hp < MAX_HP, '돌진이 끝나면 다시 맞음');
+  assert.ok(!match.projectiles.includes(b));
+});
+
+test('숨겨진 캐릭터 아크 트루퍼: 온이름 자리 비밀(2번), 모든 피해에 +5, 무기는 자유 선택', () => {
+  const arc = CHARACTERS.find((c) => c.id === 'arc-trooper');
+  assert.equal(arc.hidden, true);
+  assert.equal(arc.unlockFrom, 'earth-arrow');
+  assert.equal(arc.unlockTaps, 2);
+  const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'arc-trooper', weapon: 'pistol', secondary: 'shotgun' } });
+  assert.equal(P1.name, '아크 트루퍼');
+  assert.equal(P1.weapon, 'pistol');
+  assert.equal(P1.secondary, 'shotgun');
+  assert.equal(P1.primaryOnly, false);
+  bulletNear(match, P1, P2, UP);
+  step(match, inputs);
+  assert.equal(P2.hp, MAX_HP - WEAPONS.pistol.damage - 5, '권총 20 + 5');
+  assert.equal(match.stats.P1.weapons.pistol.damage, 25);
+  // 수류탄 폭발에도 +5
+  P2.x = P2.previousX = 300; P1.x = P1.previousX = 300;
+  inputs.P1.aim = UP; inputs.P1.item = true;
+  run(match, inputs, 2);
+  assert.equal(P2.hp, MAX_HP - 25 - (WEAPONS.grenade.splash.damage + 5));
+  // 상대가 쏜 피해에는 더하지 않음
+  bulletNear(match, P2, P1, DOWN);
+  step(match, inputs);
+  assert.equal(P1.hp, MAX_HP - WEAPONS.pistol.damage);
+});
+
+test('숨겨진 캐릭터 제작자: 온이름 3번, 즉사기만 사용, 전투 시작 30초 전에는 못 쏨', () => {
+  const creator = CHARACTERS.find((c) => c.id === 'creator');
+  assert.equal(creator.hidden, true);
+  assert.equal(creator.unlockFrom, 'earth-arrow');
+  assert.equal(creator.unlockTaps, 3);
+  const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'creator', weapon: 'rifle', secondary: 'dagger' } });
+  assert.equal(P1.name, '제작자');
+  assert.equal(P1.weapon, 'instakill');
+  assert.equal(P1.primaryOnly, true);
+  inputs.P1.aiming = true;
+  assert.equal(shots(run(match, inputs, 29.9), 'P1'), 0, '30초 전에는 못 쏨');
+  assert.equal(P2.hp, MAX_HP);
+  const events = run(match, inputs, 0.2);
+  assert.equal(shots(events, 'P1'), 1);
+  assert.ok(events.some((e) => e.type === 'megalaser'));
+  assert.equal(P2.alive, false, '즉사');
+  assert.equal(match.winner, 'earth');
+  assert.deepEqual(match.stats.P2.killedBy, { ownerId: 'P1', weapon: 'instakill' });
+});
+
+test('즉사기는 무조건 맞음: 엄폐물 뒤·옆으로 비껴 조준·단검 돌진 중(무적)이어도 즉사, 한 경기 한 번', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'creator' }, P2: { secondary: 'dagger' } });
+  const cover = coverById(match, 'center');
+  P1.x = P1.previousX = cover.x; P2.x = P2.previousX = cover.x; // 가운데 엄폐물이 가로막음
+  P2.maxHp = P2.hp = 5000;
+  match.tick = Math.ceil(30 / TICK);
+  inputs.P1.aim = -0.2; // 거의 옆을 겨눔
+  // P2가 단검 돌진 중(무적)
+  P2.slot = 'secondary'; P2.weapon = 'dagger';
+  inputs.P2.aim = DOWN; inputs.P2.aiming = true; step(match, inputs); inputs.P2.aiming = false;
+  step(match, inputs);
+  assert.ok(P2.dash, '돌진 중');
+  inputs.P1.aiming = true;
+  step(match, inputs);
+  assert.equal(P2.alive, false);
+  assert.equal(cover.hp, COVER.hp, '엄폐물은 그대로');
+
+  const again = playing({ P1: { characterId: 'creator' } });
+  again.match.tick = Math.ceil(30 / TICK);
+  again.P2.maxHp = again.P2.hp = 999999;
+  again.P2.hp = 999999;
+  again.inputs.P1.aiming = true;
+  step(again.match, again.inputs);
+  again.P2.alive = true; again.P2.hp = 100; again.match.phase = 'playing'; again.match.winner = null;
+  assert.equal(shots(run(again.match, again.inputs, 2), 'P1'), 0, '두 번째는 없음');
+});
+
+test('즉사기 사용 가능 시각은 밸런스로 조절', () => {
+  const byId = Object.fromEntries(PARAMS.map((p) => [p.id, p]));
+  try {
+    setValue(byId['weapons.instakill.readyAfter'], 5);
+    const { match, inputs, P1 } = playing({ P1: { characterId: 'creator' } });
+    inputs.P1.aiming = true;
+    assert.equal(shots(run(match, inputs, 4.9), 'P1'), 0);
+    assert.equal(shots(run(match, inputs, 0.2), 'P1'), 1);
+  } finally {
+    resetAll();
+  }
+});
+
+test('아크 트루퍼는 제트팩으로 다른 캐릭터보다 빠르게 움직임(초당 420)', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'arc-trooper' } });
+  assert.ok(P1.jetpack, '제트팩');
+  assert.equal(P2.jetpack, null);
+  P1.x = P1.previousX = 400; P2.x = P2.previousX = 400;
+  inputs.P1.moveAxis = 1; inputs.P2.moveAxis = 1;
+  run(match, inputs, 1);
+  assert.ok(Math.abs(P1.x - 400 - 420) < 8, `아크 트루퍼 ${P1.x - 400}`);
+  assert.ok(Math.abs(P2.x - 400 - 300) < 8, `다른 캐릭터 ${P2.x - 400}`);
+});

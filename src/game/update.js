@@ -171,6 +171,9 @@ function damageCover(match, cover, amount, shot, events) {
   if (cover.hp === 0) events.push({ type: 'cover-break', coverId: cover.id, x: cover.x, y: cover.y });
 }
 
+/** 단검 돌진 중(가고 돌아오는 동안 모두)에는 무적: 탄·폭발·레이저·돌진에 맞지 않는다. */
+const invulnerable = (p) => !!p.dash;
+
 /** 탄 한 발이 엄폐물에 주는 피해. RPG 직격은 배수 적용. */
 function coverDamage(b) {
   return b.weapon === 'rpg' ? b.damage * COVER.rpgMultiplier : b.damage;
@@ -181,6 +184,9 @@ function coverDamage(b) {
  * 쏜 사람의 무기별 피해·명중과 맞은 사람의 받은 피해를 통계에 더한다. 통계의 피해는 실제로 깎인 체력이다.
  */
 function damage(match, victim, amount, shot, events) {
+  // bonusDamage: 추가 피해가 있는 캐릭터(아크 트루퍼)가 상대 플레이어에게 준 피해마다 더한다
+  const attacker = match.players.find((p) => p.id === shot.ownerId);
+  amount += attacker?.bonusDamage ?? 0;
   const dealt = Math.min(victim.hp, amount);
   victim.hp = Math.max(0, victim.hp - amount);
   victim.hurt = HURT_TIME;
@@ -206,7 +212,7 @@ function explode(match, b, x, y, directVictim, directCover, events) {
   const { splash } = b;
   events.push({ type: 'explode', x, y, radius: splash.radius });
   for (const p of match.players) {
-    if (!p.alive || p.team === b.team || p === directVictim) continue;
+    if (!p.alive || p.team === b.team || p === directVictim || invulnerable(p)) continue;
     if (Math.hypot(p.x - x, p.y - y) <= splash.radius + p.radius) damage(match, p, splash.damage, b, events);
   }
   for (const c of match.covers) {
@@ -256,7 +262,7 @@ function fireLaser(match, p, weapon, events) {
   if (cover) best = cover;
   // 전투기는 하늘 높이 날아 레이저도 막지 않는다.
   for (const q of match.players) {
-    if (!q.alive || q.team === p.team) continue;
+    if (!q.alive || q.team === p.team || invulnerable(q)) continue;
     const t = segmentCircleTime(x0 - q.x, y0 - q.y, x1 - q.x, y1 - q.y, q.radius);
     if (t !== null && t < best.t) best = { t, victim: q };
   }
@@ -284,6 +290,7 @@ function fire(match, p, events) {
     }
   }
   if (weapon.beam) { fireLaser(match, p, weapon, events); return; }
+  if (weapon.instakill) { fireInstakill(match, p, weapon, events); return; }
   if (weapon.dash) { startDash(p, weapon, events); return; }
   const group = { connected: false };
   if (weapon.pellets) {
@@ -304,6 +311,29 @@ function fire(match, p, events) {
     spawnProjectile(match, p, p.aim);
   }
   events.push({ type: 'fire', playerId: p.id, weapon: p.weapon });
+}
+
+/** 경기 시작 뒤 흐른 시간(초). 카운트다운·일시정지는 세지 않는다. */
+export const elapsed = (match) => match.tick * TICK;
+
+/**
+ * 즉사기: 가장 가까운 상대에게 유도되는 거대한 레이저. 엄폐물·무적과 상관없이 반드시 맞아 즉사한다.
+ * 한 경기에 한 번(p.instakillUsed).
+ */
+function fireInstakill(match, p, weapon, events) {
+  let target = null, best = Infinity;
+  for (const q of match.players) {
+    if (!q.alive || q.team === p.team) continue;
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    if (d < best) { best = d; target = q; }
+  }
+  if (!target) return;
+  p.instakillUsed = true;
+  const x1 = p.x + Math.cos(p.aim) * MUZZLE_OFFSET * 1.6, y1 = p.y + Math.sin(p.aim) * MUZZLE_OFFSET * 1.6;
+  events.push({ type: 'fire', playerId: p.id, weapon: weapon.id });
+  events.push({ type: 'megalaser', playerId: p.id, x1, y1, x2: target.x, y2: target.y, aim: p.aim });
+  const shot = { team: p.team, ownerId: p.id, weapon: weapon.id, connected: false };
+  damage(match, target, target.hp, shot, events);
 }
 
 /** 단검 돌진 시작: 조준 방향으로 날아가 상대에 닿거나, 엄폐물·상대 레일·경기장 끝에 닿으면 자기 자리로 돌아온다. */
@@ -339,7 +369,7 @@ function updateDash(match, p, dt, events) {
   const x0 = p.x, y0 = p.y, x1 = x0 + d.vx * dt, y1 = y0 + d.vy * dt;
   let best = null;
   for (const q of match.players) {
-    if (!q.alive || q.team === p.team) continue;
+    if (!q.alive || q.team === p.team || invulnerable(q)) continue;
     const t = segmentCircleTime(x0 - q.x, y0 - q.y, x1 - q.x, y1 - q.y, p.radius + q.radius);
     if (t !== null && (!best || t < best.t)) best = { t, victim: q };
   }
@@ -365,8 +395,9 @@ function updateDash(match, p, dt, events) {
   if (pastRail || p.x <= MIN_X || p.x >= MAX_X || p.y < 0 || p.y > ARENA_HEIGHT) d.returning = true;
 }
 
-/** 탄약 외 제약(배터리·과열·무기별 쿨타임) 때문에 지금 쏠 수 없는지. */
-function blocked(p, weapon) {
+/** 탄약 외 제약(배터리·과열·무기별 쿨타임·즉사기 대기) 때문에 지금 쏠 수 없는지. */
+function blocked(p, weapon, match) {
+  if (weapon.instakill) return p.instakillUsed || elapsed(match) < weapon.readyAfter;
   if (weapon.battery) return p.battery <= 0;
   if (weapon.heat) return p.overheat > 0;
   if (weapon.ownCooldown) return (p.cooldowns[weapon.id] ?? 0) > 0;
@@ -445,7 +476,7 @@ export function step(match, inputs, dt = TICK) {
         p.burstLeft--;
         p.burstTimer += weapon.burstGap;
       }
-    } else if (p.cooldown <= EPS && !blocked(p, weapon) &&
+    } else if (p.cooldown <= EPS && !blocked(p, weapon, match) &&
       (weapon.trigger === 'release' ? p.wasAiming && !input.aiming : input.aiming)) {
       fire(match, p, events);
       // 단검·샷건은 그 무기 쿨타임만 돌고, 다른 무기는 바로 쓸 수 있다.
@@ -470,7 +501,8 @@ export function step(match, inputs, dt = TICK) {
     if (coverHit) earliest = { t: coverHit.t, projectile: b, victim: null, cover: coverHit.cover };
     // 전투기는 하늘 높이 날기 때문에 탄환은 그 밑으로 지나간다(막지 않음).
     for (const p of match.players) {
-      if (!p.alive || p.team === b.team) continue;
+      // 단검 돌진 중(무적)인 플레이어는 탄이 그냥 지나간다
+      if (!p.alive || p.team === b.team || invulnerable(p)) continue;
       const t = segmentCircleTime(
         b.previousX - p.previousX, b.previousY - p.y, b.x - p.x, b.y - p.y, p.radius + BULLET_RADIUS);
       if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, projectile: b, victim: p };

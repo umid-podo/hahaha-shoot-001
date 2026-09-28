@@ -138,7 +138,8 @@ export function createControls(groups, players, inputs) {
   }
   return {
     cancelAll() { for (const cancel of cancels) cancel(); },
-    sync(list) {
+    /** elapsed: 경기 시작 뒤 흐른 시간(즉사기 남은 시간 표시용) */
+    sync(list, elapsed = 0) {
       for (const p of list) {
         const b = buttons[p.id];
         if (!b) continue;
@@ -146,6 +147,16 @@ export function createControls(groups, players, inputs) {
           b.slot = p.slot;
           b.primary.setAttribute('aria-pressed', String(p.slot === 'primary'));
           b.secondary.setAttribute('aria-pressed', String(p.slot === 'secondary'));
+        }
+        // 즉사기: 쓸 수 있을 때까지 주무기 버튼에 남은 초, 쓴 뒤에는 '사용함'
+        const primaryWeapon = WEAPONS[p.primary];
+        const primaryText = !primaryWeapon.instakill ? primaryWeapon.name
+          : p.instakillUsed ? `${primaryWeapon.name} 사용함`
+          : elapsed < primaryWeapon.readyAfter ? `${primaryWeapon.name} ${Math.ceil(primaryWeapon.readyAfter - elapsed)}초`
+          : `${primaryWeapon.name} 준비!`;
+        if (b.primaryText !== primaryText) {
+          b.primaryText = primaryText;
+          b.primary.lastChild.textContent = primaryText;
         }
         // 단검·샷건: 쿨타임 동안 보조무기 버튼에 남은 초
         const left = WEAPONS[p.secondary]?.ownCooldown ? p.cooldowns[p.secondary] ?? 0 : 0;

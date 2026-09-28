@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS, COVER,
+  MAX_HP, WEAPONS, COVER, TICK,
 } from '../game/config.js';
 
 const INK = '#30353E';
@@ -10,6 +10,7 @@ const SPARK_TIME = 0.15;
 const EFFECT_TIME = 0.6;
 const EXPLODE_TIME = 0.4;
 const LASER_TIME = 0.1;
+const MEGA_TIME = 0.6;
 const GAUGE_H = 6;
 // 오른쪽 팀 체력판. 상단은 윗변, 하단은 아랫변 기준으로 캐릭터·체력바와 겹치지 않게 둔다.
 const TEAM_BOX = { isbTop: RAIL_Y.isb + 98, earthBottom: RAIL_Y.earth - 102, w: 190, right: 20 };
@@ -67,6 +68,7 @@ export async function loadAssets() {
 
 export function createRenderer(canvas, wrap, assets) {
   const ctx = canvas.getContext('2d');
+  let elapsedTime = 0; // 경기 시작 뒤 흐른 시간(즉사기 충전 표시용)
   let effects = [];
   const recoil = {};
 
@@ -122,6 +124,20 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.globalAlpha = 1;
     }
 
+    // 단검 돌진 중에는 무적: 흰 빛 테두리
+    if (p.dash) {
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 6;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius + 12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#FFD45E';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     // 판정 위치를 알려주는 몸 중심 팀 링. 피격 직후에는 빨갛게 번쩍인다.
     ctx.lineWidth = hurt ? 5 : 3;
     ctx.strokeStyle = hurt ? '#D9443A' : color;
@@ -131,10 +147,12 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // 드론은 늘 둥실 떠 있고, 사람은 걸을 때만 통통 튄다.
-    const bounce = reducedMotion ? 0
+    // 드론은 늘 둥실 떠 있고, 제트팩 캐릭터는 떠서 움직이며, 사람은 걸을 때만 통통 튄다.
+    const moving = input.moveAxis !== 0 && !p.dash;
+    const bounce = p.jetpack ? -12 + (reducedMotion ? 0 : Math.sin(time * 4 + p.x * 0.01) * 3)
+      : reducedMotion ? 0
       : p.drone ? Math.sin(time * 5 + p.x * 0.01) * 5
-      : input.moveAxis !== 0 ? Math.sin(time * 20) * 2 : 0;
+      : moving ? Math.sin(time * 20) * 2 : 0;
     const squash = !reducedMotion && recoil[p.id] > 0 ? 0.92 : 1;
     const shake = !reducedMotion && hurt ? Math.sin(time * 90) * 3 : 0;
     const facing = Math.cos(p.aim) < 0 ? -1 : 1; // 원본은 오른쪽을 본다. 반전 시 앵커도 함께 반전된다.
@@ -144,6 +162,10 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.globalAlpha = hurt ? 0.7 : 1;
     ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
     ctx.restore();
+    // 제트팩 불꽃은 그림 위에 그려 치마에 가리지 않게 한다
+    if (p.jetpack) drawJetFlame(p, anchor, size, facing, bounce, moving, time, reducedMotion);
+
+    if (p.weapon === 'instakill') drawMegaCannon(p, time, reducedMotion);
 
     // 현재 조준 방향 눈금(항상) + 발사 준비 중에만 조준선
     const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
@@ -222,7 +244,11 @@ export function createRenderer(canvas, wrap, assets) {
   function drawGauge(p, x, y, w) {
     const weapon = WEAPONS[p.weapon];
     let ratio, color;
-    if (weapon.battery) {
+    if (weapon.instakill) {
+      // 즉사기: 전투 시작부터 readyAfter초까지 차오르는 빨간 막대, 다 차면 금색
+      ratio = p.instakillUsed ? 0 : Math.min(1, elapsedTime / weapon.readyAfter);
+      color = ratio >= 1 ? '#FFC53D' : '#D9443A';
+    } else if (weapon.battery) {
       ratio = p.battery / weapon.battery.shots; color = '#E0312B';
     } else if (weapon.heat && (p.heat > 0 || p.overheat > 0)) {
       ratio = p.overheat > 0 ? 1 : p.heat / weapon.heat.max;
@@ -232,6 +258,76 @@ export function createRenderer(canvas, wrap, assets) {
     }
     bar(x, y, w, ratio, color);
     return true;
+  }
+
+  /** 제트팩 불꽃: 그림 속 분사구에서 아래로. 움직일 때 길고 크게, 멈춰 있을 때는 작게 일렁인다. */
+  function drawJetFlame(p, anchor, size, facing, bounce, moving, time, reducedMotion) {
+    const [nx, ny] = p.jetpack;
+    const x = p.x + (nx - anchor[0]) * size * facing;
+    const y = p.y + bounce + (ny - anchor[1]) * size;
+    const flicker = reducedMotion ? 1 : 0.8 + Math.random() * 0.4;
+    const len = (moving ? 58 : 24) * flicker, wide = moving ? 14 : 9;
+    // 움직이는 반대쪽으로 살짝 기운 불꽃
+    const tilt = moving ? -Math.sign(p.x - p.previousX || 0) * 0.35 : 0;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(tilt);
+    for (const [l, w, c] of [[len, wide, 'rgba(255,120,40,0.85)'], [len * 0.65, wide * 0.6, '#FFD45E'], [len * 0.3, wide * 0.3, '#FFFFFF']]) {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.moveTo(-w, 0);
+      ctx.quadraticCurveTo(0, l * 1.1, w, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** 즉사기: 몸보다 큰 레이저포. 쓸 수 있으면 포구가 빨갛게 맥동하고, 쓰기 전·쓴 뒤에는 어둡다. */
+  function drawMegaCannon(p, time, reducedMotion) {
+    const weapon = WEAPONS.instakill;
+    const ready = !p.instakillUsed && elapsedTime >= weapon.readyAfter;
+    ctx.save();
+    ctx.translate(p.x + Math.cos(p.aim) * 10, p.y - 6 + Math.sin(p.aim) * 10);
+    ctx.rotate(p.aim);
+    if (Math.cos(p.aim) < 0) ctx.scale(1, -1);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = INK;
+    ctx.fillStyle = '#4A505A';
+    ctx.beginPath(); ctx.roundRect(-30, -16, 104, 32, 8); ctx.fill(); ctx.stroke();       // 포신 몸통
+    ctx.fillStyle = '#2A2E35';
+    ctx.beginPath(); ctx.roundRect(-44, -22, 30, 44, 6); ctx.fill(); ctx.stroke();        // 뒤쪽 동력부
+    ctx.fillStyle = '#6B7380';
+    ctx.beginPath(); ctx.roundRect(70, -22, 22, 44, 6); ctx.fill(); ctx.stroke();         // 포구
+    ctx.strokeStyle = '#D9443A'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-24, -8); ctx.lineTo(62, -8); ctx.moveTo(-24, 8); ctx.lineTo(62, 8); ctx.stroke(); // 빨간 줄
+    const pulse = reducedMotion ? 1 : 0.6 + 0.4 * Math.sin(time * 10);
+    ctx.globalAlpha = ready ? pulse : 0.35;
+    ctx.fillStyle = ready ? '#FF3355' : '#7A2A33';
+    ctx.beginPath(); ctx.arc(92, 0, ready ? 16 : 10, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /** 즉사기 레이저: 조준 방향으로 나가 상대에게 휘어 꽂히는 거대한 빛줄기 */
+  function drawMegaLaser(fx) {
+    const k = fx.age / MEGA_TIME;
+    const dist = Math.hypot(fx.x2 - fx.x1, fx.y2 - fx.y1);
+    const cx = fx.x1 + Math.cos(fx.aim) * dist * 0.5, cy = fx.y1 + Math.sin(fx.aim) * dist * 0.5;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 1 - k * 0.7;
+    for (const [w, c] of [[90, 'rgba(255,40,90,0.25)'], [54, 'rgba(255,40,90,0.55)'], [30, '#FF2A55'], [12, '#FFFFFF']]) {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = w * (1 - k * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(fx.x1, fx.y1);
+      ctx.quadraticCurveTo(cx, cy, fx.x2, fx.y2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath(); ctx.arc(fx.x2, fx.y2, 70 * (1 - k * 0.6), 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
 
   /** 팀별 체력 요약: 팀 이름과 멤버마다 이름·총기·체력바 */
@@ -403,12 +499,14 @@ export function createRenderer(canvas, wrap, assets) {
         if (e.type === 'hit') effects.push({ kind: 'hit', x: e.x, y: e.y, damage: e.damage, age: 0 });
         if (e.type === 'block') effects.push({ kind: 'block', x: e.x, y: e.y, age: 0 });
         if (e.type === 'explode') effects.push({ kind: 'explode', x: e.x, y: e.y, radius: e.radius, age: 0 });
+        if (e.type === 'megalaser') effects.push({ kind: 'megalaser', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, aim: e.aim, age: 0 });
         if (e.type === 'laser') effects.push({ kind: 'laser', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, age: 0 });
         if (e.type === 'cover-break') effects.push({ kind: 'debris', x: e.x, y: e.y, age: 0 });
       }
     },
     reset() { effects = []; for (const id of Object.keys(recoil)) delete recoil[id]; },
     draw(match, inputs, dt, time, reducedMotion) {
+      elapsedTime = match.tick * TICK;
       ctx.setTransform(canvas.width / ARENA_WIDTH, 0, 0, canvas.height / ARENA_HEIGHT, 0, 0);
       ctx.drawImage(assets.arena.img, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
 
@@ -513,6 +611,10 @@ export function createRenderer(canvas, wrap, assets) {
       if (!paused) for (const fx of effects) fx.age += dt;
       effects = effects.filter((fx) => fx.age < EFFECT_TIME);
       for (const fx of effects) {
+        if (fx.kind === 'megalaser') {
+          if (fx.age < MEGA_TIME) drawMegaLaser(fx);
+          continue;
+        }
         if (fx.kind === 'laser') {
           if (fx.age >= LASER_TIME) continue;
           // 붉은 레이저: 넓고 옅은 빛 + 가운데 밝은 심
