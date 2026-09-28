@@ -7,7 +7,7 @@ export function weaponInfo(w) {
   if (w.instakill) {
     const aim = w.homing >= 180 ? '반드시 맞아' : `최대 ${w.homing}도 휘어 맞으면`;
     const hurt = w.damage >= 9999 ? '즉사' : `${w.damage} 피해`;
-    return `전투 시작 ${w.readyAfter}초 뒤부터 · 쏘면 거대한 레이저가 ${aim} ${hurt} · 한 경기 한 번`;
+    return `전투 시작 ${w.readyAfter}초 뒤부터 · 쏘면 거대한 레이저가 ${aim} ${hurt} · 쿨타임 ${w.interval}초`;
   }
   if (w.dash) return `조준 후 떼면 매우 빠르게 돌진 · 닿으면 ${w.damage} · 쿨타임 ${w.interval}초`;
   if (w.pellets) return `조준 후 떼면 부채꼴로 ${w.pellets}발 · 한 발 ${w.damage} · 쿨타임 ${w.interval}초`;

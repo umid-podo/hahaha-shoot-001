@@ -51,6 +51,7 @@ export const SECTIONS = [
       param('즉사기', '피해(9999면 즉사)', ['weapons', 'instakill', 'damage'], { max: 9999, step: 1 }),
       param('즉사기', '유도 각도(도, 180이면 무조건 명중)', ['weapons', 'instakill', 'homing'], { max: 180, step: 1 }),
       param('즉사기', '사용 가능 시각(전투 시작 후)', ['weapons', 'instakill', 'readyAfter'], { max: 600, step: 1, unit: SEC }),
+      param('즉사기', '쿨타임(쏜 뒤 다시 쓸 때까지)', ['weapons', 'instakill', 'interval'], { min: 0.5, max: 600, step: 0.5, unit: SEC }),
       ...gun('crossbow', [['두 화살 간격', ['arrowGap'], { max: 120, step: 1 }]]),
     ],
   },
