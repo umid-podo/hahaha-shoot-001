@@ -106,9 +106,9 @@ export function createControls(groups, players, inputs) {
       const item = actionButton('item-btn', () => { frame.item = true; });
       item.innerHTML = '<small>아이템</small><span></span>';
       item.setAttribute('aria-label', `${p.id} 수류탄 던지기`);
-      // 드론은 레이저 캐논 하나뿐이고 아이템도 없다
-      secondary.disabled = p.drone;
-      item.disabled = p.drone;
+      // 전용 무기 캐릭터는 주무기 하나뿐이고 아이템도 없다
+      secondary.disabled = p.primaryOnly;
+      item.disabled = p.primaryOnly;
       actions.append(primary, secondary, item);
       buttons[p.id] = { primary, secondary, item, slot: null, itemText: null };
 
@@ -149,14 +149,14 @@ export function createControls(groups, players, inputs) {
         }
         // 단검·샷건: 쿨타임 동안 보조무기 버튼에 남은 초
         const left = WEAPONS[p.secondary]?.ownCooldown ? p.cooldowns[p.secondary] ?? 0 : 0;
-        const secondaryText = left > 0 ? `${Math.ceil(left)}초` : WEAPONS[p.secondary].name;
+        const secondaryText = p.primaryOnly ? '없음' : left > 0 ? `${Math.ceil(left)}초` : WEAPONS[p.secondary].name;
         if (b.secondaryText !== secondaryText) {
           b.secondaryText = secondaryText;
           b.secondary.lastChild.textContent = secondaryText;
           b.secondary.classList.toggle('cooling', left > 0);
         }
         const ready = p.alive && p.grenadeCooldown <= 0;
-        const text = p.drone ? '없음' : ready ? '수류탄' : `${Math.ceil(p.grenadeCooldown)}초`;
+        const text = p.primaryOnly ? '없음' : ready ? '수류탄' : `${Math.ceil(p.grenadeCooldown)}초`;
         if (b.itemText !== text) {
           b.itemText = text;
           b.item.lastChild.textContent = text;

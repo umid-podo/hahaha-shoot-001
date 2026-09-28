@@ -412,14 +412,14 @@ export function step(match, inputs, dt = TICK) {
     p.hurt = Math.max(0, p.hurt - dt);
     if (!p.alive) continue;
     const input = inputs[p.id];
-    // 드론은 주무기 하나뿐이고 아이템도 없다
+    // 전용 무기 캐릭터(R-10·숨겨진 캐릭터)는 주무기 하나뿐이고 아이템도 없다
     if (input.select) {
-      if (!p.drone) selectSlot(p, input.select, events);
+      if (!p.primaryOnly) selectSlot(p, input.select, events);
       input.select = null;
     }
     if (input.swap) {
       input.swap = false;
-      if (!p.drone) swapWeapon(p, events);
+      if (!p.primaryOnly) swapWeapon(p, events);
     }
     const weapon = WEAPONS[p.weapon];
     p.cooldown = Math.max(0, p.cooldown - dt);
@@ -435,7 +435,7 @@ export function step(match, inputs, dt = TICK) {
     p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * p.speed * dt));
     if (input.item) {
       input.item = false;
-      if (!p.drone) throwGrenade(match, p, events);
+      if (!p.primaryOnly) throwGrenade(match, p, events);
     }
     // 점사 중인 남은 탄은 조준을 풀어도 끝까지 나간다.
     if (p.burstLeft > 0) {

@@ -9,6 +9,8 @@ import { weaponInfo, weaponLabel, choiceButton } from './widgets.js';
 const $ = (selector) => document.querySelector(selector);
 // 2인 조작 패널 한 개(이동키 + 버튼 + 발사키)가 들어가려면 필요한 대략의 화면 폭
 const MIN_PANEL_WIDTH = 380;
+// 숨겨진 캐릭터를 부르는 3번 누르기의 시간 창(ms)
+const SECRET_TAP_MS = 800;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -46,16 +48,35 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
   chars.className = 'choices characters';
   chars.setAttribute('role', 'group');
   chars.setAttribute('aria-label', `${s.id} 캐릭터`);
-  for (const c of CHARACTERS) {
+  for (const c of CHARACTERS.filter((ch) => !ch.hidden)) {
+    // 숨겨진 캐릭터: 이 버튼을 빠르게 3번 누르면 버튼이 숨겨진 캐릭터로 바뀐다(다시 3번 누르면 돌아옴).
+    const secret = CHARACTERS.find((h) => h.hidden && h.unlockFrom === c.id);
+    let shown = secret && pick.characterId === secret.id ? secret : c;
+    let taps = [];
     const img = document.createElement('img');
-    img.src = c.image ?? `assets/characters/${c.id}.png`;
     img.alt = '';
     const name = document.createElement('span');
-    name.textContent = c.name;
-    chars.append(choiceButton([img, name], pick.characterId === c.id, () => {
-      onPick(s.id, 'characterId', c.id);
+    const draw = () => {
+      img.src = shown.image ?? `assets/characters/${shown.id}.png`;
+      name.textContent = shown.name;
+    };
+    draw();
+    const btn = choiceButton([img, name], pick.characterId === shown.id, () => {
+      if (secret) {
+        const now = performance.now();
+        taps = [...taps.filter((t) => now - t < SECRET_TAP_MS), now];
+        if (taps.length >= 3) {
+          taps = [];
+          shown = shown === c ? secret : c;
+          draw();
+          btn.classList.toggle('secret', shown === secret);
+        }
+      }
+      onPick(s.id, 'characterId', shown.id);
       syncWeapons();
-    }));
+    });
+    btn.classList.toggle('secret', shown === secret);
+    chars.append(btn);
   }
 
   // 무기 선택: 주무기 줄과 보조무기 줄
@@ -79,14 +100,14 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     ...weaponRow('보조무기', SECONDARY_IDS, 'secondary', pick.secondary ?? DEFAULT_SECONDARY),
   );
 
-  // 드론을 고르면 주무기 선택 대신 전용 무기 안내
+  // 전용 무기 캐릭터(R-10·숨겨진 캐릭터)를 고르면 무기 선택 대신 전용 무기 안내
   const droneNote = document.createElement('small');
   droneNote.className = 'drone-note';
   function syncWeapons() {
     const character = CHARACTERS.find((c) => c.id === loadout[s.id].characterId);
-    weapons.hidden = !!character?.drone;
-    droneNote.hidden = !character?.drone;
-    if (character?.drone) {
+    weapons.hidden = !!character?.weapon;
+    droneNote.hidden = !character?.weapon;
+    if (character?.weapon) {
       const w = WEAPONS[character.weapon];
       droneNote.textContent = `${character.name} 전용: ${w.name} (${weaponInfo(w)}) · 보조무기·수류탄 없음`;
     }

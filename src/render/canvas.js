@@ -145,17 +145,6 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
     ctx.restore();
 
-    // 아킴보 석궁을 들면 작은 석궁 두 개를 조준 방향으로 겨눈 모습으로 덧그린다.
-    if (p.weapon === 'crossbow') {
-      const { img: bow } = assets['akimbo-crossbow'];
-      ctx.save();
-      ctx.translate(p.x + Math.cos(p.aim) * 36, p.y + Math.sin(p.aim) * 36);
-      ctx.rotate(p.aim);
-      if (Math.cos(p.aim) < 0) ctx.scale(1, -1); // 왼쪽을 겨눠도 뒤집혀 보이지 않게
-      ctx.drawImage(bow, -22, -28, 70, 56);
-      ctx.restore();
-    }
-
     // 현재 조준 방향 눈금(항상) + 발사 준비 중에만 조준선
     const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
     // 떼면 쏘는 무기(RPG·저격총)의 쿨타임, 방전, 과열 동안은 눈금을 회색으로 표시
@@ -205,12 +194,12 @@ export function createRenderer(canvas, wrap, assets) {
     // 단검·샷건 쿨타임: 보라 막대(무기를 바꿔 들고 있어도 표시)
     const secondary = WEAPONS[p.secondary];
     const secondaryLeft = p.cooldowns[p.secondary] ?? 0;
-    if (!p.drone && secondary?.ownCooldown && secondaryLeft > 0) {
+    if (!p.primaryOnly && secondary?.ownCooldown && secondaryLeft > 0) {
       bar(p.x - HP_BAR.w / 2, gaugeY + row * (GAUGE_H + 2), HP_BAR.w, 1 - secondaryLeft / secondary.interval, '#8E6BD6');
       row++;
     }
     // 수류탄(아이템) 쿨타임: 던진 뒤 다시 쓸 수 있을 때까지 회색 막대
-    if (!p.drone && p.grenadeCooldown > 0) {
+    if (!p.primaryOnly && p.grenadeCooldown > 0) {
       bar(p.x - HP_BAR.w / 2, gaugeY + row * (GAUGE_H + 2), HP_BAR.w,
         1 - p.grenadeCooldown / WEAPONS.grenade.interval, '#9A9EA5');
     }
@@ -266,9 +255,13 @@ export function createRenderer(canvas, wrap, assets) {
     members.forEach((p, i) => {
       const my = y + 40 + i * 30;
       ctx.fillStyle = p.alive ? INK : '#9A9EA5';
-      ctx.font = 'bold 13px system-ui, sans-serif';
+      // 이름이 긴 캐릭터(에스가라 케스가라의 분신)는 판 안에 들어가도록 글자를 줄인다
+      const text = `${p.id} ${p.name} · ${WEAPONS[p.weapon].name}`;
+      let size = 13;
+      ctx.font = `bold ${size}px system-ui, sans-serif`;
+      while (size > 8 && ctx.measureText(text).width > w - 24) ctx.font = `bold ${--size}px system-ui, sans-serif`;
       ctx.textAlign = 'left';
-      ctx.fillText(`${p.id} ${p.name} · ${WEAPONS[p.weapon].name}`, x + 12, my + 2);
+      ctx.fillText(text, x + 12, my + 2);
       ctx.textAlign = 'right';
       ctx.fillText(p.alive ? `${p.hp}` : 'KO', x + w - 12, my + 17);
       drawHpBar(ctx, x + 12, my + 12, w - 60, 10, p.hp, p.maxHp);
