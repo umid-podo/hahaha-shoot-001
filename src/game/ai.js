@@ -188,7 +188,7 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   // 무기 전환: 가끔 주무기 ↔ 보조무기. 기관단총이 과열되거나 단검·샷건이 쿨타임이면 바로 주무기로,
   // 쿨타임 중인 보조무기로는 바꾸지 않는다.
   ai.swapTimer -= dt;
-  if (!me.drone) {
+  if (!me.primaryOnly) {
     const smgHot = me.weapon === 'smg' && (me.overheat > 0 || me.heat > WEAPONS.smg.heat.max * 0.85);
     const secondaryCooling = WEAPONS[me.secondary].ownCooldown && (me.cooldowns[me.secondary] ?? 0) > 0;
     if ((smgHot || (me.slot === 'secondary' && secondaryCooling)) && ai.charge === null) {
@@ -202,7 +202,7 @@ export function updateAI(ai, match, inputs, dt = TICK) {
 
   // 수류탄: 쿨타임이 끝나고 난이도별 대기가 지나면 상대 쪽으로 던진다.
   ai.grenadeTimer -= dt;
-  if (!me.drone && me.grenadeCooldown <= 0 && ai.grenadeTimer <= 0) {
+  if (!me.primaryOnly && me.grenadeCooldown <= 0 && ai.grenadeTimer <= 0) {
     frame.item = true;
     ai.grenadeTimer = WEAPONS.grenade.interval + between(ai.rng, ai.diff.grenade);
   }

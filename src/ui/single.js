@@ -115,6 +115,8 @@ export function createSingleSetup(onChange) {
   return {
     open(state) {
       single = state;
+      // 목록에서 빠진 무기(예: 전용 무기가 된 아킴보 석궁)가 저장돼 있으면 기본값으로
+      if (!PRIMARY_IDS.includes(single.aiWeapon)) single.aiWeapon = defaultSingle().aiWeapon;
       if (!SECONDARY_IDS.includes(single.aiSecondary)) single.aiSecondary = SECONDARY_IDS[0];
       buildChoices();
       syncSecondary();

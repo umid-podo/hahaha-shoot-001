@@ -54,14 +54,15 @@ export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
     const pick = loadout[slot.id] ?? {};
     const characterId = characterOf(pick.characterId) ? pick.characterId : slot.characterId;
     const character = characterOf(characterId);
-    // 드론은 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
+    // R-10·숨겨진 캐릭터는 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
     const weapon = character.weapon ?? (PRIMARY_IDS.includes(pick.weapon) ? pick.weapon : slot.weapon);
     const secondary = SECONDARY_IDS.includes(pick.secondary) ? pick.secondary : DEFAULT_SECONDARY;
     const maxHp = pick.maxHp > 0 ? Math.round(pick.maxHp) : character.maxHp ?? MAX_HP;
     return {
       id: slot.id, team: slot.team, characterId, name: pick.ai ? `${character.name} (AI)` : character.name,
       ai: !!pick.ai, bulletSpeedScale: pick.bulletSpeedScale > 0 ? pick.bulletSpeedScale : 1, damage: pick.damage ?? null,
-      drone: !!character.drone, scale: character.scale ?? 1,
+      // primaryOnly: 전용 주무기 하나만 쓰는 캐릭터(보조무기·수류탄 없음)
+      drone: !!character.drone, primaryOnly: !!character.weapon, scale: character.scale ?? 1,
       // radius: 싱글플레이에서 AI 히트박스 반지름을 따로 정할 수 있다
       radius: pick.radius > 0 ? pick.radius : character.radius ?? BODY_RADIUS, speed: character.speed ?? MAX_SPEED,
       primary: weapon, secondary, slot: 'primary', weapon,
