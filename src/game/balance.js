@@ -48,6 +48,7 @@ export const SECTIONS = [
         ['유도 회전(rad/초)', ['homing', 'turnRate'], { max: 10, step: 0.1 }],
       ]),
       ...gun('sniper'),
+      param('즉사기', '사용 가능 시각(전투 시작 후)', ['weapons', 'instakill', 'readyAfter'], { max: 600, step: 1, unit: SEC }),
       ...gun('crossbow', [['두 화살 간격', ['arrowGap'], { max: 120, step: 1 }]]),
     ],
   },

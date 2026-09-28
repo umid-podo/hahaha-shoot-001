@@ -245,6 +245,24 @@
       ],
       "anchorStatus": "허리띠 높이 초기값",
       "frames": 1
+    },
+    {
+      "id": "creator",
+      "name": "제작자",
+      "path": "characters/creator.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 542545,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "source": "earth-arrow.png에 빨간 '제작자' 글씨를 몸에 덧씀(WenQuanYi Zen Hei)",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.48,
+        0.68
+      ],
+      "anchorStatus": "온이름과 같음",
+      "frames": 1
     }
   ]
 }

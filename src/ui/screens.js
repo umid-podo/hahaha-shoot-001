@@ -9,8 +9,8 @@ import { weaponInfo, weaponLabel, choiceButton } from './widgets.js';
 const $ = (selector) => document.querySelector(selector);
 // 2인 조작 패널 한 개(이동키 + 버튼 + 발사키)가 들어가려면 필요한 대략의 화면 폭
 const MIN_PANEL_WIDTH = 380;
-// 숨겨진 캐릭터를 부르는 연타의 시간 창(ms): 3번은 0.8초, 2번은 0.5초 안
-const secretWindow = (taps) => (taps >= 3 ? 800 : 500);
+// 숨겨진 캐릭터를 부르는 연타: 앞 누름과 이 시간(ms) 안에 다시 누르면 '빠른 연타'로 센다
+const FAST_TAP_MS = 400;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -49,11 +49,12 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
   chars.setAttribute('role', 'group');
   chars.setAttribute('aria-label', `${s.id} 캐릭터`);
   for (const c of CHARACTERS.filter((ch) => !ch.hidden)) {
-    // 숨겨진 캐릭터: 이 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 버튼이 숨겨진 캐릭터로 바뀐다(다시 누르면 돌아옴).
-    // 아크 트루퍼는 온이름 2번, 에스가라 케스가라의 분신은 R-10 3번.
-    const secret = CHARACTERS.find((h) => h.hidden && h.unlockFrom === c.id);
-    let shown = secret && pick.characterId === secret.id ? secret : c;
-    let taps = [];
+    // 숨겨진 캐릭터: 이 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 버튼이 그 숨겨진 캐릭터로 바뀐다.
+    // 온이름은 2번 아크 트루퍼, 3번 제작자 / R-10은 3번 에스가라 케스가라의 분신.
+    // 숨겨진 캐릭터가 된 버튼을 (연타가 아니게) 한 번 누르면 원래 캐릭터로 돌아온다.
+    const secrets = CHARACTERS.filter((h) => h.hidden && h.unlockFrom === c.id);
+    let shown = secrets.find((h) => h.id === pick.characterId) ?? c;
+    let count = 0, lastTap = -Infinity;
     const img = document.createElement('img');
     img.alt = '';
     const name = document.createElement('span');
@@ -63,21 +64,20 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     };
     draw();
     const btn = choiceButton([img, name], pick.characterId === shown.id, () => {
-      if (secret) {
+      if (secrets.length) {
         const now = performance.now();
-        const need = secret.unlockTaps ?? 3;
-        taps = [...taps.filter((t) => now - t < secretWindow(need)), now];
-        if (taps.length >= need) {
-          taps = [];
-          shown = shown === c ? secret : c;
-          draw();
-          btn.classList.toggle('secret', shown === secret);
-        }
+        count = now - lastTap < FAST_TAP_MS ? count + 1 : 1;
+        lastTap = now;
+        const unlocked = secrets.find((h) => (h.unlockTaps ?? 3) === count);
+        if (unlocked) shown = unlocked;
+        else if (count === 1 && shown !== c) shown = c; // 숨겨진 캐릭터를 다시 누르면 원래대로
+        draw();
+        btn.classList.toggle('secret', shown !== c);
       }
       onPick(s.id, 'characterId', shown.id);
       syncWeapons();
     });
-    btn.classList.toggle('secret', shown === secret);
+    btn.classList.toggle('secret', shown !== c);
     chars.append(btn);
   }
 
@@ -252,7 +252,7 @@ export function createScreens(handlers) {
       compare.setAttribute('aria-label', `준 피해 비교: ${players.map((p, i) => `${p.id} ${dealt[i]}`).join(', ')}`);
 
       // 무기별 표: 쏜 무기만, 주무기 → 보조무기 → 아이템 순
-      const order = [...PRIMARY_IDS, 'laser', ...SECONDARY_IDS, 'grenade'];
+      const order = [...PRIMARY_IDS, 'crossbow', 'laser', 'instakill', ...SECONDARY_IDS, 'grenade'];
       const rows = [];
       for (const p of players) {
         const used = order.filter((id) => stats[p.id].weapons[id]);

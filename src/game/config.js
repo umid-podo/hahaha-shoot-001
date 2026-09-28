@@ -26,6 +26,8 @@ export const TICK = 1 / 60;
  * dash: 쏘는 대신 조준 방향으로 dash.speed(초당)로 돌진해 상대 몸에 닿으면 damage를 준다(단검).
  * pellets·spread: 한 번에 pellets발을 spread도 부채꼴로 고르게 쏜다(샷건).
  * arrows·arrowGap: 한 번에 arrows발을 arrowGap 간격으로 나란히 쏜다(아킴보 석궁).
+ * instakill: 거대한 레이저로 가장 가까운 상대를 반드시 맞혀 즉사시킨다(엄폐물·무적 무시). 경기 시작 readyAfter초 뒤부터,
+ *   한 경기에 한 번 쓸 수 있다(제작자 전용).
  * thrown: 던지는 무기. 엄폐물·플레이어 위로 날아가 목표 레일 선에서 터진다(직격 없음, 폭발 피해만).
  */
 export const WEAPONS = {
@@ -42,6 +44,8 @@ export const WEAPONS = {
     id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release',
     note: '팀 진영에 강철 엄폐물',
   },
+  // 제작자 전용 주무기: 커다란 레이저포. 전투 시작 30초 뒤부터 쏠 수 있고, 쏘면 유도되는 거대 레이저가 상대를 즉사시킨다.
+  instakill: { id: 'instakill', name: '즉사기', interval: 0, damage: 0, burst: 1, instakill: true, readyAfter: 30 },
   // 드론(R-10) 전용 주무기
   laser: { id: 'laser', name: '레이저 캐논', interval: 0.1, damage: 4, burst: 1, beam: true, battery: { shots: 30, recharge: 2 } },
   // 보조무기
@@ -84,6 +88,7 @@ export const SLOT_NAME = { primary: '주무기', secondary: '보조무기' };
  * drone: 떠 있는 드론(둥실 뜨는 모습). hidden: 선택 화면에 보이지 않는 숨겨진 캐릭터로,
  * unlockFrom 캐릭터 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 그 자리에 나타난다.
  * bonusDamage: 상대 플레이어에게 피해를 줄 때마다 더하는 추가 피해.
+ * jetpack: 제트팩으로 떠서 움직이고, 움직일 때 제트팩에서 불꽃이 나온다(아크 트루퍼). jetpackNozzle은 그림 안 분사구 위치(0~1).
  * maxHp는 최대 체력, radius는 몸 판정(히트 박스) 반지름, speed는 초당 이동 속도, scale은 그림 크기 배율.
  * maxHp·radius·speed는 밸런스 메뉴에서 캐릭터별로 조정한다.
  */
@@ -99,7 +104,13 @@ export const CHARACTERS = [
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 2번 누르면 온이름 대신 나타난다. 모든 피해에 +5.
   {
     id: 'arc-trooper', name: '아크 트루퍼', hidden: true, unlockFrom: 'earth-arrow', unlockTaps: 2, bonusDamage: 5,
-    maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, image: 'assets/characters/arc-trooper.svg',
+    jetpack: true, jetpackNozzle: [0.31, 0.6],
+    maxHp: MAX_HP, radius: BODY_RADIUS, speed: 420, image: 'assets/characters/arc-trooper.svg',
+  },
+  // 숨겨진 캐릭터: 온이름 버튼을 빠르게 3번 누르면 나타난다. 모습은 온이름 + 몸에 빨간 '제작자'. 즉사기 전용.
+  {
+    id: 'creator', name: '제작자', hidden: true, unlockFrom: 'earth-arrow', unlockTaps: 3, weapon: 'instakill',
+    maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED,
   },
   // 숨겨진 캐릭터: R-10 버튼을 빠르게 3번 누르면 R-10 대신 나타난다. 아킴보 석궁 전용.
   {
