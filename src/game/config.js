@@ -98,7 +98,7 @@ export const CHARACTERS = [
   // 숨겨진 캐릭터: R-10 버튼을 빠르게 3번 누르면 R-10 대신 나타난다. 아킴보 석궁 전용.
   {
     id: 'esgara-clone', name: '에스가라 케스가라의 분신', hidden: true, unlockFrom: 'r10', weapon: 'crossbow',
-    maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, image: 'assets/characters/esgara-clone.svg',
+    maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.05,
   },
 ];
 

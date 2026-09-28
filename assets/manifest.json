@@ -214,19 +214,20 @@
     {
       "id": "esgara-clone",
       "name": "에스가라 케스가라의 분신",
-      "path": "characters/esgara-clone.svg",
-      "width": 512,
-      "height": 512,
-      "bytes": 4777,
-      "format": "svg",
-      "source": "hand-written SVG (사용자 제공 그림의 특징을 참고해 새로 그림)",
+      "path": "characters/esgara-clone.png",
+      "width": 768,
+      "height": 768,
+      "bytes": 459207,
+      "format": "png",
+      "source": "사용자 제공 일러스트(사용 허락 확인)에서 배경을 지우고 정사각형으로 맞춤",
       "kind": "static-character",
       "bodyAnchor": [
-        0.47,
-        0.62
+        0.5,
+        0.66
       ],
-      "anchorStatus": "몸통 중심 초기값",
-      "frames": 1
+      "anchorStatus": "이름표와 겹치지 않도록 허리 조금 아래",
+      "frames": 1,
+      "hasAlphaChannel": true
     }
   ]
 }
