@@ -335,3 +335,6 @@ button.choice.secret span { font-size: 11px; }
 /* 준비 화면 무기 선택: 주무기 줄 + 보조무기 줄 */
 .weapon-picks { display: grid; gap: 4px; }
 .weapon-picks .field-label { margin-top: 2px; font-size: 13px; }
+
+/* 무기 선택 버튼 안의 무기 그림(아킴보 석궁) */
+button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; }
