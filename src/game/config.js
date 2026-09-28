@@ -26,8 +26,9 @@ export const TICK = 1 / 60;
  * dash: 쏘는 대신 조준 방향으로 dash.speed(초당)로 돌진해 상대 몸에 닿으면 damage를 준다(단검).
  * pellets·spread: 한 번에 pellets발을 spread도 부채꼴로 고르게 쏜다(샷건).
  * arrows·arrowGap: 한 번에 arrows발을 arrowGap 간격으로 나란히 쏜다(아킴보 석궁).
- * instakill: 거대한 레이저로 가장 가까운 상대를 반드시 맞혀 즉사시킨다(엄폐물·무적 무시). 경기 시작 readyAfter초 뒤부터,
- *   한 경기에 한 번 쓸 수 있다(제작자 전용).
+ * instakill: 거대한 레이저. 조준 방향에서 가장 가까운 상대 쪽으로 최대 homing도까지 휘어(180이면 어디를 겨눠도 명중),
+ *   닿으면 damage 피해(기본 9999 = 즉사)를 준다. 엄폐물·무적은 무시한다. 경기 시작 readyAfter초 뒤부터 한 경기에 한 번(제작자 전용).
+ *   beamWidth는 레이저 굵기(명중 판정 여유).
  * thrown: 던지는 무기. 엄폐물·플레이어 위로 날아가 목표 레일 선에서 터진다(직격 없음, 폭발 피해만).
  */
 export const WEAPONS = {
@@ -45,7 +46,9 @@ export const WEAPONS = {
     note: '팀 진영에 강철 엄폐물',
   },
   // 제작자 전용 주무기: 커다란 레이저포. 전투 시작 30초 뒤부터 쏠 수 있고, 쏘면 유도되는 거대 레이저가 상대를 즉사시킨다.
-  instakill: { id: 'instakill', name: '즉사기', interval: 0, damage: 0, burst: 1, instakill: true, readyAfter: 30 },
+  instakill: {
+    id: 'instakill', name: '즉사기', interval: 0, damage: 9999, burst: 1, instakill: true, readyAfter: 30, homing: 180, beamWidth: 40,
+  },
   // 드론(R-10) 전용 주무기
   laser: { id: 'laser', name: '레이저 캐논', interval: 0.1, damage: 4, burst: 1, beam: true, battery: { shots: 30, recharge: 2 } },
   // 보조무기

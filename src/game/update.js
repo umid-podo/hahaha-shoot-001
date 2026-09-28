@@ -317,8 +317,9 @@ function fire(match, p, events) {
 export const elapsed = (match) => match.tick * TICK;
 
 /**
- * 즉사기: 가장 가까운 상대에게 유도되는 거대한 레이저. 엄폐물·무적과 상관없이 반드시 맞아 즉사한다.
- * 한 경기에 한 번(p.instakillUsed).
+ * 즉사기: 조준 방향에서 가장 가까운 상대 쪽으로 최대 weapon.homing도까지 휘는 거대한 레이저.
+ * 휜 방향의 빛줄기(굵기 beamWidth)가 상대 몸에 닿으면 weapon.damage 피해(기본 9999 = 즉사). 엄폐물·무적은 무시한다.
+ * 맞든 빗나가든 한 경기에 한 번(p.instakillUsed).
  */
 function fireInstakill(match, p, weapon, events) {
   let target = null, best = Infinity;
@@ -330,10 +331,24 @@ function fireInstakill(match, p, weapon, events) {
   if (!target) return;
   p.instakillUsed = true;
   const x1 = p.x + Math.cos(p.aim) * MUZZLE_OFFSET * 1.6, y1 = p.y + Math.sin(p.aim) * MUZZLE_OFFSET * 1.6;
+  // 유도: 조준 방향에서 상대 방향으로 최대 homing도까지 꺾는다
+  const toTarget = Math.atan2(target.y - y1, target.x - x1);
+  const diff = Math.atan2(Math.sin(toTarget - p.aim), Math.cos(toTarget - p.aim));
+  const limit = (Math.max(0, weapon.homing) * Math.PI) / 180;
+  const dir = p.aim + Math.max(-limit, Math.min(limit, diff));
+  const reach = 2400;
+  const x2 = x1 + Math.cos(dir) * reach, y2 = y1 + Math.sin(dir) * reach;
+  const hit = segmentCircleTime(x1 - target.x, y1 - target.y, x2 - target.x, y2 - target.y,
+    target.radius + weapon.beamWidth / 2) !== null;
   events.push({ type: 'fire', playerId: p.id, weapon: weapon.id });
-  events.push({ type: 'megalaser', playerId: p.id, x1, y1, x2: target.x, y2: target.y, aim: p.aim });
+  events.push({
+    type: 'megalaser', playerId: p.id, x1, y1, aim: p.aim, hit,
+    // 맞으면 상대에게 휘어 꽂히고, 빗나가면 꺾인 방향으로 경기장 끝까지
+    x2: hit ? target.x : x1 + Math.cos(dir) * 1800, y2: hit ? target.y : y1 + Math.sin(dir) * 1800,
+  });
+  if (!hit) return;
   const shot = { team: p.team, ownerId: p.id, weapon: weapon.id, connected: false };
-  damage(match, target, target.hp, shot, events);
+  damage(match, target, weaponDamage(p, weapon.id).damage, shot, events);
 }
 
 /** 단검 돌진 시작: 조준 방향으로 날아가 상대에 닿거나, 엄폐물·상대 레일·경기장 끝에 닿으면 자기 자리로 돌아온다. */
