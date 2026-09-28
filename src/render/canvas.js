@@ -245,8 +245,9 @@ export function createRenderer(canvas, wrap, assets) {
     const weapon = WEAPONS[p.weapon];
     let ratio, color;
     if (weapon.instakill) {
-      // 즉사기: 전투 시작부터 readyAfter초까지 차오르는 빨간 막대, 다 차면 금색
-      ratio = p.instakillUsed ? 0 : Math.min(1, elapsedTime / weapon.readyAfter);
+      // 즉사기: 전투 시작부터 readyAfter초까지, 쏜 뒤에는 쿨타임 동안 차오르는 빨간 막대, 다 차면 금색
+      ratio = elapsedTime < weapon.readyAfter ? elapsedTime / weapon.readyAfter
+        : weapon.interval > 0 ? 1 - p.cooldown / weapon.interval : 1;
       color = ratio >= 1 ? '#FFC53D' : '#D9443A';
     } else if (weapon.battery) {
       ratio = p.battery / weapon.battery.shots; color = '#E0312B';
@@ -286,7 +287,7 @@ export function createRenderer(canvas, wrap, assets) {
   /** 즉사기: 몸보다 큰 레이저포. 쓸 수 있으면 포구가 빨갛게 맥동하고, 쓰기 전·쓴 뒤에는 어둡다. */
   function drawMegaCannon(p, time, reducedMotion) {
     const weapon = WEAPONS.instakill;
-    const ready = !p.instakillUsed && elapsedTime >= weapon.readyAfter;
+    const ready = elapsedTime >= weapon.readyAfter && p.cooldown <= 0;
     ctx.save();
     ctx.translate(p.x + Math.cos(p.aim) * 10, p.y - 6 + Math.sin(p.aim) * 10);
     ctx.rotate(p.aim);

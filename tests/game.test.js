@@ -1020,7 +1020,7 @@ test('숨겨진 캐릭터 제작자: 온이름 3번, 즉사기만 사용, 전투
   assert.deepEqual(match.stats.P2.killedBy, { ownerId: 'P1', weapon: 'instakill' });
 });
 
-test('즉사기는 무조건 맞음: 엄폐물 뒤·옆으로 비껴 조준·단검 돌진 중(무적)이어도 즉사, 한 경기 한 번', () => {
+test('즉사기는 무조건 맞음: 엄폐물 뒤·옆으로 비껴 조준·단검 돌진 중(무적)이어도 즉사, 쿨타임 뒤 다시 사용', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'creator' }, P2: { secondary: 'dagger' } });
   const cover = coverById(match, 'center');
   P1.x = P1.previousX = cover.x; P2.x = P2.previousX = cover.x; // 가운데 엄폐물이 가로막음
@@ -1044,7 +1044,9 @@ test('즉사기는 무조건 맞음: 엄폐물 뒤·옆으로 비껴 조준·단
   again.inputs.P1.aiming = true;
   step(again.match, again.inputs);
   again.P2.alive = true; again.P2.hp = 100; again.match.phase = 'playing'; again.match.winner = null;
-  assert.equal(shots(run(again.match, again.inputs, 2), 'P1'), 0, '두 번째는 없음');
+  assert.equal(shots(run(again.match, again.inputs, WEAPONS.instakill.interval - 0.1), 'P1'), 0, '쿨타임 동안은 못 쏨');
+  assert.equal(shots(run(again.match, again.inputs, 0.2), 'P1'), 1, '쿨타임이 지나면 다시 쏨(계속 사용 가능)');
+  assert.equal(again.P2.alive, false);
 });
 
 test('즉사기 사용 가능 시각은 밸런스로 조절', () => {
@@ -1096,7 +1098,7 @@ test('즉사기 피해·유도 각도 조절: 피해를 줄이면 그만큼만, 
     const ev = step(miss.match, miss.inputs);
     assert.equal(ev.find((e) => e.type === 'megalaser').hit, false);
     assert.equal(miss.P2.hp, MAX_HP, '유도 10도로는 못 맞힘');
-    assert.equal(miss.P1.instakillUsed, true, '빗나가도 한 번 쓴 것');
+    assert.ok(miss.P1.cooldown > 0, '빗나가도 쿨타임');
 
     setValue(byId['weapons.instakill.homing'], 45);
     const bend = ready({ P1: { characterId: 'creator' } });
@@ -1104,6 +1106,23 @@ test('즉사기 피해·유도 각도 조절: 피해를 줄이면 그만큼만, 
     bend.inputs.P1.aiming = true;
     step(bend.match, bend.inputs);
     assert.equal(bend.P2.hp, MAX_HP - 120, '유도 45도면 휘어서 맞음');
+  } finally {
+    resetAll();
+  }
+});
+
+test('즉사기 쿨타임은 밸런스로 조절, 피해를 줄이면 여러 번 맞혀 쓰러뜨림', () => {
+  const byId = Object.fromEntries(PARAMS.map((p) => [p.id, p]));
+  try {
+    setValue(byId['weapons.instakill.damage'], 200);
+    setValue(byId['weapons.instakill.interval'], 2);
+    const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'creator' } });
+    P1.x = P1.previousX = 300; P2.x = P2.previousX = 300;
+    match.tick = Math.ceil(WEAPONS.instakill.readyAfter / TICK);
+    inputs.P1.aiming = true;
+    const events = run(match, inputs, 4.1);
+    assert.equal(shots(events, 'P1'), 3, '2초마다: 0초·2초·4초');
+    assert.equal(P2.alive, false, '200 × 3번 = 600 ≥ 500');
   } finally {
     resetAll();
   }

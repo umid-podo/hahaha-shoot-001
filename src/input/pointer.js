@@ -148,11 +148,11 @@ export function createControls(groups, players, inputs) {
           b.primary.setAttribute('aria-pressed', String(p.slot === 'primary'));
           b.secondary.setAttribute('aria-pressed', String(p.slot === 'secondary'));
         }
-        // 즉사기: 쓸 수 있을 때까지 주무기 버튼에 남은 초, 쓴 뒤에는 '사용함'
+        // 즉사기: 다시 쓸 수 있을 때까지(전투 시작 대기·쏜 뒤 쿨타임) 주무기 버튼에 남은 초
         const primaryWeapon = WEAPONS[p.primary];
+        const wait = primaryWeapon.instakill ? Math.max(primaryWeapon.readyAfter - elapsed, p.cooldown) : 0;
         const primaryText = !primaryWeapon.instakill ? primaryWeapon.name
-          : p.instakillUsed ? `${primaryWeapon.name} 사용함`
-          : elapsed < primaryWeapon.readyAfter ? `${primaryWeapon.name} ${Math.ceil(primaryWeapon.readyAfter - elapsed)}초`
+          : wait > 0 ? `${primaryWeapon.name} ${Math.ceil(wait)}초`
           : `${primaryWeapon.name} 준비!`;
         if (b.primaryText !== primaryText) {
           b.primaryText = primaryText;

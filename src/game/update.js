@@ -319,7 +319,7 @@ export const elapsed = (match) => match.tick * TICK;
 /**
  * 즉사기: 조준 방향에서 가장 가까운 상대 쪽으로 최대 weapon.homing도까지 휘는 거대한 레이저.
  * 휜 방향의 빛줄기(굵기 beamWidth)가 상대 몸에 닿으면 weapon.damage 피해(기본 9999 = 즉사). 엄폐물·무적은 무시한다.
- * 맞든 빗나가든 한 경기에 한 번(p.instakillUsed).
+ * 맞든 빗나가든 쏜 뒤에는 쿨타임(weapon.interval)이 돈다.
  */
 function fireInstakill(match, p, weapon, events) {
   let target = null, best = Infinity;
@@ -329,7 +329,6 @@ function fireInstakill(match, p, weapon, events) {
     if (d < best) { best = d; target = q; }
   }
   if (!target) return;
-  p.instakillUsed = true;
   const x1 = p.x + Math.cos(p.aim) * MUZZLE_OFFSET * 1.6, y1 = p.y + Math.sin(p.aim) * MUZZLE_OFFSET * 1.6;
   // 유도: 조준 방향에서 상대 방향으로 최대 homing도까지 꺾는다
   const toTarget = Math.atan2(target.y - y1, target.x - x1);
@@ -412,7 +411,7 @@ function updateDash(match, p, dt, events) {
 
 /** 탄약 외 제약(배터리·과열·무기별 쿨타임·즉사기 대기) 때문에 지금 쏠 수 없는지. */
 function blocked(p, weapon, match) {
-  if (weapon.instakill) return p.instakillUsed || elapsed(match) < weapon.readyAfter;
+  if (weapon.instakill) return elapsed(match) < weapon.readyAfter; // 쏜 뒤 대기는 공통 쿨타임(p.cooldown)
   if (weapon.battery) return p.battery <= 0;
   if (weapon.heat) return p.overheat > 0;
   if (weapon.ownCooldown) return (p.cooldowns[weapon.id] ?? 0) > 0;
