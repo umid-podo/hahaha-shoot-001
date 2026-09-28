@@ -1,4 +1,6 @@
-import { TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, TICK } from '../game/config.js';
+import {
+  TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, TICK,
+} from '../game/config.js';
 import { KEY_LABELS } from '../input/keyboard.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
@@ -56,18 +58,30 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     }));
   }
 
+  // 무기 선택: 주무기 줄과 보조무기 줄
+  const weaponRow = (label, ids, key, current) => {
+    const row = document.createElement('div');
+    row.className = 'choices weapons';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', `${s.id} ${label}`);
+    for (const id of ids) {
+      const name = document.createElement('span');
+      name.textContent = WEAPONS[id].name;
+      const info = document.createElement('small');
+      info.textContent = weaponInfo(WEAPONS[id]);
+      row.append(choiceButton([name, info], current === id, () => onPick(s.id, key, id)));
+    }
+    const heading = document.createElement('div');
+    heading.className = 'field-label';
+    heading.textContent = label;
+    return [heading, row];
+  };
   const weapons = document.createElement('div');
-  weapons.className = 'choices weapons';
-  weapons.setAttribute('role', 'group');
-  weapons.setAttribute('aria-label', `${s.id} 총기`);
-  for (const id of PRIMARY_IDS) {
-    const name = document.createElement('span');
-    name.textContent = WEAPONS[id].name;
-    const info = document.createElement('small');
-    info.textContent = weaponInfo(WEAPONS[id]);
-    weapons.append(choiceButton([name, info], pick.weapon === id,
-      () => onPick(s.id, 'weapon', id)));
-  }
+  weapons.className = 'weapon-picks';
+  weapons.append(
+    ...weaponRow('주무기', PRIMARY_IDS, 'weapon', pick.weapon),
+    ...weaponRow('보조무기', SECONDARY_IDS, 'secondary', pick.secondary ?? DEFAULT_SECONDARY),
+  );
 
   // 드론을 고르면 주무기 선택 대신 전용 무기 안내
   const droneNote = document.createElement('small');
@@ -219,7 +233,7 @@ export function createScreens(handlers) {
       compare.setAttribute('aria-label', `준 피해 비교: ${players.map((p, i) => `${p.id} ${dealt[i]}`).join(', ')}`);
 
       // 무기별 표: 쏜 무기만, 주무기 → 보조무기 → 아이템 순
-      const order = [...PRIMARY_IDS, 'laser', 'smg', 'grenade'];
+      const order = [...PRIMARY_IDS, 'laser', ...SECONDARY_IDS, 'grenade'];
       const rows = [];
       for (const p of players) {
         const used = order.filter((id) => stats[p.id].weapons[id]);

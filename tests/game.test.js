@@ -800,3 +800,39 @@ test('밸런스: 수치를 바꾸면 게임에 바로 반영되고, 기본값으
     resetAll();
   }
 });
+
+test('보조무기 선택: 기관단총(기본) 또는 단검, 경기 중 보조무기 칸은 고른 무기', () => {
+  assert.equal(createMatch().players[0].secondary, 'smg', '기본은 기관단총');
+  assert.equal(createMatch({ P1: { secondary: 'rpg' } }).players[0].secondary, 'smg', '보조무기가 아니면 기본값');
+  const { match, inputs, P1 } = playing({ P1: { weapon: 'rifle', secondary: 'dagger' } });
+  assert.equal(P1.secondary, 'dagger');
+  inputs.P1.select = 'secondary';
+  assert.ok(step(match, inputs).some((e) => e.type === 'swap' && e.weapon === 'dagger'));
+  inputs.P1.swap = true;
+  step(match, inputs);
+  assert.equal(P1.weapon, 'rifle', '다시 주무기');
+});
+
+test('단검: 들고 있으면 이동 속도 1.4배, 누르고 있으면 0.6초마다 던져 한 발 15', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'rifle', secondary: 'dagger' } });
+  P1.x = P1.previousX = 400;
+  inputs.P1.moveAxis = 1;
+  run(match, inputs, 1);
+  const normal = P1.x - 400;
+  P1.x = P1.previousX = 400;
+  P1.slot = 'secondary'; P1.weapon = 'dagger';
+  run(match, inputs, 1);
+  const boosted = P1.x - 400;
+  assert.ok(Math.abs(normal - 300) < 6, `주무기 300 (${normal})`);
+  assert.ok(Math.abs(boosted - 420) < 8, `단검 420 (${boosted})`);
+  inputs.P1.moveAxis = 0;
+
+  P1.x = P1.previousX = 300; P2.x = P2.previousX = 300; // 엄폐물 없는 줄
+  inputs.P1.aiming = true;
+  const events = run(match, inputs, 1.2 - TICK / 2);
+  assert.equal(shots(events, 'P1'), 2, '0.6초 간격');
+  inputs.P1.aiming = false;
+  run(match, inputs, 1.5);
+  assert.equal(P2.hp, MAX_HP - 30);
+  assert.equal(match.stats.P1.weapons.dagger.damage, 30);
+});

@@ -153,3 +153,14 @@ test('카운트다운·쓰러짐 중에는 AI가 쏘거나 움직이지 않음',
   assert.equal(inputs.P2.aiming, false);
   assert.ok(P2.x >= MIN_X && P2.x <= MAX_X);
 });
+
+test('AI 보조무기로 단검을 고르면 단검을 쓰고, 보조무기 피해 설정도 단검에 적용', () => {
+  const { match, inputs, P1, P2 } = single({ weapon: 'pistol', secondary: 'dagger', damage: { secondary: 25 } }, {}, 11);
+  assert.equal(P2.secondary, 'dagger');
+  assert.equal(spawnProjectile(match, { ...P2, weapon: 'dagger' }, Math.PI / 2, 'dagger').damage, 25);
+  P1.hp = P1.maxHp = 99999;
+  const brain = createAI('P2', 'hard', 11);
+  run(match, inputs, brain, 30);
+  assert.ok(match.stats.P2.weapons.dagger?.shots > 0, '단검 사용');
+  assert.ok(!match.stats.P2.weapons.smg, '기관단총은 안 씀');
+});

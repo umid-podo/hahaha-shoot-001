@@ -22,6 +22,7 @@ export const TICK = 1 / 60;
  * homing.turnRate(rad/s)는 가장 가까운 적을 향해 초당 꺾을 수 있는 최대 각도. RPG는 빗나가도 적 레일 선·경기장 끝·수명 끝에서 터진다.
  * beam: 탄 대신 즉시 닿는 레이저. battery.shots발을 쏘면 방전되고, 마지막 발사 후 battery.recharge초가 지나면 가득 찬다.
  * heat: 연속 사격 max초를 채우면 과열되어 cooldown초 동안 쏘지 못한다. 쉬는 동안에는 초당 decay만큼 식는다.
+ * moveBoost: 이 무기를 들고 있는 동안 이동 속도 배율(단검).
  * thrown: 던지는 무기. 엄폐물·플레이어 위로 날아가 목표 레일 선에서 터진다(직격 없음, 폭발 피해만).
  */
 export const WEAPONS = {
@@ -40,6 +41,10 @@ export const WEAPONS = {
   laser: { id: 'laser', name: '레이저 캐논', interval: 0.1, damage: 4, burst: 1, beam: true, battery: { shots: 30, recharge: 2 } },
   // 보조무기
   smg: { id: 'smg', name: '기관단총', interval: 0.1, damage: 4, speed: 800, burst: 1, heat: { max: 4, cooldown: 2, decay: 1 } },
+  // 단검: 들고 있으면 몸이 가벼워 빨리 움직이고, 누르고 있으면 단검을 던진다.
+  dagger: {
+    id: 'dagger', name: '단검', interval: 0.6, damage: 15, speed: 1000, burst: 1, moveBoost: 1.4,
+  },
   // 수류탄(아이템): 아이템 버튼으로 지금 조준 방향에 바로 던진다. interval은 던진 뒤의 쿨타임
   grenade: {
     id: 'grenade', name: '수류탄', interval: 20, damage: 0, speed: 700, burst: 1, thrown: true,
@@ -53,10 +58,14 @@ export const WEAPONS = {
  */
 export const RULES = { swapTime: 0.4, bulletLife: 2 };
 export const WEAPON_IDS = Object.keys(WEAPONS);
-/** 준비 화면에서 고르는 주무기. 경기 중에는 주무기·보조무기 사이만 바꾸고, 수류탄은 아이템 버튼으로 바로 던진다. */
+/**
+ * 준비 화면에서 고르는 주무기·보조무기. 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,
+ * 수류탄은 아이템 버튼으로 바로 던진다.
+ */
 export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper'];
+export const SECONDARY_IDS = ['smg', 'dagger'];
+export const DEFAULT_SECONDARY = 'smg';
 export const SLOT_ORDER = ['primary', 'secondary'];
-export const SLOT_WEAPON = { secondary: 'smg' };
 export const SLOT_NAME = { primary: '주무기', secondary: '보조무기' };
 
 /**

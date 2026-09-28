@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, BULLET_RADIUS,
-  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, SLOT_WEAPON, JET, COVER,
+  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
@@ -217,7 +217,7 @@ function explode(match, b, x, y, directVictim, directCover, events) {
 function selectSlot(p, slot, events) {
   if (p.slot === slot || !SLOT_ORDER.includes(slot)) return;
   p.slot = slot;
-  p.weapon = slot === 'primary' ? p.primary : SLOT_WEAPON[slot];
+  p.weapon = slot === 'primary' ? p.primary : p.secondary;
   p.burstLeft = 0;
   p.cooldown = Math.max(p.cooldown, RULES.swapTime);
   events.push({ type: 'swap', playerId: p.id, weapon: p.weapon, slot: p.slot });
@@ -339,7 +339,9 @@ export function step(match, inputs, dt = TICK) {
     const weapon = WEAPONS[p.weapon];
     p.cooldown = Math.max(0, p.cooldown - dt);
     updateResources(p, weapon.heat && input.aiming, dt);
-    p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * p.speed * dt));
+    // 단검처럼 moveBoost가 있는 무기를 들면 더 빨리 움직인다.
+    const speed = p.speed * (weapon.moveBoost ?? 1);
+    p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * speed * dt));
     p.aim = input.aim;
     if (input.item) {
       input.item = false;

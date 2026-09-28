@@ -327,3 +327,7 @@ button.choice[aria-pressed="true"] { border-color: var(--team); background: colo
 /* 싱글 플레이 경기: AI 자리 조작 패널 대신 이름·난이도 */
 .ai-panel { display: grid; grid-template-columns: 1fr; place-items: center; align-content: center; min-height: calc(var(--stick) + 16px); color: var(--team); }
 .ai-panel small { color: var(--muted); }
+
+/* 준비 화면 무기 선택: 주무기 줄 + 보조무기 줄 */
+.weapon-picks { display: grid; gap: 4px; }
+.weapon-picks .field-label { margin-top: 2px; font-size: 13px; }

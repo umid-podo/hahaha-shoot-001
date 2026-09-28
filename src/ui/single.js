@@ -1,4 +1,4 @@
-import { WEAPONS, PRIMARY_IDS, MAX_HP } from '../game/config.js';
+import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
 import { weaponInfo, choiceButton } from './widgets.js';
@@ -9,7 +9,7 @@ const $ = (selector) => document.querySelector(selector);
 function defaultDamage(single) {
   return {
     primary: WEAPONS[single.aiWeapon].damage,
-    secondary: WEAPONS.smg.damage,
+    secondary: WEAPONS[single.aiSecondary].damage,
     grenade: WEAPONS.grenade.splash.damage,
   };
 }
@@ -44,7 +44,7 @@ export function createSingleSetup(onChange) {
     number.hp.closest('.param').classList.toggle('changed', single.aiHp !== defaultSingle().aiHp);
     number.speed.closest('.param').classList.toggle('changed', single.aiBulletSpeed !== 100);
     $('#ai-defaults').textContent = `기본 피해: ${WEAPONS[single.aiWeapon].name} ${defaults.primary}` +
-      ` · 기관단총 ${defaults.secondary} · 수류탄 ${defaults.grenade}. 탄속 100%는 무기 기본 탄속입니다.`;
+      ` · ${WEAPONS[single.aiSecondary].name} ${defaults.secondary} · 수류탄 ${defaults.grenade}. 탄속 100%는 무기 기본 탄속입니다.`;
   }
 
   function buildChoices() {
@@ -63,6 +63,20 @@ export function createSingleSetup(onChange) {
       return choiceButton([name, info], single.aiWeapon === id, () => {
         single.aiWeapon = id;
         single.aiDamage.primary = null; // 무기를 바꾸면 주무기 피해는 새 무기 기본값부터
+        changed();
+      });
+    }));
+  }
+
+  function syncSecondary() {
+    $('#ai-secondary').replaceChildren(...SECONDARY_IDS.map((id) => {
+      const name = document.createElement('span');
+      name.textContent = WEAPONS[id].name;
+      const info = document.createElement('small');
+      info.textContent = weaponInfo(WEAPONS[id]);
+      return choiceButton([name, info], single.aiSecondary === id, () => {
+        single.aiSecondary = id;
+        single.aiDamage.secondary = null; // 보조무기를 바꾸면 피해도 새 무기 기본값부터
         changed();
       });
     }));
@@ -95,13 +109,16 @@ export function createSingleSetup(onChange) {
   $('#ai-reset-btn').addEventListener('click', () => {
     Object.assign(single, defaultSingle());
     buildChoices();
+    syncSecondary();
     changed();
   });
 
   return {
     open(state) {
       single = state;
+      if (!SECONDARY_IDS.includes(single.aiSecondary)) single.aiSecondary = SECONDARY_IDS[0];
       buildChoices();
+      syncSecondary();
       syncNumbers();
     },
   };

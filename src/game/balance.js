@@ -59,6 +59,7 @@ export const SECTIONS = [
         ['과열 시 대기', ['heat', 'cooldown'], { max: 30, step: 0.1, unit: SEC }],
         ['초당 식는 양', ['heat', 'decay'], { max: 10, step: 0.1 }],
       ]),
+      ...gun('dagger', [['들고 있을 때 이동 속도 배율', ['moveBoost'], { min: 1, max: 3, step: 0.05 }]]),
       param('수류탄', '쿨타임', ['weapons', 'grenade', 'interval'], { min: 0.5, max: 120, step: 0.5, unit: SEC }),
       param('수류탄', '던지는 속도(초당)', ['weapons', 'grenade', 'speed'], { min: 50, max: 3000, step: 10 }),
       param('수류탄', '폭발 피해', ['weapons', 'grenade', 'splash', 'damage'], { max: 1000 }),

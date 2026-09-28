@@ -1,5 +1,5 @@
 import {
-  RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, JET, COVERS, COVER,
+  RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, JET, COVERS, COVER,
   STEEL, STEEL_SPOTS,
 } from './config.js';
 
@@ -12,9 +12,9 @@ export const SLOTS = [
 export const characterOf = (id) => CHARACTERS.find((c) => c.id === id);
 export const characterName = (id) => characterOf(id)?.name ?? id;
 
-/** 기본 선택. { P1: { characterId, weapon }, P2: ... } */
+/** 기본 선택. { P1: { characterId, weapon, secondary }, P2: ... } */
 export function defaultLoadout() {
-  return Object.fromEntries(SLOTS.map((s) => [s.id, { characterId: s.characterId, weapon: s.weapon }]));
+  return Object.fromEntries(SLOTS.map((s) => [s.id, { characterId: s.characterId, weapon: s.weapon, secondary: DEFAULT_SECONDARY }]));
 }
 
 export function initialAim(team) {
@@ -45,7 +45,7 @@ function createStats(players) {
 
 /**
  * @param {Record<string, {characterId: string, weapon: string}>} [loadout]
- * 자리별 선택에 싱글플레이 AI 설정을 더할 수 있다: ai(true면 AI가 조작), maxHp(체력),
+ * secondary는 보조무기(SECONDARY_IDS, 없으면 기관단총). 자리별 선택에 싱글플레이 AI 설정을 더할 수 있다: ai(true면 AI가 조작), maxHp(체력),
  * bulletSpeedScale(탄속 배율), damage({ primary, secondary, grenade } 칸별 피해).
  */
 export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
@@ -56,13 +56,14 @@ export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
     const character = characterOf(characterId);
     // 드론은 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
     const weapon = character.weapon ?? (PRIMARY_IDS.includes(pick.weapon) ? pick.weapon : slot.weapon);
+    const secondary = SECONDARY_IDS.includes(pick.secondary) ? pick.secondary : DEFAULT_SECONDARY;
     const maxHp = pick.maxHp > 0 ? Math.round(pick.maxHp) : character.maxHp ?? MAX_HP;
     return {
       id: slot.id, team: slot.team, characterId, name: pick.ai ? `${character.name} (AI)` : character.name,
       ai: !!pick.ai, bulletSpeedScale: pick.bulletSpeedScale > 0 ? pick.bulletSpeedScale : 1, damage: pick.damage ?? null,
       drone: !!character.drone, scale: character.scale ?? 1,
       radius: character.radius ?? BODY_RADIUS, speed: character.speed ?? MAX_SPEED,
-      primary: weapon, slot: 'primary', weapon,
+      primary: weapon, secondary, slot: 'primary', weapon,
       battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
       x, previousX: x, y: RAIL_Y[slot.team],
       aim: initialAim(slot.team),

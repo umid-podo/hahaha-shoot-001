@@ -43,7 +43,7 @@ const SINGLE_KEY = 'haha2.single.v1';
  */
 export function defaultSingle() {
   return {
-    aiWeapon: 'pistol', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100,
+    aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100,
     aiDamage: { primary: null, secondary: null, grenade: null },
   };
 }

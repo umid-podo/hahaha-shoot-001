@@ -11,7 +11,8 @@ export function weaponInfo(w) {
   }
   const shots = w.burst > 1 ? `${w.burst}점사 ` : '';
   const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';
-  return `${w.interval}초마다 ${shots}· 한 발 ${w.damage}${splash}`;
+  const boost = w.moveBoost ? ` · 들고 있으면 이동 속도 ${w.moveBoost}배` : '';
+  return `${w.interval}초마다 ${shots}· 한 발 ${w.damage}${splash}${boost}`;
 }
 
 export function choiceButton(label, pressed, onClick) {

@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS, COVER,
+  MAX_HP, WEAPONS, COVER, RULES,
 } from '../game/config.js';
 
 const INK = '#30353E';
@@ -442,6 +442,27 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.stroke();
           ctx.fillStyle = '#C9CDD2';
           ctx.fillRect(b.x - r * 0.3, b.y - r - 5, r * 0.6, 6);
+          continue;
+        }
+        if (b.weapon === 'dagger') {
+          // 단검: 은색 날 + 갈색 손잡이, 날아가며 빙글빙글 돈다(동작 줄이기면 진행 방향 고정)
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate(reducedMotion ? Math.atan2(b.vy, b.vx) : (RULES.bulletLife - b.life) * 25);
+          ctx.fillStyle = '#DDE3EA';
+          ctx.strokeStyle = INK;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(18, 0); ctx.lineTo(2, -5); ctx.lineTo(2, 5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#8A5A2B';
+          ctx.fillRect(-14, -3, 14, 6);
+          ctx.strokeRect(-14, -3, 14, 6);
+          ctx.fillStyle = INK;
+          ctx.fillRect(-1, -8, 4, 16);
+          ctx.restore();
           continue;
         }
         const rocket = b.weapon === 'rpg';
