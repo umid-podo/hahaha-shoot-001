@@ -104,8 +104,9 @@ export const CHARACTERS = [
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 2번 누르면 온이름 대신 나타난다. 모든 피해에 +5.
   {
     id: 'arc-trooper', name: '아크 트루퍼', hidden: true, unlockFrom: 'earth-arrow', unlockTaps: 2, bonusDamage: 5,
-    jetpack: true, jetpackNozzle: [0.31, 0.6],
-    maxHp: MAX_HP, radius: BODY_RADIUS, speed: 420, image: 'assets/characters/arc-trooper.svg',
+    // 그림: 장갑 몸통에 온이름 머리. 머리·화살표 때문에 그림판이 넓어 1.25배로 그려 몸 크기를 맞춘다.
+    jetpack: true, jetpackNozzle: [0.348, 0.68], scale: 1.25,
+    maxHp: MAX_HP, radius: BODY_RADIUS, speed: 420,
   },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 3번 누르면 나타난다. 모습은 온이름 + 몸에 빨간 '제작자'. 즉사기 전용.
   {
