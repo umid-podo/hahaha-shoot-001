@@ -40,7 +40,7 @@ export const WEAPONS = {
     id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release',
     splash: { damage: 10, radius: 120 }, homing: { turnRate: 0.8 },
   },
-  // 아킴보 석궁(에스가라 케스가라의 분신 전용): 작은 석궁 두 개. 연사는 조금 느리지만 탄속이 빠르고 화살 2개가 나란히 날아간다.
+  // 아킴보 석궁: 권총 손잡이가 달린 작은 석궁 두 자루. 연사는 조금 느리지만 탄속이 빠르고 화살 2개가 나란히 날아간다.
   crossbow: { id: 'crossbow', name: '아킴보 석궁', interval: 0.7, damage: 12, speed: 1500, burst: 1, arrows: 2, arrowGap: 26 },
   sniper: {
     id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release',
@@ -81,14 +81,14 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
  * 준비 화면에서 고르는 주무기·보조무기. 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,
  * 수류탄은 아이템 버튼으로 바로 던진다.
  */
-export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper'];
+export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow'];
 export const SECONDARY_IDS = ['smg', 'dagger', 'shotgun'];
 export const DEFAULT_SECONDARY = 'smg';
 export const SLOT_ORDER = ['primary', 'secondary'];
 export const SLOT_NAME = { primary: '주무기', secondary: '보조무기' };
 
 /**
- * weapon이 있는 캐릭터는 주무기가 그 무기로 고정되고 보조무기·수류탄을 쓸 수 없다(R-10, 에스가라 케스가라의 분신).
+ * weapon이 있는 캐릭터는 주무기가 그 무기로 고정되고 보조무기·수류탄을 쓸 수 없다(R-10, 제작자).
  * drone: 떠 있는 드론(둥실 뜨는 모습). hidden: 선택 화면에 보이지 않는 숨겨진 캐릭터로,
  * unlockFrom 캐릭터 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 그 자리에 나타난다.
  * bonusDamage: 상대 플레이어에게 피해를 줄 때마다 더하는 추가 피해.
@@ -116,11 +116,6 @@ export const CHARACTERS = [
   {
     id: 'creator', name: '제작자', hidden: true, unlockFrom: 'earth-arrow', unlockTaps: 3, weapon: 'instakill',
     maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED,
-  },
-  // 숨겨진 캐릭터: R-10 버튼을 빠르게 3번 누르면 R-10 대신 나타난다. 아킴보 석궁 전용.
-  {
-    id: 'esgara-clone', name: '에스가라 케스가라의 분신', hidden: true, unlockFrom: 'r10', weapon: 'crossbow',
-    maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.05,
   },
 ];
 

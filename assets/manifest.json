@@ -212,24 +212,6 @@
       "bytes": 739
     },
     {
-      "id": "esgara-clone",
-      "name": "에스가라 케스가라의 분신",
-      "path": "characters/esgara-clone.png",
-      "width": 768,
-      "height": 768,
-      "bytes": 459207,
-      "format": "png",
-      "source": "사용자 제공 일러스트(사용 허락 확인)에서 배경을 지우고 정사각형으로 맞춤",
-      "kind": "static-character",
-      "bodyAnchor": [
-        0.5,
-        0.66
-      ],
-      "anchorStatus": "이름표와 겹치지 않도록 허리 조금 아래",
-      "frames": 1,
-      "hasAlphaChannel": true
-    },
-    {
       "id": "arc-trooper",
       "name": "아크 트루퍼",
       "path": "characters/arc-trooper.png",
@@ -264,6 +246,17 @@
       ],
       "anchorStatus": "온이름과 같음",
       "frames": 1
+    },
+    {
+      "id": "akimbo-crossbow",
+      "name": "아킴보 석궁",
+      "path": "ui/akimbo-crossbow.svg",
+      "width": 200,
+      "height": 150,
+      "bytes": 2080,
+      "format": "svg",
+      "source": "hand-written SVG(받은 권총형 석궁 그림을 보고 새로 그림)",
+      "kind": "ui"
     }
   ]
 }

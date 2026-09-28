@@ -50,7 +50,7 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
   chars.setAttribute('aria-label', `${s.id} 캐릭터`);
   for (const c of CHARACTERS.filter((ch) => !ch.hidden)) {
     // 숨겨진 캐릭터: 이 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 버튼이 그 숨겨진 캐릭터로 바뀐다.
-    // 온이름은 2번 아크 트루퍼, 3번 제작자 / R-10은 3번 에스가라 케스가라의 분신.
+    // 온이름은 2번 아크 트루퍼, 3번 제작자.
     // 숨겨진 캐릭터가 된 버튼을 (연타가 아니게) 한 번 누르면 원래 캐릭터로 돌아온다.
     const secrets = CHARACTERS.filter((h) => h.hidden && h.unlockFrom === c.id);
     let shown = secrets.find((h) => h.id === pick.characterId) ?? c;
@@ -252,7 +252,7 @@ export function createScreens(handlers) {
       compare.setAttribute('aria-label', `준 피해 비교: ${players.map((p, i) => `${p.id} ${dealt[i]}`).join(', ')}`);
 
       // 무기별 표: 쏜 무기만, 주무기 → 보조무기 → 아이템 순
-      const order = [...PRIMARY_IDS, 'crossbow', 'laser', 'instakill', ...SECONDARY_IDS, 'grenade'];
+      const order = [...PRIMARY_IDS, 'laser', 'instakill', ...SECONDARY_IDS, 'grenade'];
       const rows = [];
       for (const p of players) {
         const used = order.filter((id) => stats[p.id].weapons[id]);

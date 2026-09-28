@@ -166,6 +166,16 @@ export function createRenderer(canvas, wrap, assets) {
     if (p.jetpack) drawJetFlame(p, anchor, size, facing, bounce, moving, time, reducedMotion);
 
     if (p.weapon === 'instakill') drawMegaCannon(p, time, reducedMotion);
+    // 아킴보 석궁: 권총형 석궁 두 자루를 조준 방향으로 겨눈 모습으로 덧그린다
+    if (p.weapon === 'crossbow') {
+      const { img: bow } = assets['akimbo-crossbow'];
+      ctx.save();
+      ctx.translate(p.x + Math.cos(p.aim) * 30, p.y - 4 + Math.sin(p.aim) * 30);
+      ctx.rotate(p.aim);
+      if (Math.cos(p.aim) < 0) ctx.scale(1, -1); // 왼쪽을 겨눠도 뒤집혀 보이지 않게
+      ctx.drawImage(bow, -30, -30, 80, 60);
+      ctx.restore();
+    }
 
     // 현재 조준 방향 눈금(항상) + 발사 준비 중에만 조준선
     const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
@@ -354,7 +364,7 @@ export function createRenderer(canvas, wrap, assets) {
     members.forEach((p, i) => {
       const my = y + 40 + i * 30;
       ctx.fillStyle = p.alive ? INK : '#9A9EA5';
-      // 이름이 긴 캐릭터(에스가라 케스가라의 분신)는 판 안에 들어가도록 글자를 줄인다
+      // 이름·무기 이름이 길면 판 안에 들어가도록 글자를 줄인다
       const text = `${p.id} ${p.name} · ${WEAPONS[p.weapon].name}`;
       let size = 13;
       ctx.font = `bold ${size}px system-ui, sans-serif`;

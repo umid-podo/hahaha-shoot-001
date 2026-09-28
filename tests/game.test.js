@@ -907,8 +907,9 @@ test('샷건: 조준 후 떼면 부채꼴로 5발, 1발 40, 10초 쿨타임, 명
   assert.equal(c.match.stats.P1.weapons.shotgun.hits, 1);
 });
 
-test('아킴보 석궁(숨겨진 캐릭터 전용): 0.7초마다 화살 2개가 나란히, 탄속 1500, 한 발 12', () => {
-  const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'esgara-clone' } });
+test('아킴보 석궁(모든 캐릭터 주무기): 0.7초마다 화살 2개가 나란히, 탄속 1500, 한 발 12', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'crossbow' } });
+  assert.equal(P1.weapon, 'crossbow');
   P1.x = P1.previousX = 300; P2.x = P2.previousX = 300; P2.radius = 60;
   inputs.P1.aim = UP;
   inputs.P1.aiming = true;
@@ -924,25 +925,13 @@ test('아킴보 석궁(숨겨진 캐릭터 전용): 0.7초마다 화살 2개가 
   assert.equal(P2.hp, MAX_HP - 12 * 6, '세 번 쏴서 6발 적중');
 });
 
-test('숨겨진 캐릭터 에스가라 케스가라의 분신: 아킴보 석궁 고정, 보조무기·수류탄 없음, 다른 캐릭터는 석궁을 못 고름', () => {
-  const { match, inputs, P1 } = playing({ P1: { characterId: 'esgara-clone', weapon: 'rpg', secondary: 'shotgun' } });
-  assert.equal(P1.name, '에스가라 케스가라의 분신');
-  assert.equal(P1.weapon, 'crossbow', '고른 무기와 상관없이 석궁');
-  assert.equal(P1.primaryOnly, true);
-  assert.equal(P1.drone, false, '드론처럼 떠 있지는 않음');
-  inputs.P1.select = 'secondary';
-  inputs.P1.swap = true;
-  inputs.P1.item = true;
-  const events = step(match, inputs);
-  assert.ok(!events.some((e) => e.type === 'swap'), '무기 전환 불가');
-  assert.ok(!events.some((e) => e.type === 'fire' && e.weapon === 'grenade'), '수류탄 불가');
-  assert.equal(P1.weapon, 'crossbow');
-
-  assert.equal(createMatch({ P1: { weapon: 'crossbow' } }).players[0].weapon, 'dual', '일반 캐릭터는 석궁 불가(자리 기본값)');
-  assert.ok(!PRIMARY_IDS.includes('crossbow'));
-  const hidden = CHARACTERS.find((c) => c.id === 'esgara-clone');
-  assert.equal(hidden.hidden, true);
-  assert.equal(hidden.unlockFrom, 'r10');
+test('아킴보 석궁은 모든 일반 캐릭터가 주무기로 고를 수 있다', () => {
+  assert.ok(PRIMARY_IDS.includes('crossbow'));
+  for (const c of CHARACTERS.filter((ch) => !ch.weapon)) {
+    const { P1 } = playing({ P1: { characterId: c.id, weapon: 'crossbow' } });
+    assert.equal(P1.weapon, 'crossbow', c.name);
+  }
+  assert.ok(!CHARACTERS.some((c) => c.id === 'esgara-clone'), '에스가라 케스가라의 분신은 삭제');
 });
 
 test('단검 돌진 중(가고 돌아오는 동안)에는 무적: 탄·폭발이 통과하고 피해 없음', () => {

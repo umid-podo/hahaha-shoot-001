@@ -22,9 +22,19 @@ export function weaponInfo(w) {
   return `${w.interval}초마다 ${shots}${arrows}· 한 발 ${w.damage}${splash}`;
 }
 
-/** 무기 선택 버튼 안의 내용: 이름, 설명 */
+/** 그림이 있는 무기 */
+const WEAPON_ICON = { crossbow: 'assets/ui/akimbo-crossbow.svg' };
+
+/** 무기 선택 버튼 안의 내용: [그림], 이름, 설명 */
 export function weaponLabel(w) {
   const nodes = [];
+  if (WEAPON_ICON[w.id]) {
+    const img = document.createElement('img');
+    img.className = 'weapon-icon';
+    img.src = WEAPON_ICON[w.id];
+    img.alt = '';
+    nodes.push(img);
+  }
   const name = document.createElement('span');
   name.textContent = w.name;
   const info = document.createElement('small');
