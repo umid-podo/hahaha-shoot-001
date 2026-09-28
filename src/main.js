@@ -46,7 +46,7 @@ function singleLoadout() {
     P1: loadout.P1,
     P2: {
       characterId: AI_CHARACTERS[Math.floor(Math.random() * AI_CHARACTERS.length)],
-      weapon: single.aiWeapon, secondary: single.aiSecondary, ai: true, maxHp: single.aiHp, bulletSpeedScale: single.aiBulletSpeed / 100, damage,
+      weapon: single.aiWeapon, secondary: single.aiSecondary, ai: true, radius: single.aiRadius, maxHp: single.aiHp, bulletSpeedScale: single.aiBulletSpeed / 100, damage,
     },
   };
 }

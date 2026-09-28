@@ -83,7 +83,9 @@ const SHOT = {
   sniper: { filter: 2400, q: 1.2, decay: 0.35, thump: 230, volume: 1.4 },
   smg: { filter: 2000, decay: 0.06, thump: 170, volume: 0.6 },
   grenade: { filter: 350, q: 0.4, decay: 0.15, thump: 80, volume: 0.5 }, // 던지는 휙 소리
-  dagger: { filter: 3000, q: 0.6, decay: 0.08, thump: 0, volume: 0.35 }, // 짧고 날카로운 휙
+  dagger: { filter: 3000, q: 0.6, decay: 0.12, thump: 0, volume: 0.45 }, // 돌진하며 휙
+  shotgun: { filter: 700, q: 0.5, decay: 0.3, thump: 70, volume: 1.4 }, // 묵직한 쾅
+  crossbow: { filter: 2600, q: 1.2, decay: 0.07, thump: 0, volume: 0.45 }, // 시위 튕기는 탁
   jet: { filter: 700, q: 0.5, decay: 0.35, thump: 110, volume: 1.1 },
 };
 

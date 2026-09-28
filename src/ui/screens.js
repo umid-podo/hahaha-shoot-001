@@ -4,7 +4,7 @@ import {
 import { KEY_LABELS } from '../input/keyboard.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
-import { weaponInfo, choiceButton } from './widgets.js';
+import { weaponInfo, weaponLabel, choiceButton } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
 // 2인 조작 패널 한 개(이동키 + 버튼 + 발사키)가 들어가려면 필요한 대략의 화면 폭
@@ -65,11 +65,7 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', `${s.id} ${label}`);
     for (const id of ids) {
-      const name = document.createElement('span');
-      name.textContent = WEAPONS[id].name;
-      const info = document.createElement('small');
-      info.textContent = weaponInfo(WEAPONS[id]);
-      row.append(choiceButton([name, info], current === id, () => onPick(s.id, key, id)));
+      row.append(choiceButton(weaponLabel(WEAPONS[id]), current === id, () => onPick(s.id, key, id)));
     }
     const heading = document.createElement('div');
     heading.className = 'field-label';

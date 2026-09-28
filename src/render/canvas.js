@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS, COVER, RULES,
+  MAX_HP, WEAPONS, COVER,
 } from '../game/config.js';
 
 const INK = '#30353E';
@@ -108,6 +108,20 @@ export function createRenderer(canvas, wrap, assets) {
       return;
     }
 
+    // 단검 돌진: 지나온 길에 팀 색 잔상
+    if (p.dash && !reducedMotion) {
+      const len = Math.hypot(p.dash.vx, p.dash.vy);
+      const ux = (p.dash.returning ? -p.dash.vx : p.dash.vx) / len, uy = (p.dash.returning ? -p.dash.vy : p.dash.vy) / len;
+      for (let i = 3; i >= 1; i--) {
+        ctx.globalAlpha = 0.12 * (4 - i);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(p.x - ux * i * 26, p.y - uy * i * 26, p.radius * (1 - i * 0.12), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // 판정 위치를 알려주는 몸 중심 팀 링. 피격 직후에는 빨갛게 번쩍인다.
     ctx.lineWidth = hurt ? 5 : 3;
     ctx.strokeStyle = hurt ? '#D9443A' : color;
@@ -131,11 +145,23 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
     ctx.restore();
 
+    // 아킴보 석궁을 들면 작은 석궁 두 개를 조준 방향으로 겨눈 모습으로 덧그린다.
+    if (p.weapon === 'crossbow') {
+      const { img: bow } = assets['akimbo-crossbow'];
+      ctx.save();
+      ctx.translate(p.x + Math.cos(p.aim) * 36, p.y + Math.sin(p.aim) * 36);
+      ctx.rotate(p.aim);
+      if (Math.cos(p.aim) < 0) ctx.scale(1, -1); // 왼쪽을 겨눠도 뒤집혀 보이지 않게
+      ctx.drawImage(bow, -22, -28, 70, 56);
+      ctx.restore();
+    }
+
     // 현재 조준 방향 눈금(항상) + 발사 준비 중에만 조준선
     const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
     // 떼면 쏘는 무기(RPG·저격총)의 쿨타임, 방전, 과열 동안은 눈금을 회색으로 표시
     const weapon = WEAPONS[p.weapon];
     const reloading = (weapon.trigger === 'release' && p.cooldown > 0) ||
+      (weapon.ownCooldown && (p.cooldowns[weapon.id] ?? 0) > 0) ||
       (weapon.battery && p.battery <= 0) || (weapon.heat && p.overheat > 0);
     ctx.fillStyle = reloading ? '#9A9EA5' : color;
     ctx.beginPath();
@@ -175,9 +201,17 @@ export function createRenderer(canvas, wrap, assets) {
     drawHpBar(ctx, p.x - HP_BAR.w / 2, p.y + 76, HP_BAR.w, HP_BAR.h, p.hp, p.maxHp);
     const gaugeY = p.y + 76 + HP_BAR.h + 3;
     const drawn = drawGauge(p, p.x - HP_BAR.w / 2, gaugeY, HP_BAR.w);
+    let row = drawn ? 1 : 0;
+    // 단검·샷건 쿨타임: 보라 막대(무기를 바꿔 들고 있어도 표시)
+    const secondary = WEAPONS[p.secondary];
+    const secondaryLeft = p.cooldowns[p.secondary] ?? 0;
+    if (!p.drone && secondary?.ownCooldown && secondaryLeft > 0) {
+      bar(p.x - HP_BAR.w / 2, gaugeY + row * (GAUGE_H + 2), HP_BAR.w, 1 - secondaryLeft / secondary.interval, '#8E6BD6');
+      row++;
+    }
     // 수류탄(아이템) 쿨타임: 던진 뒤 다시 쓸 수 있을 때까지 회색 막대
     if (!p.drone && p.grenadeCooldown > 0) {
-      bar(p.x - HP_BAR.w / 2, gaugeY + (drawn ? GAUGE_H + 2 : 0), HP_BAR.w,
+      bar(p.x - HP_BAR.w / 2, gaugeY + row * (GAUGE_H + 2), HP_BAR.w,
         1 - p.grenadeCooldown / WEAPONS.grenade.interval, '#9A9EA5');
     }
   }
@@ -444,25 +478,29 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.fillRect(b.x - r * 0.3, b.y - r - 5, r * 0.6, 6);
           continue;
         }
-        if (b.weapon === 'dagger') {
-          // 단검: 은색 날 + 갈색 손잡이, 날아가며 빙글빙글 돈다(동작 줄이기면 진행 방향 고정)
+        if (b.weapon === 'crossbow') {
+          // 석궁 화살: 가는 나무 살 + 은색 촉 + 깃
           ctx.save();
           ctx.translate(b.x, b.y);
-          ctx.rotate(reducedMotion ? Math.atan2(b.vy, b.vx) : (RULES.bulletLife - b.life) * 25);
-          ctx.fillStyle = '#DDE3EA';
+          ctx.rotate(Math.atan2(b.vy, b.vx));
+          ctx.strokeStyle = '#8A5A2B';
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(12, 0); ctx.stroke();
+          ctx.fillStyle = '#C9CDD2';
+          ctx.strokeStyle = INK;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(10, -5); ctx.lineTo(10, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#D9443A';
+          ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(-26, -6); ctx.lineTo(-14, 0); ctx.lineTo(-26, 6); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          continue;
+        }
+        if (b.weapon === 'shotgun') {
+          // 샷건 산탄: 작고 둥근 알갱이
+          ctx.fillStyle = '#FFD45E';
           ctx.strokeStyle = INK;
           ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(18, 0); ctx.lineTo(2, -5); ctx.lineTo(2, 5);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = '#8A5A2B';
-          ctx.fillRect(-14, -3, 14, 6);
-          ctx.strokeRect(-14, -3, 14, 6);
-          ctx.fillStyle = INK;
-          ctx.fillRect(-1, -8, 4, 16);
-          ctx.restore();
+          ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
           continue;
         }
         const rocket = b.weapon === 'rpg';

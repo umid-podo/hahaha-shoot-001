@@ -46,7 +46,7 @@ function createStats(players) {
 /**
  * @param {Record<string, {characterId: string, weapon: string}>} [loadout]
  * secondary는 보조무기(SECONDARY_IDS, 없으면 기관단총). 자리별 선택에 싱글플레이 AI 설정을 더할 수 있다: ai(true면 AI가 조작), maxHp(체력),
- * bulletSpeedScale(탄속 배율), damage({ primary, secondary, grenade } 칸별 피해).
+ * radius(히트박스 반지름), bulletSpeedScale(탄속 배율), damage({ primary, secondary, grenade } 칸별 피해).
  */
 export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
   const players = SLOTS.map((slot) => {
@@ -62,13 +62,14 @@ export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
       id: slot.id, team: slot.team, characterId, name: pick.ai ? `${character.name} (AI)` : character.name,
       ai: !!pick.ai, bulletSpeedScale: pick.bulletSpeedScale > 0 ? pick.bulletSpeedScale : 1, damage: pick.damage ?? null,
       drone: !!character.drone, scale: character.scale ?? 1,
-      radius: character.radius ?? BODY_RADIUS, speed: character.speed ?? MAX_SPEED,
+      // radius: 싱글플레이에서 AI 히트박스 반지름을 따로 정할 수 있다
+      radius: pick.radius > 0 ? pick.radius : character.radius ?? BODY_RADIUS, speed: character.speed ?? MAX_SPEED,
       primary: weapon, secondary, slot: 'primary', weapon,
       battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
       x, previousX: x, y: RAIL_Y[slot.team],
       aim: initialAim(slot.team),
       hp: maxHp, maxHp, alive: true, hurt: 0,
-      cooldown: 0, burstLeft: 0, burstTimer: 0, wasAiming: false,
+      cooldown: 0, cooldowns: {}, dash: null, burstLeft: 0, burstTimer: 0, wasAiming: false,
     };
   });
   const rng = createRng(seed);

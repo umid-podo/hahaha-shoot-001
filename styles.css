@@ -263,7 +263,9 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 .weapon-btn span, .item-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weapon-btn[aria-pressed="true"] { background: var(--team); color: #fff; }
 .item-btn { border-style: dashed; background: #fffbea; }
-.item-btn.cooling { color: var(--muted); border-color: var(--line); background: #f2f2f2; }
+.item-btn.cooling, .weapon-btn.cooling { color: var(--muted); border-color: var(--line); background: #f2f2f2; }
+.weapon-btn[aria-pressed="true"].cooling { background: #d8d8d8; color: var(--ink); }
+button.choice img.weapon-icon { width: 44px; height: 36px; object-fit: contain; }
 /* 가운데 칸이 좁으면(작은 화면) 버튼을 세로 한 줄로 쌓는다. */
 @container (max-width: 230px) {
   .panel-head { font-size: 12px; }

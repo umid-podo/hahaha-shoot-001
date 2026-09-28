@@ -1,7 +1,7 @@
 import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
-import { weaponInfo, choiceButton } from './widgets.js';
+import { weaponLabel, choiceButton } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -27,7 +27,7 @@ const DIFFICULTY_HINT = {
 export function createSingleSetup(onChange) {
   let single = null;
   const number = {
-    hp: $('#ai-hp'), speed: $('#ai-speed'),
+    hp: $('#ai-hp'), speed: $('#ai-speed'), radius: $('#ai-radius'),
     primary: $('#ai-dmg-primary'), secondary: $('#ai-dmg-secondary'), grenade: $('#ai-dmg-grenade'),
   };
 
@@ -37,6 +37,8 @@ export function createSingleSetup(onChange) {
     const defaults = defaultDamage(single);
     number.hp.value = String(single.aiHp);
     number.speed.value = String(single.aiBulletSpeed);
+    number.radius.value = String(single.aiRadius);
+    number.radius.closest('.param').classList.toggle('changed', single.aiRadius !== defaultSingle().aiRadius);
     for (const slot of ['primary', 'secondary', 'grenade']) {
       number[slot].value = String(single.aiDamage[slot] ?? defaults[slot]);
       number[slot].closest('.param').classList.toggle('changed', single.aiDamage[slot] !== null);
@@ -44,7 +46,7 @@ export function createSingleSetup(onChange) {
     number.hp.closest('.param').classList.toggle('changed', single.aiHp !== defaultSingle().aiHp);
     number.speed.closest('.param').classList.toggle('changed', single.aiBulletSpeed !== 100);
     $('#ai-defaults').textContent = `기본 피해: ${WEAPONS[single.aiWeapon].name} ${defaults.primary}` +
-      ` · ${WEAPONS[single.aiSecondary].name} ${defaults.secondary} · 수류탄 ${defaults.grenade}. 탄속 100%는 무기 기본 탄속입니다.`;
+      ` · ${WEAPONS[single.aiSecondary].name} ${defaults.secondary} · 수류탄 ${defaults.grenade}. 탄속 100%는 무기 기본 탄속, 히트박스 기본 반지름은 30(사람 캐릭터)입니다.`;
   }
 
   function buildChoices() {
@@ -56,11 +58,7 @@ export function createSingleSetup(onChange) {
       return choiceButton([name, info], single.difficulty === id, () => { single.difficulty = id; changed(); });
     }));
     $('#ai-weapon').replaceChildren(...PRIMARY_IDS.map((id) => {
-      const name = document.createElement('span');
-      name.textContent = WEAPONS[id].name;
-      const info = document.createElement('small');
-      info.textContent = weaponInfo(WEAPONS[id]);
-      return choiceButton([name, info], single.aiWeapon === id, () => {
+      return choiceButton(weaponLabel(WEAPONS[id]), single.aiWeapon === id, () => {
         single.aiWeapon = id;
         single.aiDamage.primary = null; // 무기를 바꾸면 주무기 피해는 새 무기 기본값부터
         changed();
@@ -70,11 +68,7 @@ export function createSingleSetup(onChange) {
 
   function syncSecondary() {
     $('#ai-secondary').replaceChildren(...SECONDARY_IDS.map((id) => {
-      const name = document.createElement('span');
-      name.textContent = WEAPONS[id].name;
-      const info = document.createElement('small');
-      info.textContent = weaponInfo(WEAPONS[id]);
-      return choiceButton([name, info], single.aiSecondary === id, () => {
+      return choiceButton(weaponLabel(WEAPONS[id]), single.aiSecondary === id, () => {
         single.aiSecondary = id;
         single.aiDamage.secondary = null; // 보조무기를 바꾸면 피해도 새 무기 기본값부터
         changed();
@@ -95,6 +89,11 @@ export function createSingleSetup(onChange) {
   number.speed.addEventListener('change', () => {
     const v = Number(number.speed.value);
     single.aiBulletSpeed = Number.isFinite(v) && number.speed.value !== '' ? clamp(number.speed, v) : 100;
+    changed();
+  });
+  number.radius.addEventListener('change', () => {
+    const v = Number(number.radius.value);
+    single.aiRadius = Number.isFinite(v) && number.radius.value !== '' ? clamp(number.radius, v) : defaultSingle().aiRadius;
     changed();
   });
   for (const slot of ['primary', 'secondary', 'grenade']) {

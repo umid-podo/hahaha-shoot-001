@@ -39,11 +39,11 @@ const SINGLE_KEY = 'haha2.single.v1';
 
 /**
  * 싱글플레이 설정. aiDamage의 null은 '무기 기본 피해'를 뜻한다.
- * aiBulletSpeed는 탄속 배율(%)이다.
+ * aiBulletSpeed는 탄속 배율(%), aiRadius는 AI 히트박스(몸 판정) 반지름이다.
  */
 export function defaultSingle() {
   return {
-    aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100,
+    aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100, aiRadius: 30,
     aiDamage: { primary: null, secondary: null, grenade: null },
   };
 }

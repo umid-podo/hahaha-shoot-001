@@ -34,21 +34,25 @@ export function weaponDamage(player, weaponId) {
   return { damage: override, splash };
 }
 
-export function spawnProjectile(match, player, aim, weaponId = player.weapon) {
+/**
+ * 탄 한 발을 만든다. offset은 조준 방향에 수직으로 비켜 놓는 거리(나란히 쏘는 화살),
+ * group은 한 번에 함께 나간 탄들의 공용 기록(명중 수를 방아쇠 한 번당 한 번만 세려고)이다.
+ */
+export function spawnProjectile(match, player, aim, weaponId = player.weapon, { offset = 0, group = null } = {}) {
   const weapon = WEAPONS[weaponId];
   const { damage, splash } = weaponDamage(player, weaponId);
   // bulletSpeedScale: 싱글플레이 AI 탄속 배율(기본 1)
   const speed = weapon.speed * (player.bulletSpeedScale ?? 1);
-  const x = player.x + Math.cos(aim) * MUZZLE_OFFSET;
-  const y = player.y + Math.sin(aim) * MUZZLE_OFFSET;
+  const x = player.x + Math.cos(aim) * MUZZLE_OFFSET - Math.sin(aim) * offset;
+  const y = player.y + Math.sin(aim) * MUZZLE_OFFSET + Math.cos(aim) * offset;
   const projectile = {
     id: match.nextProjectileId++, ownerId: player.id, team: player.team, weapon: weapon.id,
     x, y, previousX: x, previousY: y,
     vx: Math.cos(aim) * speed, vy: Math.sin(aim) * speed,
     life: RULES.bulletLife, damage,
     splash, homing: weapon.homing, endY: ENEMY_RAIL[player.team],
-    // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용)
-    connected: false,
+    // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용). group이 있으면 그쪽에 기록한다.
+    connected: false, group,
     // 던진 무기는 아무것에도 닿지 않고 목표 레일 선에서 터진다. startY는 포물선 표시용.
     thrown: !!weapon.thrown, overCovers: !!weapon.thrown, startY: y,
   };
@@ -182,11 +186,13 @@ function damage(match, victim, amount, shot, events) {
   victim.hurt = HURT_TIME;
   events.push({ type: 'hit', x: victim.x, y: victim.y, team: shot.team, damage: amount, victimId: victim.id });
   const ws = weaponStats(match, shot.ownerId, shot.weapon);
+  // 샷건·석궁처럼 여러 발이 함께 나가면 한 번이라도 맞은 방아쇠 한 번을 명중 1로 센다.
+  const tracker = shot.group ?? shot;
   if (ws) {
     ws.damage += dealt;
-    if (!shot.connected) ws.hits++;
+    if (!tracker.connected) ws.hits++;
   }
-  shot.connected = true;
+  tracker.connected = true;
   const taken = match.stats?.[victim.id];
   if (taken) {
     taken.taken += dealt;
@@ -278,21 +284,100 @@ function fire(match, p, events) {
     }
   }
   if (weapon.beam) { fireLaser(match, p, weapon, events); return; }
-  spawnProjectile(match, p, p.aim);
+  if (weapon.dash) { startDash(p, weapon, events); return; }
+  const group = { connected: false };
+  if (weapon.pellets) {
+    // 샷건: spread도 부채꼴 안에 pellets발을 고르게
+    const n = Math.max(1, Math.round(weapon.pellets));
+    const spread = (weapon.spread * Math.PI) / 180;
+    for (let i = 0; i < n; i++) {
+      const angle = n === 1 ? p.aim : p.aim - spread / 2 + (spread * i) / (n - 1);
+      spawnProjectile(match, p, angle, weapon.id, { group });
+    }
+  } else if (weapon.arrows) {
+    // 아킴보 석궁: 같은 방향으로 나란히
+    const n = Math.max(1, Math.round(weapon.arrows));
+    for (let i = 0; i < n; i++) {
+      spawnProjectile(match, p, p.aim, weapon.id, { offset: (i - (n - 1) / 2) * weapon.arrowGap, group });
+    }
+  } else {
+    spawnProjectile(match, p, p.aim);
+  }
   events.push({ type: 'fire', playerId: p.id, weapon: p.weapon });
 }
 
-/** 탄약 외 제약(배터리·과열) 때문에 지금 쏠 수 없는지. */
+/** 단검 돌진 시작: 조준 방향으로 날아가 상대에 닿거나, 엄폐물·상대 레일·경기장 끝에 닿으면 자기 자리로 돌아온다. */
+function startDash(p, weapon, events) {
+  const speed = weapon.dash.speed;
+  p.burstLeft = 0;
+  p.dash = {
+    vx: Math.cos(p.aim) * speed, vy: Math.sin(p.aim) * speed, speed, age: 0,
+    homeX: p.x, returning: false,
+    damage: weaponDamage(p, weapon.id).damage,
+    shot: { team: p.team, ownerId: p.id, weapon: weapon.id, connected: false },
+  };
+  events.push({ type: 'fire', playerId: p.id, weapon: weapon.id });
+  events.push({ type: 'dash', playerId: p.id });
+}
+
+/** 돌진 한 틱: 가는 중에는 가장 먼저 닿는 상대(피해)·엄폐물(막힘)을 찾고, 돌아올 때는 레일의 원래 자리로 곧장 간다. */
+function updateDash(match, p, dt, events) {
+  const d = p.dash;
+  d.age += dt;
+  if (d.returning) {
+    const hx = d.homeX, hy = RAIL_Y[p.team];
+    const dist = Math.hypot(hx - p.x, hy - p.y);
+    const move = d.speed * dt;
+    if (dist <= move) {
+      p.x = hx; p.y = hy; p.dash = null;
+    } else {
+      p.x += ((hx - p.x) / dist) * move;
+      p.y += ((hy - p.y) / dist) * move;
+    }
+    return;
+  }
+  const x0 = p.x, y0 = p.y, x1 = x0 + d.vx * dt, y1 = y0 + d.vy * dt;
+  let best = null;
+  for (const q of match.players) {
+    if (!q.alive || q.team === p.team) continue;
+    const t = segmentCircleTime(x0 - q.x, y0 - q.y, x1 - q.x, y1 - q.y, p.radius + q.radius);
+    if (t !== null && (!best || t < best.t)) best = { t, victim: q };
+  }
+  for (const c of match.covers) {
+    if (c.hp <= 0) continue;
+    const t = segmentRectTime(x0 - c.x, y0 - c.y, x1 - c.x, y1 - c.y, c.w / 2 + p.radius / 2, c.h / 2 + p.radius / 2);
+    // 출발 때 이미 겹쳐 있던 엄폐물(t=0)은 무시하고 지나간다
+    if (t !== null && t > 0 && (!best || t < best.t)) best = { t, cover: c };
+  }
+  const t = best ? best.t : 1;
+  p.x = Math.min(MAX_X, Math.max(MIN_X, x0 + (x1 - x0) * t));
+  p.y = y0 + (y1 - y0) * t;
+  if (best?.victim) {
+    damage(match, best.victim, d.damage, d.shot, events);
+    d.returning = true;
+  } else if (best?.cover) {
+    events.push({ type: 'block', x: p.x, y: p.y });
+    d.returning = true;
+  }
+  // 상대 레일을 넘거나 경기장 끝·옆 벽에 닿으면 돌아온다
+  const enemyY = ENEMY_RAIL[p.team];
+  const pastRail = (p.y - enemyY) * Math.sign(d.vy) >= 0;
+  if (pastRail || p.x <= MIN_X || p.x >= MAX_X || p.y < 0 || p.y > ARENA_HEIGHT) d.returning = true;
+}
+
+/** 탄약 외 제약(배터리·과열·무기별 쿨타임) 때문에 지금 쏠 수 없는지. */
 function blocked(p, weapon) {
   if (weapon.battery) return p.battery <= 0;
   if (weapon.heat) return p.overheat > 0;
+  if (weapon.ownCooldown) return (p.cooldowns[weapon.id] ?? 0) > 0;
   return false;
 }
 
-/** 배터리 충전, 기관단총 냉각, 수류탄 쿨타임. 무기를 들고 있지 않아도 시간은 흐른다. */
+/** 배터리 충전, 기관단총 냉각, 수류탄·무기별 쿨타임. 무기를 들고 있지 않아도 시간은 흐른다. */
 function updateResources(p, firing, dt) {
   p.sinceShot += dt;
   p.grenadeCooldown = Math.max(0, p.grenadeCooldown - dt);
+  for (const id of Object.keys(p.cooldowns)) p.cooldowns[id] = Math.max(0, p.cooldowns[id] - dt);
   const battery = WEAPONS[p.primary].battery;
   if (battery && p.sinceShot >= battery.recharge) p.battery = battery.shots;
   const { heat } = WEAPONS.smg;
@@ -339,10 +424,15 @@ export function step(match, inputs, dt = TICK) {
     const weapon = WEAPONS[p.weapon];
     p.cooldown = Math.max(0, p.cooldown - dt);
     updateResources(p, weapon.heat && input.aiming, dt);
-    // 단검처럼 moveBoost가 있는 무기를 들면 더 빨리 움직인다.
-    const speed = p.speed * (weapon.moveBoost ?? 1);
-    p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * speed * dt));
     p.aim = input.aim;
+    // 단검 돌진 중에는 이동·사격·아이템 입력을 받지 않는다(조준 각도만 따라감).
+    if (p.dash) {
+      input.item = false;
+      updateDash(match, p, dt, events);
+      p.wasAiming = false;
+      continue;
+    }
+    p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * p.speed * dt));
     if (input.item) {
       input.item = false;
       if (!p.drone) throwGrenade(match, p, events);
@@ -358,7 +448,9 @@ export function step(match, inputs, dt = TICK) {
     } else if (p.cooldown <= EPS && !blocked(p, weapon) &&
       (weapon.trigger === 'release' ? p.wasAiming && !input.aiming : input.aiming)) {
       fire(match, p, events);
-      p.cooldown = weapon.interval;
+      // 단검·샷건은 그 무기 쿨타임만 돌고, 다른 무기는 바로 쓸 수 있다.
+      if (weapon.ownCooldown) p.cooldowns[weapon.id] = weapon.interval;
+      else p.cooldown = weapon.interval;
       p.burstLeft = weapon.burst - 1;
       p.burstTimer = weapon.burstGap ?? 0;
     }
@@ -411,6 +503,8 @@ export function step(match, inputs, dt = TICK) {
   for (const p of match.players) {
     if (p.alive && p.hp <= 0) {
       p.alive = false;
+      // 돌진 중에 쓰러지면 자기 레일에 쓰러진다
+      if (p.dash) { p.y = RAIL_Y[p.team]; p.dash = null; }
       if (match.stats?.[p.id]) match.stats[p.id].downAt = match.tick * TICK;
       events.push({ type: 'down', playerId: p.id, x: p.x, y: p.y });
     }
