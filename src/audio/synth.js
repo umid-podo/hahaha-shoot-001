@@ -125,6 +125,9 @@ export function playEvents(events) {
     if (e.type === 'cover-hit') tone(180, 0.04, 'triangle');
     if (e.type === 'cover-break') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 70, volume: 1.3 }); tone(120, 0.2, 'sawtooth', 0.04); }
     if (e.type === 'down') [660, 440, 220].forEach((f, i) => tone(f, 0.12, 'square', i * 0.1));
+    // 스토리 모드: 웨이브 클리어(올라가는 음), 새 웨이브(경고음)
+    if (e.type === 'wave-clear') [523, 784, 1047].forEach((f, i) => tone(f, 0.14, 'triangle', i * 0.1));
+    if (e.type === 'wave') [440, 330, 440, 330].forEach((f, i) => tone(f, 0.12, 'square', i * 0.14));
     if (e.type === 'result') [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', i * 0.13 + 0.3));
   }
 }

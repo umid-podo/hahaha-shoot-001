@@ -1,3 +1,5 @@
+import { defaultStory, normalizeStory } from '../game/story.js';
+
 const KEY = 'haha2.settings.v1';
 
 /** JSON 파싱 실패·저장 불가 시 기본값으로 실행한다. */
@@ -43,6 +45,8 @@ const SINGLE_KEY = 'haha2.single.v1';
  */
 export function defaultSingle() {
   return {
+    // mode: 'free'(자유 대전, AI 1명) 또는 'story'(스토리 모드, 웨이브)
+    mode: 'free',
     aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100, aiRadius: 30,
     aiDamage: { primary: null, secondary: null, grenade: null },
   };
@@ -60,4 +64,19 @@ export function loadSingle() {
 
 export function saveSingle(single) {
   try { localStorage.setItem(SINGLE_KEY, JSON.stringify(single)); } catch { /* 저장 불가 환경은 무시 */ }
+}
+
+const STORY_KEY = 'haha2.story.v1';
+
+/** 스토리 모드 웨이브별 요원 밸런스(defaultStory() 모양). */
+export function loadStory() {
+  try {
+    return normalizeStory(JSON.parse(localStorage.getItem(STORY_KEY)));
+  } catch {
+    return defaultStory();
+  }
+}
+
+export function saveStory(story) {
+  try { localStorage.setItem(STORY_KEY, JSON.stringify(story)); } catch { /* 저장 불가 환경은 무시 */ }
 }

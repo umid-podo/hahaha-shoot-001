@@ -2,6 +2,7 @@ import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
   MAX_HP, WEAPONS, COVER, TICK,
 } from '../game/config.js';
+import { WAVES } from '../game/story.js';
 
 const INK = '#30353E';
 const MAX_DPR = 2;
@@ -138,6 +139,15 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.globalAlpha = 1;
     }
 
+    // 보스(스토리 모드 스미스 요원): 몸 둘레에 맥동하는 붉은 기운
+    if (p.boss) {
+      const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(time * 5);
+      ctx.fillStyle = `rgba(217,68,58,${0.12 + 0.12 * pulse})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius + 26 + pulse * 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // 판정 위치를 알려주는 몸 중심 팀 링. 피격 직후에는 빨갛게 번쩍인다.
     ctx.lineWidth = hurt ? 5 : 3;
     ctx.strokeStyle = hurt ? '#D9443A' : color;
@@ -211,9 +221,9 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.font = 'bold 18px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const label = `${p.id} ${p.name}`;
+    const label = p.boss ? `BOSS ${p.name}` : `${p.id} ${p.name}`;
     const w = ctx.measureText(label).width + 16;
-    ctx.fillStyle = color;
+    ctx.fillStyle = p.boss ? '#B3261E' : color;
     ctx.beginPath();
     ctx.roundRect(p.x - w / 2, p.y + 47, w, 24, 12);
     ctx.fill();
@@ -493,6 +503,176 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.restore();
   }
 
+  /**
+   * 스토리 모드: 헬리콥터(건쉽)에서 줄을 타고 내려오는 요원. 하늘에서 내려오므로 작게 시작해 레일에 닿으면 제 크기.
+   * 아직 차례가 오지 않은 요원(t < 0)은 그리지 않는다.
+   */
+  function drawRappel(p, input, time, reducedMotion) {
+    const e = p.entering;
+    if (e.t < 0) return;
+    const k = Math.min(1, e.t / e.duration);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(p.x, e.fromY);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    const s = 0.55 + 0.45 * k;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.scale(s, s);
+    ctx.translate(-p.x, -p.y);
+    drawPlayer(p, input, time, reducedMotion);
+    ctx.restore();
+  }
+
+  /** 위에서 본 헬리콥터·건쉽. 기수는 dir 쪽(-1이면 왼쪽). 그림자 → 동체 → 회전 날개 순. */
+  function drawCarrier(c, time, reducedMotion) {
+    const gunship = c.kind === 'gunship';
+    const k = gunship ? 1.35 : 1;
+    const body = gunship ? '#4B5A44' : '#5E7FA3';
+    const dark = gunship ? '#323C2E' : '#3E5876';
+    const down = c.state === 'down';
+    const fade = down ? Math.max(0, 1 - c.fall / 1.4) : 1;
+    const rotor = reducedMotion ? 0.6 : time * (down ? 9 : 22);
+    ctx.save();
+    ctx.globalAlpha = fade;
+    // 그림자(하늘 높이 떠 있음)
+    ctx.fillStyle = 'rgba(48,53,62,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(c.x + 34, c.y + 64, 96 * k, 34 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.angle);
+    ctx.scale(k, k); // 기수는 왼쪽(-x)
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 4 / k;
+    ctx.lineJoin = 'round';
+    // 꼬리(오른쪽으로 길게) + 꼬리 날개
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.roundRect(30, -8, 112, 16, 6); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(128, -26, 14, 52, 5); ctx.fill(); ctx.stroke();
+    // 꼬리 회전 날개
+    ctx.save();
+    ctx.translate(135, 30);
+    ctx.rotate(rotor * 1.6);
+    ctx.lineWidth = 3 / k;
+    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(12, 0); ctx.stroke();
+    ctx.restore();
+    if (gunship) {
+      // 건쉽: 짧은 날개 + 로켓 포드 + 기수 기관포
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.roundRect(-12, -62, 26, 124, 6); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#2A2E35';
+      for (const y of [-58, 40]) { ctx.beginPath(); ctx.roundRect(-30, y, 46, 18, 8); ctx.fill(); ctx.stroke(); }
+      ctx.beginPath(); ctx.roundRect(-98, -5, 30, 10, 3); ctx.fill(); ctx.stroke();
+    }
+    // 동체
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.ellipse(-6, 0, 72, 36, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    // 조종석 유리(기수 쪽)
+    ctx.fillStyle = '#9FD3F2';
+    ctx.beginPath();
+    ctx.ellipse(-44, 0, 24, 22, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    // 문(요원이 내리는 곳)과 표식
+    ctx.fillStyle = dark;
+    ctx.fillRect(-4, -34, 34, 8);
+    ctx.fillRect(-4, 26, 34, 8);
+    ctx.fillStyle = '#D56A26';
+    ctx.font = `bold ${gunship ? 14 : 16}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ISB', 18, 1);
+    // 주 회전 날개: 흐릿한 원판 + 날개 2(건쉽 4)장
+    ctx.fillStyle = 'rgba(48,53,62,0.12)';
+    ctx.beginPath(); ctx.arc(0, 0, 112, 0, Math.PI * 2); ctx.fill();
+    ctx.save();
+    ctx.rotate(rotor);
+    ctx.fillStyle = '#30353E';
+    const blades = gunship ? 4 : 2;
+    for (let i = 0; i < blades; i++) {
+      ctx.rotate(Math.PI * 2 / blades);
+      ctx.fillRect(-4, -112, 8, 112);
+    }
+    ctx.restore();
+    ctx.fillStyle = '#C9CDD2';
+    ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    // 격추: 불길과 연기
+    if (down) {
+      ctx.save();
+      ctx.globalAlpha = fade;
+      for (let i = 0; i < 4; i++) {
+        const r = 26 + i * 10 + (reducedMotion ? 0 : Math.sin(time * 20 + i) * 4);
+        ctx.fillStyle = i % 2 ? 'rgba(255,157,63,0.7)' : 'rgba(80,80,80,0.45)';
+        ctx.beginPath(); ctx.arc(c.x - 20 + i * 18, c.y - 10 - i * 8, r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  /** 스토리 모드 하늘: 헬리콥터·건쉽, 헬리콥터를 격추하는 전투기와 미사일 */
+  function drawStoryCraft(story, time, reducedMotion) {
+    if (story.carrier) drawCarrier(story.carrier, time, reducedMotion);
+    if (story.missile) {
+      const m = story.missile;
+      ctx.fillStyle = '#FFB23F';
+      ctx.beginPath(); ctx.moveTo(m.x - 16, m.y - 5); ctx.lineTo(m.x - 34, m.y); ctx.lineTo(m.x - 16, m.y + 5); ctx.fill();
+      ctx.fillStyle = '#D9443A';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(m.x + 20, m.y); ctx.lineTo(m.x + 10, m.y - 7); ctx.lineTo(m.x - 16, m.y - 7); ctx.lineTo(m.x - 16, m.y + 7); ctx.lineTo(m.x + 10, m.y + 7);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    if (story.jet) drawJet(story.jet);
+  }
+
+  /** 스토리 모드 안내: 왼쪽 가운데 웨이브 표시 + 웨이브 시작·클리어 때 가운데 큰 글씨 */
+  function drawStoryHud(story) {
+    const wave = WAVES[story.wave];
+    const text = `${wave.title} (${story.wave + 1}/${WAVES.length})`;
+    ctx.font = 'bold 20px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(text).width + 24;
+    ctx.fillStyle = wave.boss ? '#B3261E' : TEAM_COLOR.isb;
+    ctx.beginPath();
+    ctx.roundRect(36, ARENA_HEIGHT / 2 - 18, w, 36, 18);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, 48, ARENA_HEIGHT / 2 + 1);
+
+    const b = story.banner;
+    if (!b) return;
+    // 들어올 때 커지고 나갈 때 흐려진다
+    const fadeIn = Math.min(1, b.t / 0.25), fadeOut = Math.min(1, (b.duration - b.t) / 0.4);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(fadeIn, fadeOut));
+    ctx.translate(ARENA_WIDTH / 2, 330);
+    const s = 0.8 + 0.2 * fadeIn;
+    ctx.scale(s, s);
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.font = 'bold 84px system-ui, sans-serif';
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = '#fff';
+    ctx.fillStyle = b.text.includes('보스') || b.text.includes('경고') ? '#B3261E' : INK;
+    ctx.strokeText(b.text, 0, 0);
+    ctx.fillText(b.text, 0, 0);
+    if (b.sub) {
+      ctx.font = 'bold 32px system-ui, sans-serif';
+      ctx.lineWidth = 7;
+      ctx.fillStyle = INK;
+      ctx.strokeText(b.sub, 0, 70);
+      ctx.fillText(b.sub, 0, 70);
+    }
+    ctx.restore();
+  }
+
   function floatText(text, x, y, color) {
     ctx.font = 'bold 30px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -539,6 +719,7 @@ export function createRenderer(canvas, wrap, assets) {
       const paused = match.phase === 'paused';
       for (const p of match.players) {
         if (!paused && recoil[p.id] > 0) recoil[p.id] -= dt;
+        if (p.entering) continue; // 줄 타고 내려오는 요원은 헬리콥터 위에 그린다
         drawPlayer(p, inputs[p.id], time, reducedMotion);
       }
 
@@ -620,6 +801,10 @@ export function createRenderer(canvas, wrap, assets) {
       }
 
       if (match.jet) drawJet(match.jet);
+      if (match.story) {
+        drawStoryCraft(match.story, time, reducedMotion);
+        for (const p of match.players) if (p.entering) drawRappel(p, inputs[p.id], time, reducedMotion);
+      }
 
       if (!paused) for (const fx of effects) fx.age += dt;
       effects = effects.filter((fx) => fx.age < EFFECT_TIME);
@@ -678,6 +863,7 @@ export function createRenderer(canvas, wrap, assets) {
 
       drawTeam('isb', match.players);
       drawTeam('earth', match.players);
+      if (match.story) drawStoryHud(match.story);
 
       if (match.phase === 'countdown') {
         ctx.font = 'bold 200px system-ui, sans-serif';

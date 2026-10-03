@@ -2,6 +2,7 @@ import { TICK, COUNTDOWN, TEAM_NAME } from './game/config.js';
 import { SLOTS, createMatch, createInputs, cancelInputs, defaultLoadout } from './game/state.js';
 import { step } from './game/update.js';
 import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
+import { createStoryMatch, WAVES } from './game/story.js';
 import { createControls } from './input/pointer.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
 import { pollGamepads, applyGamepads, clearGamepads } from './input/gamepad.js';
@@ -11,7 +12,7 @@ import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
 import { unlock, setMuted, playEvents, updateEngine } from './audio/synth.js';
 import {
-  loadSettings, saveSettings, loadBalance, saveBalance, loadSingle, saveSingle,
+  loadSettings, saveSettings, loadBalance, saveBalance, loadSingle, saveSingle, loadStory, saveStory,
 } from './storage/settings.js';
 import { applyOverrides, overrides } from './game/balance.js';
 
@@ -26,6 +27,8 @@ const loadout = defaultLoadout();
 // 'versus'(2인 대결) 또는 'single'(싱글 플레이, P2는 AI)
 let mode = 'versus';
 const single = loadSingle();
+// 스토리 모드 웨이브별 요원 밸런스
+const story = loadStory();
 let match = null;
 let inputs = null;
 let controls = null;
@@ -55,30 +58,36 @@ function singleLoadout() {
   };
 }
 
-/** 싱글 플레이에서 AI 자리 조작 패널 대신 보여 줄 안내 */
-function aiPanel(player) {
+/** 싱글 플레이에서 AI 자리 조작 패널 대신 보여 줄 안내(제목, 설명). 스토리 모드는 웨이브가 바뀌면 설명을 고친다. */
+function aiPanel(team, title, text) {
   const panel = document.createElement('div');
-  panel.className = `panel ai-panel team-${player.team}`;
+  panel.className = `panel ai-panel team-${team}`;
   const head = document.createElement('b');
-  head.textContent = `${player.id} · ${player.name}`;
+  head.textContent = title;
   const info = document.createElement('small');
-  info.textContent = `난이도 ${DIFFICULTY[single.difficulty].name}`;
+  info.className = 'ai-panel-info';
+  info.textContent = text;
   panel.append(head, info);
   return panel;
 }
 
+const storyMode = () => mode === 'single' && single.mode === 'story';
+/** 이번 틱에 움직일 AI들: 스토리 모드는 지금 경기장의 요원 전원, 자유 대전은 1명 */
+const brains = () => (match?.story ? match.story.brains : ai ? [ai] : []);
+
 function startMatch() {
   unlock();
-  match = createMatch(mode === 'single' ? singleLoadout() : loadout);
+  match = storyMode() ? createStoryMatch(loadout.P1, story) : createMatch(mode === 'single' ? singleLoadout() : loadout);
   inputs = createInputs(match.players);
   humans = match.players.filter((p) => !p.ai);
   const aiPlayer = match.players.find((p) => p.ai);
-  ai = aiPlayer ? createAI(aiPlayer.id, single.difficulty) : null;
+  ai = aiPlayer && !match.story ? createAI(aiPlayer.id, single.difficulty) : null;
   clearKeys();
   clearGamepads();
   const groups = { earth: document.querySelector('#controls-earth'), isb: document.querySelector('#controls-isb') };
   controls = createControls(groups, humans, inputs);
-  if (aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer));
+  if (match.story) groups.isb.replaceChildren(aiPanel('isb', '스토리 모드 · ISB팀', WAVES[0].title));
+  else if (aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
   renderer.reset();
   screens.show('game');
 }
@@ -106,7 +115,7 @@ function toggle(key) {
 function showSetup() {
   unlock();
   match = null;
-  if (mode === 'single') screens.showSingle(SLOTS[0], loadout, single);
+  if (mode === 'single') screens.showSingle(SLOTS[0], loadout, single, story);
   else screens.showReady(SLOTS, loadout);
 }
 
@@ -116,6 +125,7 @@ const screens = createScreens({
   onVersus() { mode = 'versus'; showSetup(); },
   onSingle() { mode = 'single'; showSetup(); },
   onSingleChange(value) { saveSingle(value); },
+  onStoryChange(value) { saveStory(value); },
   onPick(slotId, key, value) {
     loadout[slotId] = { ...loadout[slotId], [key]: value };
   },
@@ -158,13 +168,19 @@ function frame(now) {
     while (accumulator >= TICK && steps < MAX_STEPS_PER_FRAME && active()) {
       applyKeyboard(inputs, humans, TICK);
       applyGamepads(inputs, humans, TICK);
-      if (ai) updateAI(ai, match, inputs, TICK);
+      for (const brain of brains()) updateAI(brain, match, inputs, TICK);
       const events = step(match, inputs, TICK);
       accumulator -= TICK;
       steps++;
       renderer.addEvents(events);
       playEvents(events);
       for (const e of events) {
+        if (e.type === 'wave') {
+          screens.announce(`${e.title} 시작`);
+          const info = document.querySelector('#controls-isb .ai-panel-info');
+          if (info) info.textContent = e.title;
+        }
+        if (e.type === 'wave-clear') screens.announce(`${WAVES[e.wave].title} 클리어`);
         if (e.type !== 'down') continue;
         const p = match.players.find((pl) => pl.id === e.playerId);
         screens.announce(`${TEAM_NAME[p.team]} ${p.id} ${p.name} 쓰러짐`);

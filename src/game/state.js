@@ -44,36 +44,44 @@ function createStats(players) {
 }
 
 /**
- * @param {Record<string, {characterId: string, weapon: string}>} [loadout]
- * secondary는 보조무기(SECONDARY_IDS, 없으면 기관단총). 자리별 선택에 싱글플레이 AI 설정을 더할 수 있다: ai(true면 AI가 조작), maxHp(체력),
- * radius(히트박스 반지름), bulletSpeedScale(탄속 배율), damage({ primary, secondary, grenade } 칸별 피해).
+ * 자리(slot: { id, team, characterId, weapon }) 하나의 플레이어를 만든다.
+ * pick의 secondary는 보조무기(SECONDARY_IDS, 없으면 기관단총). 싱글플레이 AI·스토리 모드 적 설정을 더할 수 있다: ai(true면 AI가 조작),
+ * maxHp(체력), radius(히트박스 반지름), bulletSpeedScale(탄속 배율), damage({ primary, secondary, grenade } 칸별 피해),
+ * damageScale(모든 피해 배율), speedScale(이동 속도 배율), primaryOnly(보조무기·수류탄 없음), name(이름), scale(그림 크기), boss(보스 표시).
+ * weaponPool: 고를 수 있는 주무기 목록(기본은 준비 화면 주무기 목록).
  */
-export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
-  const players = SLOTS.map((slot) => {
-    const x = ARENA_WIDTH / 2;
-    const pick = loadout[slot.id] ?? {};
-    const characterId = characterOf(pick.characterId) ? pick.characterId : slot.characterId;
-    const character = characterOf(characterId);
-    // R-10·숨겨진 캐릭터는 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
-    const weapon = character.weapon ?? (PRIMARY_IDS.includes(pick.weapon) ? pick.weapon : slot.weapon);
-    const secondary = SECONDARY_IDS.includes(pick.secondary) ? pick.secondary : DEFAULT_SECONDARY;
-    const maxHp = pick.maxHp > 0 ? Math.round(pick.maxHp) : character.maxHp ?? MAX_HP;
-    return {
-      id: slot.id, team: slot.team, characterId, name: pick.ai ? `${character.name} (AI)` : character.name,
-      ai: !!pick.ai, bulletSpeedScale: pick.bulletSpeedScale > 0 ? pick.bulletSpeedScale : 1, damage: pick.damage ?? null,
-      // primaryOnly: 전용 주무기 하나만 쓰는 캐릭터(보조무기·수류탄 없음)
-      drone: !!character.drone, primaryOnly: !!character.weapon, bonusDamage: character.bonusDamage ?? 0,
-      jetpack: character.jetpack ? character.jetpackNozzle : null, scale: character.scale ?? 1,
-      // radius: 싱글플레이에서 AI 히트박스 반지름을 따로 정할 수 있다
-      radius: pick.radius > 0 ? pick.radius : character.radius ?? BODY_RADIUS, speed: character.speed ?? MAX_SPEED,
-      primary: weapon, secondary, slot: 'primary', weapon,
-      battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
-      x, previousX: x, y: RAIL_Y[slot.team],
-      aim: initialAim(slot.team),
-      hp: maxHp, maxHp, alive: true, hurt: 0,
-      cooldown: 0, cooldowns: {}, dash: null, burstLeft: 0, burstTimer: 0, wasAiming: false,
-    };
-  });
+export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
+  const x = pick.x ?? ARENA_WIDTH / 2;
+  const characterId = characterOf(pick.characterId) ? pick.characterId : slot.characterId;
+  const character = characterOf(characterId);
+  // R-10·숨겨진 캐릭터는 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
+  const weapon = character.weapon ?? (weaponPool.includes(pick.weapon) ? pick.weapon : slot.weapon);
+  const secondary = SECONDARY_IDS.includes(pick.secondary) ? pick.secondary : DEFAULT_SECONDARY;
+  const maxHp = pick.maxHp > 0 ? Math.round(pick.maxHp) : character.maxHp ?? MAX_HP;
+  const name = pick.name ?? character.name;
+  return {
+    id: slot.id, team: slot.team, characterId, name: pick.ai && !pick.name ? `${name} (AI)` : name,
+    ai: !!pick.ai, bulletSpeedScale: pick.bulletSpeedScale > 0 ? pick.bulletSpeedScale : 1, damage: pick.damage ?? null,
+    damageScale: pick.damageScale >= 0 ? pick.damageScale : 1, boss: !!pick.boss,
+    // primaryOnly: 전용 주무기 하나만 쓰는 캐릭터(보조무기·수류탄 없음). 스토리 모드 일반 요원도 주무기만 쓴다.
+    drone: !!character.drone, primaryOnly: !!character.weapon || !!pick.primaryOnly, bonusDamage: character.bonusDamage ?? 0,
+    jetpack: character.jetpack ? character.jetpackNozzle : null, scale: pick.scale ?? character.scale ?? 1,
+    // radius: 싱글플레이에서 AI 히트박스 반지름을 따로 정할 수 있다
+    radius: pick.radius > 0 ? pick.radius : character.radius ?? BODY_RADIUS,
+    speed: (character.speed ?? MAX_SPEED) * (pick.speedScale > 0 ? pick.speedScale : 1),
+    primary: weapon, secondary, slot: 'primary', weapon,
+    battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
+    x, previousX: x, y: RAIL_Y[slot.team],
+    aim: initialAim(slot.team),
+    hp: maxHp, maxHp, alive: true, hurt: 0,
+    cooldown: 0, cooldowns: {}, dash: null, burstLeft: 0, burstTimer: 0, wasAiming: false,
+    // entering: 스토리 모드에서 헬리콥터에서 내려오는 중(움직이지도 맞지도 않음) { t, duration, fromY }
+    entering: null,
+  };
+}
+
+/** 플레이어 목록으로 경기 상태를 만든다. */
+export function createMatchWith(players, seed = Date.now()) {
   const rng = createRng(seed);
   return {
     phase: 'countdown', countdown: COUNTDOWN,
@@ -82,6 +90,19 @@ export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
     jet: null, jetTimer: between(rng, JET.firstDelay), rng,
     tick: 0, winner: null, stats: createStats(players),
   };
+}
+
+/**
+ * @param {Record<string, {characterId: string, weapon: string}>} [loadout]
+ * 자리별 선택(createPlayer의 pick)으로 P1·P2 경기를 만든다.
+ */
+export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
+  return createMatchWith(SLOTS.map((slot) => createPlayer(slot, loadout[slot.id] ?? {})), seed);
+}
+
+/** 경기 중에 들어온 플레이어(스토리 모드 적)의 통계 칸을 만든다. */
+export function addStats(match, player) {
+  match.stats[player.id] ??= createStats([player])[player.id];
 }
 
 /** 저격총을 주무기로 고른 플레이어마다 그 팀 진영의 빈 강철 자리에 부서지지 않는 엄폐물 하나. */
@@ -97,13 +118,13 @@ function steelCovers(players) {
   return covers;
 }
 
+/** 플레이어 한 명의 입력 프레임. swap: 주무기↔보조무기 전환, select: 누른 무기 칸('primary'·'secondary')으로 바로 전환, item: 수류탄 던지기 */
+export function createInput(player) {
+  return { moveAxis: 0, touchAxis: 0, aim: initialAim(player.team), aiming: false, swap: false, select: null, item: false };
+}
+
 export function createInputs(players) {
-  const inputs = {};
-  for (const p of players) {
-    // swap: 주무기↔보조무기 전환, select: 누른 무기 칸('primary'·'secondary')으로 바로 전환, item: 수류탄 던지기
-    inputs[p.id] = { moveAxis: 0, touchAxis: 0, aim: initialAim(p.team), aiming: false, swap: false, select: null, item: false };
-  }
-  return inputs;
+  return Object.fromEntries(players.map((p) => [p.id, createInput(p)]));
 }
 
 /** 일시정지·포커스 상실 시 호출. 조준 각도는 유지하고 진행 중인 입력(이동·사격)만 버린다. */

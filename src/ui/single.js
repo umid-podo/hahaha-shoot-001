@@ -105,15 +105,42 @@ export function createSingleSetup(onChange) {
     });
   }
   $('#ai-reset-btn').addEventListener('click', () => {
-    Object.assign(single, defaultSingle());
+    Object.assign(single, defaultSingle(), { mode: single.mode });
     buildChoices();
     syncSecondary();
     changed();
   });
 
+  /** 자유 대전 · 스토리 모드 고르기. 고른 모드의 설정 칸만 보인다. */
+  function buildMode() {
+    const modes = [
+      ['free', '자유 대전', 'AI 1명과 1:1. 무기·체력·난이도를 직접 정함'],
+      ['story', '스토리 모드', '웨이브 3개 + 보스전(스미스 요원)'],
+    ];
+    $('#single-mode').replaceChildren(...modes.map(([id, name, hint]) => {
+      const label = document.createElement('span');
+      label.textContent = name;
+      const info = document.createElement('small');
+      info.textContent = hint;
+      return choiceButton([label, info], single.mode === id, () => {
+        single.mode = id;
+        syncMode();
+        onChange(single);
+      });
+    }));
+    syncMode();
+  }
+
+  function syncMode() {
+    $('#free-setup').hidden = single.mode === 'story';
+    $('#story-setup').hidden = single.mode !== 'story';
+  }
+
   return {
     open(state) {
       single = state;
+      if (single.mode !== 'story') single.mode = 'free';
+      buildMode();
       // 목록에서 빠진 무기(예: 전용 무기가 된 아킴보 석궁)가 저장돼 있으면 기본값으로
       if (!PRIMARY_IDS.includes(single.aiWeapon)) single.aiWeapon = defaultSingle().aiWeapon;
       if (!SECONDARY_IDS.includes(single.aiSecondary)) single.aiSecondary = SECONDARY_IDS[0];
