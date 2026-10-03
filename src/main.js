@@ -4,6 +4,7 @@ import { step } from './game/update.js';
 import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
 import { createControls } from './input/pointer.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
+import { pollGamepads, applyGamepads, clearGamepads } from './input/gamepad.js';
 import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
@@ -29,7 +30,7 @@ let inputs = null;
 let controls = null;
 let renderer = null;
 let ai = null;
-// 키보드·터치로 조작하는 사람 플레이어(싱글 플레이에서는 AI 자리 제외)
+// 키보드·터치·컨트롤러로 조작하는 사람 플레이어(싱글 플레이에서는 AI 자리 제외)
 let humans = [];
 
 const active = () => match && (match.phase === 'playing' || match.phase === 'countdown');
@@ -37,6 +38,7 @@ const active = () => match && (match.phase === 'playing' || match.phase === 'cou
 function cancelAllInput() {
   controls.cancelAll();
   clearKeys();
+  clearGamepads();
   cancelInputs(inputs);
 }
 
@@ -72,6 +74,7 @@ function startMatch() {
   const aiPlayer = match.players.find((p) => p.ai);
   ai = aiPlayer ? createAI(aiPlayer.id, single.difficulty) : null;
   clearKeys();
+  clearGamepads();
   const groups = { earth: document.querySelector('#controls-earth'), isb: document.querySelector('#controls-isb') };
   controls = createControls(groups, humans, inputs);
   if (aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer));
@@ -134,7 +137,8 @@ screens.syncSettings(settings);
 blockBrowserGestures(document.querySelector('#game'));
 // 키보드는 사람 플레이어 자리에만 입력한다(싱글 플레이의 AI 자리 키는 무시).
 const humanInputs = () => Object.fromEntries(humans.map((p) => [p.id, inputs[p.id]]));
-attachKeyboard(() => (active() ? humanInputs() : null), () => (match?.phase === 'paused' ? resume() : pause()));
+const togglePause = () => (match?.phase === 'paused' ? resume() : pause());
+attachKeyboard(() => (active() ? humanInputs() : null), togglePause);
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 window.addEventListener('blur', pause);
 
@@ -143,11 +147,14 @@ let accumulator = 0;
 function frame(now) {
   const frameMs = Math.min(now - last, MAX_FRAME_MS);
   last = now;
+  // 컨트롤러는 이벤트가 없어 매 프레임 읽는다(Start는 경기 밖에서도 일시정지 풀기에 쓴다).
+  pollGamepads(humans, active() ? inputs : null, togglePause);
   if (active()) {
     accumulator += frameMs / 1000;
     let steps = 0;
     while (accumulator >= TICK && steps < MAX_STEPS_PER_FRAME && active()) {
       applyKeyboard(inputs, humans, TICK);
+      applyGamepads(inputs, humans, TICK);
       if (ai) updateAI(ai, match, inputs, TICK);
       const events = step(match, inputs, TICK);
       accumulator -= TICK;

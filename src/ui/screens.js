@@ -2,6 +2,7 @@ import {
   TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, TICK,
 } from '../game/config.js';
 import { KEY_LABELS } from '../input/keyboard.js';
+import { PAD_LABEL } from '../input/gamepad.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
 import { weaponInfo, secretChoiceButton, weaponButtons } from './widgets.js';
@@ -101,7 +102,9 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
 
   const keys = document.createElement('small');
   keys.textContent = `키보드: ${KEY_LABELS[s.id]}`;
-  li.append(title, chars, weapons, droneNote, keys);
+  const pad = document.createElement('small');
+  pad.textContent = `${s.id === 'P1' ? '첫 번째' : '두 번째'} ${PAD_LABEL}`;
+  li.append(title, chars, weapons, droneNote, keys, pad);
   return li;
 }
 
