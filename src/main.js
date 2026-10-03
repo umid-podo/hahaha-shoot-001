@@ -5,6 +5,7 @@ import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
 import { createControls } from './input/pointer.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
 import { pollGamepads, applyGamepads, clearGamepads } from './input/gamepad.js';
+import { pollPadMenu } from './input/padmenu.js';
 import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
@@ -149,6 +150,8 @@ function frame(now) {
   last = now;
   // 컨트롤러는 이벤트가 없어 매 프레임 읽는다(Start는 경기 밖에서도 일시정지 풀기에 쓴다).
   pollGamepads(humans, active() ? inputs : null, togglePause);
+  // 경기 밖(메뉴·준비·일시정지·결과·밸런스 화면)에서는 컨트롤러로 버튼을 고른다(A 선택, B 취소).
+  pollPadMenu(!active(), frameMs / 1000);
   if (active()) {
     accumulator += frameMs / 1000;
     let steps = 0;

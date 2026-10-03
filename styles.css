@@ -40,6 +40,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 button[aria-pressed="true"] { background: #ffd45e; }
 button:focus-visible, h1:focus-visible, h2:focus-visible { outline: 3px solid var(--earth); outline-offset: 3px; }
 h1:focus, h2:focus { outline: none; }
+/* 게임 컨트롤러로 메뉴를 고를 때(src/input/padmenu.js)는 고른 칸을 늘 표시하고, 고치는 중인 숫자 칸은 굵게 */
+body.pad-nav :is(button, input, select, summary):focus { outline: 3px solid var(--earth); outline-offset: 3px; }
+body.pad-nav input.pad-editing:focus { outline: 4px solid var(--isb); box-shadow: 0 0 0 6px rgba(255, 200, 0, 0.6); }
 
 /* 화면 */
 .screen {
