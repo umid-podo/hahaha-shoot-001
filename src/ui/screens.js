@@ -5,6 +5,8 @@ import { KEY_LABELS } from '../input/keyboard.js';
 import { PAD_LABEL } from '../input/gamepad.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
+import { createStorySetup } from './story.js';
+import { WAVES } from '../game/story.js';
 import { weaponInfo, secretChoiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -127,6 +129,7 @@ export function createScreens(handlers) {
   $('#single-btn').addEventListener('click', handlers.onSingle);
   $('#single-start-btn').addEventListener('click', handlers.onStart);
   const singleSetup = createSingleSetup(handlers.onSingleChange);
+  const storySetup = createStorySetup(handlers.onStoryChange);
   for (const btn of document.querySelectorAll('.setup-again-btn')) btn.addEventListener('click', handlers.onSetup);
   const balance = createBalanceScreens({
     show,
@@ -174,18 +177,22 @@ export function createScreens(handlers) {
       $('#narrow-warning').hidden = window.innerWidth / slots.length >= MIN_PANEL_WIDTH;
       show('ready');
     },
-    /** 싱글 플레이 설정: 플레이어(P1) 캐릭터·주무기와 AI 설정 */
-    showSingle(slot, loadout, single) {
+    /** 싱글 플레이 설정: 플레이어(P1) 캐릭터·주무기와 AI 설정(자유 대전) 또는 웨이브별 요원 밸런스(스토리 모드) */
+    showSingle(slot, loadout, single, story) {
       $('#single-player').replaceChildren(slotItem(slot, loadout, handlers.onPick, `플레이어 · ${TEAM_NAME[slot.team]}`));
       singleSetup.open(single);
+      storySetup.open(story);
       show('single');
     },
     showResult(match) {
-      const { winner, players, stats } = match;
+      const { winner, stats, story } = match;
+      // 스토리 모드는 경기장에서 치운 요원까지 나온 요원 전원을 보여 준다
+      const players = story ? [...match.players.filter((p) => !p.ai), ...story.roster] : match.players;
       const time = match.tick * TICK;
-      $('#result-time').textContent = `경기 시간 ${formatTime(time)}`;
+      $('#result-time').textContent = `경기 시간 ${formatTime(time)}` + (story ? ` · 스토리 모드 ${WAVES[story.wave].title}` : '');
       const winnerPlayer = players.find((p) => p.team === winner);
       $('#result-title').textContent = winner === 'draw' ? '무승부'
+        : story ? (winner === 'earth' ? '스토리 클리어! 스미스 요원을 쓰러뜨렸다!' : `${WAVES[story.wave].title}에서 패배…`)
         : winnerPlayer.ai ? `${winnerPlayer.name} 승리…`
         : `${winnerPlayer.id} ${winnerPlayer.name} (${TEAM_NAME[winner]}) 승리!`;
 

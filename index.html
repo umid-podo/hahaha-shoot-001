@@ -28,7 +28,7 @@
       <p id="load-status" role="status">에셋을 불러오는 중…</p>
       <button id="retry-btn" type="button" hidden>다시 시도</button>
       <div class="row">
-        <button id="single-btn" class="primary" type="button" disabled>싱글 플레이 (vs AI)</button>
+        <button id="single-btn" class="primary" type="button" disabled>싱글 플레이 (vs AI · 스토리)</button>
         <button id="setup-btn" class="primary" type="button" disabled>2인 대결</button>
         <button id="balance-btn" type="button">밸런스 조정</button>
       </div>
@@ -36,7 +36,8 @@
       <details>
         <summary>조작법</summary>
         <ul>
-          <li><b>싱글 플레이</b> 혼자서 AI(ISB팀 요원)와 대결합니다. AI의 무기·체력·탄속·피해와 난이도를 정할 수 있습니다.</li>
+          <li><b>싱글 플레이</b> 혼자서 AI(ISB팀 요원)와 대결합니다. <b>자유 대전</b>은 AI의 무기·체력·탄속·피해와 난이도를 정할 수 있습니다.</li>
+          <li><b>스토리 모드</b> 싱글 플레이에서 고릅니다. 1웨이브 요원 1명 → 2웨이브 헬리콥터에서 요원 2명 → 3웨이브 요원 3명 → 보스전(전투기가 헬리콥터를 격추하고 건쉽에서 스미스 요원 등장). 스미스 요원을 쓰러뜨리면 승리. 웨이브별 요원 밸런스를 조절할 수 있습니다.</li>
           <li><b>2인 대결</b> 한 화면에서 두 사람이 대결합니다. P1(지구방위팀)은 왼쪽, P2(ISB팀)는 오른쪽 조작 패널을 씁니다.</li>
           <li><b>이동키</b> 패널 바깥쪽 동그라미를 좌우로 드래그하면 캐릭터가 옥상 레일 위에서 움직입니다.</li>
           <li><b>발사키</b> 패널 안쪽 동그라미를 드래그해 조준하면 누르고 있는 동안 자동으로 발사됩니다. RPG·저격총은 조준한 뒤 손을 떼면 나갑니다.</li>
@@ -75,10 +76,11 @@
 
   <section id="screen-single" class="screen" hidden>
     <div class="card single-card">
-      <h2 tabindex="-1">싱글 플레이 (vs AI)</h2>
+      <h2 tabindex="-1">싱글 플레이</h2>
+      <div id="single-mode" class="choices single-mode" role="group" aria-label="싱글 플레이 모드"></div>
       <div class="single-grid">
         <ul id="single-player" class="slot-list"></ul>
-        <section class="ai-setup team-isb" aria-labelledby="ai-setup-title">
+        <section id="free-setup" class="ai-setup team-isb" aria-labelledby="ai-setup-title">
           <b id="ai-setup-title">AI · ISB팀</b>
           <p class="hint">AI 캐릭터는 요원 1·요원 2 중에서 경기마다 무작위로 정해집니다. AI는 언제나 플레이어를 조준하고, 날아오는 탄을 움직여 피합니다.</p>
           <div class="field-label">난이도</div>
@@ -97,6 +99,12 @@
           </div>
           <p id="ai-defaults" class="hint"></p>
           <button id="ai-reset-btn" type="button">AI 설정 기본값으로</button>
+        </section>
+        <section id="story-setup" class="ai-setup team-isb" aria-labelledby="story-setup-title" hidden>
+          <b id="story-setup-title">스토리 모드 · ISB팀 요원 밸런스</b>
+          <p class="hint">웨이브를 차례로 깨고 마지막 보스 스미스 요원을 쓰러뜨리면 승리합니다. 체력은 웨이브 사이에 회복되지 않습니다. 2·3웨이브 요원의 주무기는 돌격소총·권총·쌍권총 중 무작위이고, 보조무기·수류탄은 스미스 요원만 씁니다. 피해·탄속·이동 속도는 기본값 대비 %입니다.</p>
+          <div id="story-waves" class="story-waves"></div>
+          <button id="story-reset-btn" type="button">스토리 설정 기본값으로</button>
         </section>
       </div>
       <div class="row">

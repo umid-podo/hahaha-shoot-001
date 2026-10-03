@@ -158,8 +158,9 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   const me = match.players.find((p) => p.id === ai.playerId);
   const frame = inputs[ai.playerId];
   if (!me || !frame) return;
-  const target = match.players.find((p) => p.alive && p.team !== me.team);
-  if (!me.alive || !target || match.phase !== 'playing') {
+  const target = match.players.find((p) => p.alive && !p.entering && p.team !== me.team);
+  // 스토리 모드에서 헬리콥터에서 내려오는 중인 요원은 아직 움직이지 않는다
+  if (!me.alive || me.entering || !target || match.phase !== 'playing') {
     frame.moveAxis = 0;
     frame.aiming = false;
     ai.charge = null;

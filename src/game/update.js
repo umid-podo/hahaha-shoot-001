@@ -4,6 +4,7 @@ import {
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
+import { updateStory, holdsResult } from './story.js';
 
 const OUT_MARGIN = 40;
 const HURT_TIME = 0.2;
@@ -23,6 +24,17 @@ function slotOf(player, weaponId) {
  * 수류탄은 폭발 피해를, RPG처럼 직격+폭발 무기는 직격 피해를 바꾸고 폭발 피해는 같은 비율로 맞춘다.
  */
 export function weaponDamage(player, weaponId) {
+  const { damage, splash } = baseDamage(player, weaponId);
+  // damageScale: 스토리 모드 적의 피해 배율(기본 1)
+  const scale = player.damageScale ?? 1;
+  if (scale === 1) return { damage, splash };
+  return {
+    damage: Math.round(damage * scale),
+    splash: splash && { ...splash, damage: Math.round(splash.damage * scale) },
+  };
+}
+
+function baseDamage(player, weaponId) {
   const weapon = WEAPONS[weaponId];
   const override = player.damage?.[slotOf(player, weaponId)];
   if (!Number.isFinite(override)) return { damage: weapon.damage, splash: weapon.splash };
@@ -109,7 +121,7 @@ function updateJet(match, dt, events) {
 function steer(match, b, turnRate, dt) {
   let target = null, best = Infinity;
   for (const p of match.players) {
-    if (!p.alive || p.team === b.team) continue;
+    if (!p.alive || p.team === b.team || p.entering) continue;
     const d = Math.hypot(p.x - b.x, p.y - b.y);
     if (d < best) { best = d; target = p; }
   }
@@ -171,8 +183,11 @@ function damageCover(match, cover, amount, shot, events) {
   if (cover.hp === 0) events.push({ type: 'cover-break', coverId: cover.id, x: cover.x, y: cover.y });
 }
 
-/** 단검 돌진 중(가고 돌아오는 동안 모두)에는 무적: 탄·폭발·레이저·돌진에 맞지 않는다. */
-const invulnerable = (p) => !!p.dash;
+/**
+ * 단검 돌진 중(가고 돌아오는 동안 모두)에는 무적: 탄·폭발·레이저·돌진에 맞지 않는다.
+ * 스토리 모드에서 헬리콥터에서 내려오는 중인 적도 아직 맞지 않는다.
+ */
+export const invulnerable = (p) => !!p.dash || !!p.entering;
 
 /** 탄 한 발이 엄폐물에 주는 피해. RPG 직격은 배수 적용. */
 function coverDamage(b) {
@@ -324,7 +339,7 @@ export const elapsed = (match) => match.tick * TICK;
 function fireInstakill(match, p, weapon, events) {
   let target = null, best = Infinity;
   for (const q of match.players) {
-    if (!q.alive || q.team === p.team) continue;
+    if (!q.alive || q.team === p.team || q.entering) continue;
     const d = Math.hypot(q.x - p.x, q.y - p.y);
     if (d < best) { best = d; target = q; }
   }
@@ -450,12 +465,14 @@ export function step(match, inputs, dt = TICK) {
   if (match.phase !== 'playing') return events;
   match.tick++;
 
+  // 스토리 모드: 웨이브 진행·헬리콥터 연출·적 내려오기
+  if (match.story) updateStory(match, inputs, dt, events);
   updateJet(match, dt, events);
 
   for (const p of match.players) {
     p.previousX = p.x;
     p.hurt = Math.max(0, p.hurt - dt);
-    if (!p.alive) continue;
+    if (!p.alive || p.entering) continue;
     const input = inputs[p.id];
     // 전용 무기 캐릭터(R-10·숨겨진 캐릭터)는 주무기 하나뿐이고 아이템도 없다
     if (input.select) {
@@ -563,7 +580,8 @@ export function step(match, inputs, dt = TICK) {
   // 팀 전원이 쓰러지면 패배. 같은 틱에 양 팀이 모두 쓰러지면 무승부.
   const earthUp = match.players.some((p) => p.team === 'earth' && p.alive);
   const isbUp = match.players.some((p) => p.team === 'isb' && p.alive);
-  if (!earthUp || !isbUp) {
+  // 스토리 모드는 남은 웨이브가 있으면 ISB팀이 전멸해도 끝나지 않는다(다음 웨이브는 story.js가 불러온다).
+  if ((!earthUp || !isbUp) && !(earthUp && holdsResult(match))) {
     match.winner = !earthUp && !isbUp ? 'draw' : earthUp ? 'earth' : 'isb';
     match.phase = 'result';
     match.projectiles = [];
