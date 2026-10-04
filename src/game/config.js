@@ -163,5 +163,19 @@ export const STEEL_SPOTS = {
   isb: [{ x: 480, y: RAIL_Y.isb + 160 }, { x: ARENA_WIDTH / 2, y: RAIL_Y.isb + 160 }],
 };
 
+/**
+ * 스토리 모드 2스테이지(복도)의 벽 포탑: 전투기 대신 나온다. 왼쪽 벽 위쪽·오른쪽 벽 아래쪽에 하나씩 붙어 있다.
+ * 웨이브 전투 중 burst초 동안 interval마다 플레이어 쪽으로 포탄을 쏘고, rest초 쉬었다가 다시 쏜다(처음엔 firstDelay초 뒤).
+ * 포탄은 엄폐물에 막히고, 맞으면 damage, 폭발 범위(splash)에 닿으면 splash.damage. ISB팀(요원)은 맞지 않는다.
+ */
+export const TURRET = {
+  firstDelay: 4, burst: 5, rest: 10, interval: 1, damage: 25, speed: 620,
+  splash: { damage: 10, radius: 100 },
+};
+export const TURRETS = [
+  { id: 'turret-left', x: 46, y: 340, dir: 1 },
+  { id: 'turret-right', x: ARENA_WIDTH - 46, y: 680, dir: -1 },
+];
+
 export const TEAM_COLOR = { earth: '#247BDB', isb: '#D56A26' };
 export const TEAM_NAME = { earth: '지구방위팀', isb: 'ISB팀' };

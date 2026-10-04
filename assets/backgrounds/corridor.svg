@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <!-- 스토리 모드 2스테이지: ISB 본부 복도(위에서 본 모습). 위쪽 벽 가운데 엘리베이터는 게임이 문과 함께 그린다. -->
+  <defs>
+    <pattern id="floor" width="100" height="100" patternUnits="userSpaceOnUse">
+      <rect width="100" height="100" fill="#C9CED6"/>
+      <rect width="50" height="50" fill="#BFC5CE"/>
+      <rect x="50" y="50" width="50" height="50" fill="#BFC5CE"/>
+      <path d="M0 .5H100M.5 0V100" stroke="#AEB5BF" stroke-width="2"/>
+    </pattern>
+    <pattern id="wall" width="40" height="40" patternUnits="userSpaceOnUse">
+      <rect width="40" height="40" fill="#5E6672"/>
+      <path d="M0 20H40M20 0V20M0 40H40" stroke="#4E5560" stroke-width="2"/>
+    </pattern>
+    <pattern id="hazard" width="28" height="28" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="28" height="28" fill="#FFD45E"/>
+      <rect width="14" height="28" fill="#30353E"/>
+    </pattern>
+  </defs>
+  <!-- 바닥 -->
+  <rect width="1600" height="1000" fill="url(#floor)"/>
+  <!-- 가운데 긴 카펫(엘리베이터에서 아래로) -->
+  <rect x="690" y="60" width="220" height="910" fill="#8E3B3B"/>
+  <rect x="704" y="60" width="192" height="910" fill="none" stroke="#C9A24A" stroke-width="5"/>
+  <!-- 천장 조명이 비친 자리 -->
+  <g fill="#FFFFFF" opacity=".28">
+    <ellipse cx="320" cy="260" rx="120" ry="60"/>
+    <ellipse cx="1280" cy="260" rx="120" ry="60"/>
+    <ellipse cx="320" cy="740" rx="120" ry="60"/>
+    <ellipse cx="1280" cy="740" rx="120" ry="60"/>
+  </g>
+  <!-- 벽: 위(엘리베이터 쪽)는 두껍게, 양옆·아래는 얇게 -->
+  <path d="M0 0H1600V1000H0Z M34 66V966H1566V66Z" fill-rule="evenodd" fill="url(#wall)"/>
+  <rect x="34" y="66" width="1532" height="900" fill="none" stroke="#30353E" stroke-width="5"/>
+  <rect x="3" y="3" width="1594" height="994" fill="none" stroke="#30353E" stroke-width="6"/>
+  <!-- 옆벽의 문들(포탑 자리는 비워 둠) -->
+  <g stroke="#30353E" stroke-width="3">
+    <rect x="34" y="560" width="16" height="110" fill="#8A5A2B"/>
+    <rect x="34" y="800" width="16" height="110" fill="#8A5A2B"/>
+    <rect x="1550" y="160" width="16" height="110" fill="#8A5A2B"/>
+    <rect x="1550" y="420" width="16" height="110" fill="#8A5A2B"/>
+  </g>
+  <!-- 레일 통로: 양 팀이 서는 페인트 구역 -->
+  <rect x="60" y="62" width="1480" height="60" rx="10" fill="#DDE1E6" stroke="#D56A26" stroke-width="3" stroke-dasharray="18 12" opacity=".9"/>
+  <rect x="60" y="862" width="1480" height="60" rx="10" fill="#DDE1E6" stroke="#247BDB" stroke-width="3" stroke-dasharray="18 12" opacity=".9"/>
+  <!-- 화분·소화기 -->
+  <g stroke="#30353E" stroke-width="3">
+    <circle cx="96" cy="170" r="26" fill="#B5703B"/>
+    <circle cx="90" cy="162" r="18" fill="#4E8A3E"/>
+    <circle cx="104" cy="176" r="14" fill="#5FA34B"/>
+    <circle cx="1504" cy="820" r="26" fill="#B5703B"/>
+    <circle cx="1498" cy="812" r="18" fill="#4E8A3E"/>
+    <circle cx="1512" cy="826" r="14" fill="#5FA34B"/>
+    <rect x="1540" y="580" width="18" height="40" rx="6" fill="#D9443A"/>
+  </g>
+  <!-- ISB 표식 -->
+  <g opacity=".35">
+    <circle cx="800" cy="500" r="96" fill="none" stroke="#C9A24A" stroke-width="8"/>
+    <text x="800" y="522" font-family="system-ui, sans-serif" font-size="64" font-weight="700" fill="#C9A24A" text-anchor="middle">ISB</text>
+  </g>
+  <!-- 아래쪽 경고 띠 -->
+  <rect x="34" y="956" width="1532" height="10" fill="url(#hazard)" opacity=".85"/>
+</svg>

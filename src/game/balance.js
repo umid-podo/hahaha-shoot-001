@@ -1,4 +1,4 @@
-import { WEAPONS, CHARACTERS, JET, COVER, RULES } from './config.js';
+import { WEAPONS, CHARACTERS, JET, COVER, RULES, TURRET } from './config.js';
 
 /**
  * 밸런스 메뉴에서 조정하는 수치 목록. 값은 config.js의 객체(WEAPONS·CHARACTERS·JET·COVER·RULES)를 그 자리에서 바꾸므로
@@ -11,6 +11,7 @@ const ROOT = {
   weapons: WEAPONS,
   cover: COVER,
   jet: JET,
+  turret: TURRET,
 };
 
 const SEC = '초';
@@ -79,7 +80,7 @@ export const SECTIONS = [
     ],
   },
   {
-    title: '엄폐물 · 전투기 · 공통',
+    title: '엄폐물 · 전투기 · 포탑 · 공통',
     params: [
       param('엄폐물', '내구도', ['cover', 'hp'], { min: 1, max: 5000, step: 10 }),
       param('엄폐물', 'RPG 직격 배수', ['cover', 'rpgMultiplier'], { max: 10, step: 0.1 }),
@@ -93,6 +94,13 @@ export const SECTIONS = [
       param('전투기', '미사일 속도(초당)', ['jet', 'missile', 'speed'], { min: 50, max: 3000, step: 10 }),
       param('전투기', '미사일 폭발 피해', ['jet', 'missile', 'splash', 'damage'], { max: 1000 }),
       param('전투기', '미사일 폭발 반경', ['jet', 'missile', 'splash', 'radius'], { max: 800, step: 5 }),
+      param('복도 포탑(스토리)', '쏘는 시간', ['turret', 'burst'], { min: 0.5, max: 60, step: 0.5, unit: SEC }),
+      param('복도 포탑(스토리)', '쉬는 시간', ['turret', 'rest'], { max: 120, step: 0.5, unit: SEC }),
+      param('복도 포탑(스토리)', '발사 간격', ['turret', 'interval'], { min: 0.1, max: 10, step: 0.1, unit: SEC }),
+      param('복도 포탑(스토리)', '포탄 피해', ['turret', 'damage'], { max: 1000 }),
+      param('복도 포탑(스토리)', '폭발 범위 피해', ['turret', 'splash', 'damage'], { max: 1000 }),
+      param('복도 포탑(스토리)', '폭발 반경', ['turret', 'splash', 'radius'], { max: 800, step: 5 }),
+      param('복도 포탑(스토리)', '포탄 속도(초당)', ['turret', 'speed'], { min: 50, max: 3000, step: 10 }),
       param('공통', '무기 전환 후 대기', ['rules', 'swapTime'], { max: 5, step: 0.05, unit: SEC }),
       param('공통', '탄환 수명', ['rules', 'bulletLife'], { min: 0.2, max: 10, step: 0.1, unit: SEC }),
     ],

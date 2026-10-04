@@ -189,6 +189,17 @@ export function playEvents(events) {
     if (e.type === 'radio') { duckMusic(e.wave === 2 ? 3.2 : 2.6); gunshot({ filter: 2500, q: 3, decay: 0.5, thump: 0, volume: 0.6 }); }
     if (e.type === 'smith-voice') [110, 104, 98, 92].forEach((f, i) => tone(f, 0.35, 'sawtooth', i * 0.3));
     if (e.type === 'hero-pose') [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12, 'triangle', i * 0.07));
+    // 스토리 2스테이지(복도): 엘리베이터 딩동, 포탑 포성, 천장 울림·붕괴, R-10 착지·도발, 스테이지 전환·회복
+    if (e.type === 'elevator') { tone(1319, 0.35, 'sine'); tone(1047, 0.5, 'sine', 0.3); }
+    if (e.type === 'turret-fire') gunshot({ filter: 500, q: 0.6, decay: 0.3, thump: 110, volume: 1 });
+    if (e.type === 'rumble') { gunshot({ filter: 120, q: 0.3, decay: 1.2, thump: 45, volume: 1.6 }); tone(40, 0.9, 'square', 0.05); }
+    if (e.type === 'ceiling-break') { gunshot({ filter: 350, q: 0.4, decay: 0.9, thump: 70, volume: 1.8 }); tone(120, 0.3, 'sawtooth', 0.05); }
+    if (e.type === 'land') gunshot({ filter: 200, q: 0.4, decay: 0.4, thump: 80, volume: 1.3 });
+    if (e.type === 'taunt') [988, 1319, 988, 1319, 740].forEach((f, i) => tone(f, 0.09, 'square', i * 0.11));
+    if (e.type === 'sigh') slide(500, 260, 0.6, 'triangle', 0.7);
+    if (e.type === 'what') [659, 880].forEach((f, i) => tone(f, 0.12, 'triangle', i * 0.12));
+    if (e.type === 'stage') [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.16, 'triangle', i * 0.11));
+    if (e.type === 'heal') slide(400, 1200, 0.5, 'sine', 0.8);
     if (e.type === 'result') [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', i * 0.13 + 0.3));
   }
 }

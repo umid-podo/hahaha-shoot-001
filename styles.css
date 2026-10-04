@@ -352,3 +352,37 @@ button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; 
 .story-wave > small { color: var(--muted); font-size: 12px; }
 .story-wave .choices.secondary { grid-template-columns: repeat(4, 1fr); }
 .story-wave .ai-numbers { grid-template-columns: 1fr; }
+
+/* 타이틀 화면(스파이 대전쟁): 손그림 기획서처럼 테두리 안에 제목, 왼쪽 지구방위팀 둘과 오른쪽 요원 둘이 서로 겨눈다 */
+.title-art {
+  position: relative;
+  margin: 10px 0 4px;
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  background: linear-gradient(#fbf8f1, #efe9dc);
+  overflow: hidden;
+}
+.title-art h1 {
+  position: relative;
+  z-index: 2;
+  padding-top: 10px;
+  letter-spacing: 0.08em;
+  font-size: clamp(34px, 9vw, 56px);
+  text-shadow: 3px 3px 0 #fff, -2px -2px 0 #fff;
+}
+.title-scene { position: relative; aspect-ratio: 5 / 3.6; margin-top: -4px; }
+.title-scene .actor { position: absolute; width: 50%; height: auto; }
+.title-scene .actor.flip { transform: scaleX(-1); }
+.title-scene .arrow { left: -6%; top: -4%; }
+.title-scene .pizza { left: -2%; top: 34%; }
+.title-scene .agent1 { right: -6%; top: -6%; }
+.title-scene .agent2 { right: -4%; top: 36%; }
+.title-scene .spark { position: absolute; width: 13%; animation: title-spark 0.9s steps(2) infinite; }
+.title-scene .spark-top { left: 45%; top: 22%; }
+.title-scene .spark-bottom { left: 42%; top: 64%; animation-delay: 0.45s; }
+@keyframes title-spark { 50% { opacity: 0.3; transform: scale(0.8) rotate(20deg); } }
+@media (prefers-reduced-motion: reduce) { .title-scene .spark { animation: none; } }
+.continue-row { align-items: center; }
+.continue-row .hint { margin: 0; }
+.story-stage { margin: 6px 0 0; grid-column: 1 / -1; font-size: 16px; color: var(--isb); }
+.choices.difficulty.mixed > :first-child { grid-column: 1 / -1; }

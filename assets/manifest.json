@@ -22,6 +22,19 @@
       "bytes": 3214
     },
     {
+      "id": "corridor",
+      "name": "ISB 본부 복도(스토리 2스테이지)",
+      "path": "backgrounds/corridor.svg",
+      "width": 1600,
+      "height": 1000,
+      "format": "svg",
+      "hasAlphaChannel": false,
+      "alphaInspection": null,
+      "source": "project-authored vector",
+      "kind": "background",
+      "bytes": 3599
+    },
+    {
       "id": "earth-arrow",
       "name": "온이름",
       "path": "characters/earth-arrow.png",

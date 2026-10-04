@@ -86,7 +86,7 @@ export function createMatchWith(players, seed = Date.now()) {
   return {
     phase: 'countdown', countdown: COUNTDOWN,
     players, projectiles: [], nextProjectileId: 1,
-    covers: [...COVERS.map((c) => ({ ...c, hp: COVER.hp })), ...steelCovers(players)],
+    covers: createCovers(players),
     jet: null, jetTimer: between(rng, JET.firstDelay), rng,
     tick: 0, winner: null, stats: createStats(players),
   };
@@ -103,6 +103,11 @@ export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
 /** 경기 중에 들어온 플레이어(스토리 모드 적)의 통계 칸을 만든다. */
 export function addStats(match, player) {
   match.stats[player.id] ??= createStats([player])[player.id];
+}
+
+/** 새 엄폐물 한 벌: 기본 엄폐물 3개(내구도 가득) + 저격총을 고른 플레이어의 강철 엄폐물. 스토리 모드는 스테이지마다 새로 만든다. */
+export function createCovers(players) {
+  return [...COVERS.map((c) => ({ ...c, hp: COVER.hp })), ...steelCovers(players)];
 }
 
 /** 저격총을 주무기로 고른 플레이어마다 그 팀 진영의 빈 강철 자리에 부서지지 않는 엄폐물 하나. */

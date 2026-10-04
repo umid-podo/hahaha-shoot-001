@@ -1,4 +1,4 @@
-import { defaultStory, normalizeStory } from '../game/story.js';
+import { defaultStory, normalizeStory, normalizeStorySave } from '../game/story.js';
 
 const KEY = 'haha2.settings.v1';
 
@@ -79,4 +79,26 @@ export function loadStory() {
 
 export function saveStory(story) {
   try { localStorage.setItem(STORY_KEY, JSON.stringify(story)); } catch { /* 저장 불가 환경은 무시 */ }
+}
+
+const STORY_SAVE_KEY = 'haha2.storysave.v1';
+
+/**
+ * 스토리 모드 저장(일시정지 화면의 '저장하기'): { wave, hp, label, pick: { characterId, weapon, secondary }, savedAt }.
+ * 없거나 읽을 수 없으면 null.
+ */
+export function loadStorySave() {
+  try {
+    return normalizeStorySave(JSON.parse(localStorage.getItem(STORY_SAVE_KEY)));
+  } catch {
+    return null;
+  }
+}
+
+export function saveStorySave(save) {
+  try { localStorage.setItem(STORY_SAVE_KEY, JSON.stringify(save)); } catch { /* 저장 불가 환경은 무시 */ }
+}
+
+export function clearStorySave() {
+  try { localStorage.removeItem(STORY_SAVE_KEY); } catch { /* 저장 불가 환경은 무시 */ }
 }
