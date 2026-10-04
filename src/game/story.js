@@ -1,4 +1,4 @@
-import { ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS } from './config.js';
+import { ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET } from './config.js';
 import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng } from './state.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
 
@@ -142,8 +142,9 @@ export function holdsResult(match) {
 
 const enemies = (match) => match.players.filter((p) => p.team === 'isb');
 
-/** 헬리콥터·건쉽이 오른쪽 화면 밖에서 날아온다. */
-function callCarrier(story, kind) {
+/** 헬리콥터·건쉽이 오른쪽 화면 밖에서 날아온다. 요원·보스가 오므로 경고음(배경음악이 작아짐)을 울린다. */
+function callCarrier(story, kind, events) {
+  events.push({ type: 'alarm', boss: kind === 'gunship' });
   story.carrier = { kind, x: ARENA_WIDTH + OFF, y: CARRIER_Y, targetX: ARENA_WIDTH / 2, state: 'in', t: 0, angle: 0 };
   story.phase = 'arrive';
 }
@@ -199,6 +200,11 @@ function moveStrike(story, dt, events) {
  */
 export function updateStory(match, inputs, dt, events) {
   const story = match.story;
+  // 전투 시작: 1웨이브 요원 등장 경고
+  if (!story.started) {
+    story.started = true;
+    events.push({ type: 'alarm', boss: false });
+  }
   if (story.banner) {
     story.banner.t += dt;
     if (story.banner.t >= story.banner.duration) story.banner = null;
@@ -233,7 +239,7 @@ export function updateStory(match, inputs, dt, events) {
         // 쓰러진 요원은 경기장에서 치우고(결과 화면용으로 roster에는 남는다) 다음 웨이브를 부른다
         match.players = match.players.filter((p) => p.team !== 'isb' || p.alive);
         story.brains = story.brains.filter((b) => match.players.some((p) => p.id === b.playerId));
-        callCarrier(story, 'heli');
+        callCarrier(story, 'heli', events);
         if (WAVES[next].boss) story.banner = banner('경고!', '헬리콥터 접근 중');
       }
       break;
@@ -257,7 +263,7 @@ export function updateStory(match, inputs, dt, events) {
       if (story.carrier) break;
       story.timer += dt;
       if (story.timer >= GUNSHIP_DELAY) {
-        callCarrier(story, 'gunship');
+        callCarrier(story, 'gunship', events);
         story.banner = banner('건쉽 접근!', BOSS_NAME);
       }
       break;
@@ -268,5 +274,163 @@ export function updateStory(match, inputs, dt, events) {
       break;
     default:
       break;
+  }
+}
+
+/* ───────── 엔딩 컷씬 ─────────
+ * 스미스 요원을 쓰러뜨리면 바로 끝나지 않고 컷씬이 나온다: 스미스 요원이 다시 일어나 주인공에게 달려들고,
+ * 주인공은 권총을 쏘지만 스미스 요원은 모두 피한다. 코앞까지 온 스미스 요원을 주인공이 발로 차서
+ * 옥상(건물) 밖으로 떨어뜨린다. 컷씬이 끝나면 승리 결과.
+ * 시간표(초): 0~1 일어남, 1~4.2 달려듦(그동안 총 6발, 모두 피함), 4.2~4.7 발차기, 4.7~7 날아가 건물 밖으로 추락, ~8.2 끝.
+ */
+export const CUTSCENE_TIME = 8.2;
+const RUN_START = 1, RUN_END = 4.2, KICK_AT = 4.5, FLY_END = 5.6, FALL_END = 7;
+const SHOTS = [1.2, 1.7, 2.2, 2.7, 3.2, 3.7];
+const SHOT_TRAVEL = 0.35;       // 겨눌 때 예측하는 시간(총알이 닿기까지 대략)
+const DODGE = 95;               // 피할 때 옆으로 비키는 거리
+const DODGE_RANGE = 230;        // 총알이 이만큼 다가오면 비킨다
+const DODGE_SPEED = 1300;       // 비키는 속도(초당)
+const STOP_GAP = 120;           // 주인공 앞 멈추는 거리
+const CUT_BULLET_SPEED = 1300;
+
+/** 마지막 웨이브(보스)를 쓰러뜨리면 결과 대신 컷씬을 시작하는지 */
+export function startsCutscene(match) {
+  if (!match.story || match.story.wave !== WAVES.length - 1) return false;
+  const hero = match.players.find((p) => p.team === 'earth' && p.alive);
+  return !!hero && !!match.players.find((p) => p.boss);
+}
+
+export function startCutscene(match) {
+  const hero = match.players.find((p) => p.team === 'earth' && p.alive);
+  const boss = match.players.find((p) => p.boss);
+  match.phase = 'cutscene';
+  match.projectiles = [];
+  match.jet = null;
+  match.story.banner = null;
+  match.story.carrier = null;
+  const dir = boss.x < ARENA_WIDTH / 2 ? -1 : 1; // 가까운 쪽 건물 끝으로 차 낸다
+  match.cutscene = {
+    t: 0, heroId: hero.id, bossId: boss.id, bossScale: boss.scale,
+    from: { x: boss.x, y: boss.y }, to: { x: hero.x, y: hero.y - STOP_GAP }, dir,
+    fired: 0, bullets: [], dodge: { x: 0, y: 0 }, kicked: false, screamed: false,
+    hero: { x: hero.x, y: hero.y, aim: hero.aim, lunge: 0 },
+    smith: { x: boss.x, y: boss.y, scale: boss.scale, angle: 0, alpha: 1, standing: 0, trail: [] },
+    caption: '',
+  };
+}
+
+/** 달려드는 경로 위 위치(피하기 전) */
+function runPath(c, t) {
+  const k = Math.max(0, Math.min(1, (t - RUN_START) / (RUN_END - RUN_START)));
+  const ease = k * k * (3 - 2 * k);
+  return { x: c.from.x + (c.to.x - c.from.x) * ease, y: c.from.y + (c.to.y - c.from.y) * ease };
+}
+
+/** 총알 b에서 본 스미스 요원까지 남은 거리(총알 진행 방향으로). 음수면 이미 지나갔다. */
+function ahead(b, x, y) {
+  const speed = Math.hypot(b.vx, b.vy);
+  return ((x - b.x) * b.vx + (y - b.y) * b.vy) / speed;
+}
+
+/**
+ * 피하기: 아직 지나가지 않은 총알이 DODGE_RANGE 안으로 다가오면 총알이 날아오는 방향의 옆(왼쪽·오른쪽 번갈아)으로
+ * 재빨리 비키고, 총알이 지나가면 다시 달리던 길로 돌아온다. 지금 비켜 있는 거리 { x, y }를 돌려준다.
+ */
+function dodgeOffset(c, base, dt) {
+  const threat = c.bullets.find((b) => !b.missed && ahead(b, base.x, base.y) < DODGE_RANGE);
+  let want = { x: 0, y: 0 };
+  if (threat) {
+    const speed = Math.hypot(threat.vx, threat.vy);
+    const px = -threat.vy / speed, py = threat.vx / speed; // 총알 방향에 수직
+    let side = threat.side;
+    // 벽 쪽으로는 비킬 수 없으니 반대쪽으로
+    if (base.x + side * px * DODGE < MIN_X || base.x + side * px * DODGE > MAX_X) side = -side;
+    want = { x: side * px * DODGE, y: side * py * DODGE };
+  }
+  const dx = want.x - c.dodge.x, dy = want.y - c.dodge.y;
+  const dist = Math.hypot(dx, dy);
+  const k = dist > 0 ? Math.min(1, (DODGE_SPEED * dt) / dist) : 0;
+  c.dodge.x += dx * k;
+  c.dodge.y += dy * k;
+  return c.dodge;
+}
+
+/** 컷씬 한 틱. 끝나면 결과(지구방위팀 승리)로 넘어간다. */
+export function updateCutscene(match, dt, events) {
+  const c = match.cutscene;
+  const t = (c.t += dt);
+  const { smith, hero } = c;
+  smith.standing = Math.min(1, t / 0.6);
+
+  // 달려들기 + 피하기
+  if (t < KICK_AT) {
+    const base = runPath(c, t);
+    const prevX = smith.x;
+    const dodge = dodgeOffset(c, base, dt);
+    smith.x = Math.min(MAX_X, Math.max(MIN_X, base.x + dodge.x));
+    smith.y = base.y + dodge.y;
+    if (t > RUN_START) smith.trail = [{ x: prevX, y: smith.y }, ...smith.trail].slice(0, 4);
+    c.caption = t < RUN_START ? `${BOSS_NAME}: 아직 끝나지 않았다!` : t < RUN_END ? '탕! 탕! …다 피한다!' : '';
+  }
+  hero.aim = Math.atan2(smith.y - hero.y, smith.x - hero.x);
+
+  // 주인공의 권총: 스미스 요원이 갈 자리를 겨누지만, 닿는 순간 스미스 요원이 비킨다
+  while (c.fired < SHOTS.length && t >= SHOTS[c.fired]) {
+    const target = runPath(c, SHOTS[c.fired] + SHOT_TRAVEL);
+    const x0 = hero.x + Math.cos(hero.aim) * MUZZLE_OFFSET, y0 = hero.y + Math.sin(hero.aim) * MUZZLE_OFFSET;
+    const aim = Math.atan2(target.y - y0, target.x - x0);
+    c.bullets.push({
+      x: x0, y: y0, vx: Math.cos(aim) * CUT_BULLET_SPEED, vy: Math.sin(aim) * CUT_BULLET_SPEED, life: 1.2, missed: false,
+      side: c.fired % 2 ? -1 : 1, // 왼쪽·오른쪽 번갈아 피한다
+    });
+    events.push({ type: 'fire', playerId: c.heroId, weapon: 'pistol' });
+    c.fired++;
+  }
+  for (const b of c.bullets) {
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    if (!b.missed && ahead(b, smith.x, smith.y) < -20) {
+      b.missed = true;
+      events.push({ type: 'dodge', x: smith.x, y: smith.y });
+    }
+  }
+  c.bullets = c.bullets.filter((b) => b.life > 0 && b.y > -50);
+
+  // 발차기
+  if (t >= KICK_AT - 0.25 && t < KICK_AT + 0.25) {
+    hero.lunge = Math.max(0, 1 - Math.abs(t - KICK_AT) / 0.25);
+    c.caption = '이얍!';
+  } else {
+    hero.lunge = 0;
+  }
+  if (!c.kicked && t >= KICK_AT) {
+    c.kicked = true;
+    c.kickFrom = { x: smith.x, y: smith.y };
+    events.push({ type: 'kick', x: smith.x, y: smith.y });
+  }
+
+  // 차여서 건물 끝으로 날아가고(빙글빙글), 난간을 넘으면 아래로 떨어지며 작아진다
+  if (c.kicked) {
+    // 난간(옥상 끝)까지 날아간 뒤, 난간 너머로 넘어가며 아래로 떨어진다(작아지며 사라짐)
+    const edgeX = c.dir < 0 ? 30 : ARENA_WIDTH - 30;
+    const k = Math.min(1, (t - KICK_AT) / (FLY_END - KICK_AT));
+    const over = Math.max(0, Math.min(1, (t - FLY_END) / (FALL_END - FLY_END)));
+    smith.x = c.kickFrom.x + (edgeX - c.kickFrom.x) * k + c.dir * 70 * over;
+    smith.y = c.kickFrom.y - Math.sin(k * Math.PI) * 120 - k * 180;
+    smith.angle = c.dir * (t - KICK_AT) * 12;
+    smith.trail = [];
+    smith.scale = c.bossScale * (1 - 0.9 * over);
+    smith.alpha = 1 - over;
+    if (!c.screamed && t >= FLY_END - 0.5) {
+      c.screamed = true;
+      events.push({ type: 'scream' });
+    }
+    c.caption = t < FLY_END ? '퍽!!' : t < FALL_END ? `${BOSS_NAME}: 으아아아아…!` : `${BOSS_NAME}를 물리쳤다!`;
+  }
+
+  if (t >= CUTSCENE_TIME) {
+    match.cutscene.done = true;
+    match.phase = 'result';
+    match.winner = 'earth';
+    events.push({ type: 'result', winner: 'earth' });
   }
 }
