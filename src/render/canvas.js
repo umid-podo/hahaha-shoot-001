@@ -2,7 +2,7 @@ import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
   MAX_HP, WEAPONS, COVER, TICK,
 } from '../game/config.js';
-import { WAVES } from '../game/story.js';
+import { WAVES, ELEVATOR, CRACK_TIME, currentWave, stageProgress, waveLabel } from '../game/story.js';
 
 const INK = '#30353E';
 const MAX_DPR = 2;
@@ -506,13 +506,36 @@ export function createRenderer(canvas, wrap, assets) {
   }
 
   /**
-   * 스토리 모드: 헬리콥터(건쉽)에서 줄을 타고 내려오는 요원. 하늘에서 내려오므로 작게 시작해 레일에 닿으면 제 크기.
-   * 아직 차례가 오지 않은 요원(t < 0)은 그리지 않는다.
+   * 스토리 모드에서 들어오는 중인 요원. 아직 차례가 오지 않은 요원(t < 0)은 그리지 않는다.
+   * rope: 헬리콥터(건쉽)에서 줄을 타고 내려온다. 하늘에서 내려오므로 작게 시작해 레일에 닿으면 제 크기.
+   * walk: 엘리베이터에서 걸어 나온다(처음엔 흐리게). fall: 천장에서 떨어진다(크게 시작해 바닥에 내려앉으며 제 크기, 그림자가 진해짐).
    */
-  function drawRappel(p, input, time, reducedMotion) {
+  function drawEntering(p, input, time, reducedMotion) {
     const e = p.entering;
     if (e.t < 0) return;
     const k = Math.min(1, e.t / e.duration);
+    if (e.kind === 'walk') {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, 0.3 + k * 2);
+      drawPlayer(p, { moveAxis: 1, aiming: false }, time, reducedMotion);
+      ctx.restore();
+      return;
+    }
+    if (e.kind === 'fall') {
+      const s = 1 + (1 - k * k) * 1.4;
+      ctx.fillStyle = `rgba(48,53,62,${0.15 + 0.3 * k})`;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 30, 60 * (0.6 + 0.4 * k), 22 * (0.6 + 0.4 * k), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.scale(s, s);
+      ctx.rotate(reducedMotion ? 0 : (1 - k) * 0.6);
+      ctx.translate(-p.x, -p.y);
+      drawPlayer(p, input, time, reducedMotion);
+      ctx.restore();
+      return;
+    }
     ctx.strokeStyle = INK;
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -616,6 +639,110 @@ export function createRenderer(canvas, wrap, assets) {
     }
   }
 
+  /**
+   * 복도 엘리베이터(기획서 그림처럼 정면에서 본 모습): 위쪽 벽 가운데 두 짝 문(◁ ▷)과 오른쪽 호출 버튼.
+   * open(0~1)만큼 문이 양옆으로 열리고 안쪽 불빛이 보인다. 열려 있는 동안 버튼이 켜진다.
+   */
+  function drawElevator(e) {
+    const { x, w } = ELEVATOR;
+    const left = x - w / 2, top = 2, h = 62;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = INK;
+    // 안쪽(문이 열리면 보임)
+    ctx.fillStyle = '#FFE9A8';
+    ctx.fillRect(left, top, w, h);
+    ctx.fillStyle = 'rgba(255,212,94,0.5)';
+    ctx.fillRect(left + 10, top + 8, w - 20, 12);
+    // 문 두 짝
+    const half = w / 2, slide = half * 0.92 * e.open;
+    ctx.fillStyle = '#AEB6BF';
+    ctx.lineWidth = 3;
+    for (const [dx, sign] of [[0, -1], [half, 1]]) {
+      const dxs = left + dx + sign * slide;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(left, top, w, h);
+      ctx.clip();
+      ctx.fillRect(dxs, top, half, h);
+      ctx.strokeRect(dxs, top, half, h);
+      // ◁ ▷ 표시
+      ctx.fillStyle = INK;
+      const cx = dxs + half / 2, cy = top + h / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - sign * 9, cy - 10); ctx.lineTo(cx + sign * 9, cy); ctx.lineTo(cx - sign * 9, cy + 10);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#AEB6BF';
+    }
+    // 문틀
+    ctx.lineWidth = 5;
+    ctx.strokeRect(left, top, w, h);
+    // 호출 버튼 판
+    ctx.fillStyle = '#DADDE1';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(left + w + 14, top + 12, 18, 38, 4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = e.open > 0 || e.target > 0 ? '#FFB23F' : '#F5F5F5';
+    for (const by of [top + 22, top + 38]) {
+      ctx.beginPath(); ctx.arc(left + w + 23, by, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+  }
+
+  /**
+   * 복도 벽 포탑(기획서 그림처럼 삼각대 위 상자 + 포신). 포신은 플레이어를 따라 돈다.
+   * 쏘는 동안 빨간 불이 깜빡이고, 다시 쏘기 1.5초 전부터 노란 경고 원이 깜빡인다.
+   */
+  function drawTurret(t, story, time, reducedMotion) {
+    const firing = story.turretFiring && story.phase === 'fight';
+    const warning = !story.turretFiring && story.phase === 'fight' && story.turretTimer < 1.5;
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    // 삼각대
+    for (const a of [-0.5, 0, 0.5]) {
+      ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(Math.sin(a) * 30 - t.dir * 8, 44); ctx.stroke();
+    }
+    if (warning && (reducedMotion || Math.sin(time * 18) > 0)) {
+      ctx.strokeStyle = '#FFB23F';
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(0, 0, 46, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3;
+    }
+    // 포신(조준 방향)
+    ctx.save();
+    ctx.rotate(t.aim);
+    ctx.fillStyle = '#4A505A';
+    ctx.beginPath(); ctx.roundRect(8, -6, 40, 12, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#2A2E35';
+    ctx.beginPath(); ctx.arc(50, 0, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    // 몸통 상자
+    ctx.fillStyle = '#7D8A99';
+    ctx.beginPath(); ctx.roundRect(-22, -16, 40, 30, 5); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = firing && (reducedMotion || Math.sin(time * 20) > 0) ? '#FF3B30' : '#7A2A33';
+    ctx.beginPath(); ctx.arc(-t.dir * 10, -24, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  /** 천장이 무너지기 직전: 떨어질 자리에 커지는 그림자와 떨어지는 먼지 */
+  function drawCeiling(c, time, reducedMotion) {
+    const k = Math.min(1, c.t / CRACK_TIME);
+    ctx.fillStyle = `rgba(48,53,62,${0.1 + 0.3 * k})`;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y + 30, 40 + 90 * k, 16 + 30 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#9C978E';
+    for (let i = 0; i < 10; i++) {
+      const fall = reducedMotion ? 0.5 : (time * 1.6 + i * 0.37) % 1;
+      const x = c.x + Math.sin(i * 2.3) * (40 + 70 * k), y = c.y - 60 + fall * 120;
+      ctx.globalAlpha = (1 - fall) * k;
+      ctx.fillRect(x - 3, y - 3, 6 + (i % 3) * 2, 6);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   /** 스토리 모드 하늘: 헬리콥터·건쉽, 헬리콥터를 격추하는 전투기와 미사일 */
   function drawStoryCraft(story, time, reducedMotion) {
     if (story.carrier) drawCarrier(story.carrier, time, reducedMotion);
@@ -635,8 +762,10 @@ export function createRenderer(canvas, wrap, assets) {
 
   /** 스토리 모드 안내: 왼쪽 가운데 웨이브 표시 + 웨이브 시작·클리어 때 가운데 큰 글씨 */
   function drawStoryHud(story) {
-    const wave = WAVES[story.wave];
-    const text = `${wave.title} (${story.wave + 1}/${WAVES.length})`;
+    const index = currentWave(story);
+    const wave = WAVES[index];
+    const { n, total } = stageProgress(index);
+    const text = `${waveLabel(index)} (${n}/${total})`;
     ctx.font = 'bold 20px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
@@ -757,8 +886,11 @@ export function createRenderer(canvas, wrap, assets) {
       const blink = reducedMotion || Math.sin(time * 12) > 0;
       ctx.fillStyle = blink ? '#FF3B30' : '#7A2A33';
       ctx.beginPath(); ctx.arc(x + 33, y - 2, 3, 0, Math.PI * 2); ctx.fill();
-      // 말풍선
-      const text = k.t < 2.4 ? '치지직…' : '지원 요청!';
+    }
+    // 말풍선(무전·도발)
+    if (k.shot.bubble) {
+      const { x, y } = k.victim;
+      const text = k.shot.bubble;
       ctx.font = 'bold 22px system-ui, sans-serif';
       const w = ctx.measureText(text).width + 24;
       const bx = x + 50, by = y + 30;
@@ -771,6 +903,32 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(text, bx + 12, by + 20);
+    }
+    if (mode === 'sigh') {
+      // 한숨: 이마의 땀방울
+      const { x, y } = k.hero;
+      const drop = reducedMotion ? 0 : (time * 20) % 14;
+      ctx.fillStyle = '#7FC4F2';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 34, y - 70 + drop);
+      ctx.quadraticCurveTo(x + 46, y - 50 + drop, x + 34, y - 46 + drop);
+      ctx.quadraticCurveTo(x + 22, y - 50 + drop, x + 34, y - 70 + drop);
+      ctx.fill(); ctx.stroke();
+    }
+    if (mode === 'what') {
+      // 깜짝: 머리 위 물음표·느낌표
+      const { x, y } = k.hero;
+      const bob = reducedMotion ? 0 : Math.sin(time * 10) * 4;
+      ctx.font = 'bold 54px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = '#fff';
+      ctx.fillStyle = '#D9443A';
+      ctx.strokeText('?!', x + 40, y - 92 + bob);
+      ctx.fillText('?!', x + 40, y - 92 + bob);
     }
     if (mode === 'hero') {
       const { x, y } = k.hero;
@@ -851,6 +1009,55 @@ export function createRenderer(canvas, wrap, assets) {
     drawLetterbox({ t: k.t, caption: k.shot.caption });
   }
 
+  /** R-10 컷씬 끝: 주인공이 어깨에 멘 RPG(로켓이 끼워진 발사관) */
+  function drawHeldRpg(pose) {
+    ctx.save();
+    ctx.translate(pose.x + Math.cos(pose.aim) * 20, pose.y - 6 + Math.sin(pose.aim) * 20);
+    ctx.rotate(pose.aim);
+    ctx.fillStyle = '#4E6B3A';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(-34, -9, 76, 18, 5); ctx.fill(); ctx.stroke();
+    ctx.drawImage(assets.rocket.img, 30, -11, 44, 22);
+    ctx.restore();
+  }
+
+  /**
+   * R-10 엔딩 컷씬: 다시 떠오른 R-10(지지직 불꽃), 주인공이 쏜 RPG 로켓. 폭발 뒤 R-10은 흐려지며 사라진다.
+   * 레이저 난사는 'laser' 이벤트 효과로 그린다.
+   */
+  function drawR10Cutscene(match, cut, time, reducedMotion) {
+    const boss = match.players.find((p) => p.id === cut.bossId);
+    const { r10 } = cut;
+    const { img, anchor } = assets[boss.characterId];
+    const size = SPRITE_SIZE * r10.scale;
+    const wobble = reducedMotion ? 0 : Math.sin(time * 30) * 4 * (1 - r10.rise * 0.5);
+    ctx.save();
+    ctx.globalAlpha = r10.alpha;
+    ctx.translate(r10.x + wobble, r10.y - r10.rise * 10);
+    ctx.rotate((1 - r10.rise) * 0.5);
+    ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
+    ctx.restore();
+    if (r10.alpha > 0 && !reducedMotion) {
+      // 고장 불꽃
+      for (let i = 0; i < 4; i++) {
+        if (Math.sin(time * 25 + i * 1.7) < 0.3) continue;
+        const a = time * 7 + i * 1.6;
+        star(r10.x + Math.cos(a) * 50, r10.y + Math.sin(a) * 34, 8, '#FFD45E');
+      }
+    }
+    if (cut.rocket && !cut.rocket.hit) {
+      const { x, y, angle } = cut.rocket;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.fillStyle = '#FFB23F';
+      ctx.beginPath(); ctx.moveTo(-20, -7); ctx.lineTo(-48 - (reducedMotion ? 0 : Math.random() * 12), 0); ctx.lineTo(-20, 7); ctx.fill();
+      ctx.drawImage(assets.rocket.img, -26, -13, 52, 26);
+      ctx.restore();
+    }
+  }
+
   function floatText(text, x, y, color) {
     ctx.font = 'bold 30px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -875,6 +1082,8 @@ export function createRenderer(canvas, wrap, assets) {
         if (e.type === 'cover-break') effects.push({ kind: 'debris', x: e.x, y: e.y, age: 0 });
         if (e.type === 'dodge') effects.push({ kind: 'miss', x: e.x, y: e.y, age: 0 });
         if (e.type === 'kick') effects.push({ kind: 'kick', x: e.x, y: e.y, age: 0 });
+        if (e.type === 'ceiling-break') effects.push({ kind: 'debris', x: e.x, y: e.y, age: 0 });
+        if (e.type === 'land') effects.push({ kind: 'explode', x: e.x, y: e.y + 20, radius: 90, age: 0 });
       }
     },
     reset() {
@@ -896,7 +1105,14 @@ export function createRenderer(canvas, wrap, assets) {
         ctx.scale(cam.z, cam.z);
         ctx.translate(-cx, -cy);
       }
-      ctx.drawImage(assets.arena.img, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+      // 천장이 울리는 장면(쿠쿵!): 화면이 흔들린다
+      if (killcam?.shot.mode === 'rumble' && !reducedMotion) ctx.translate(Math.sin(time * 70) * 12, Math.cos(time * 53) * 9);
+      const story = match.story;
+      // 스토리 모드 2스테이지는 복도 배경
+      ctx.drawImage((story?.stage === 'corridor' ? assets.corridor : assets.arena).img, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+      if (story?.elevator) drawElevator(story.elevator);
+      if (story?.turrets) for (const t of story.turrets) drawTurret(t, story, time, reducedMotion);
+      if (story?.ceiling) drawCeiling(story.ceiling, time, reducedMotion);
 
       // 배경 레일은 장식이므로 정확한 판정 Y에 기준선을 덧그린다.
       ctx.lineWidth = 2;
@@ -916,11 +1132,12 @@ export function createRenderer(canvas, wrap, assets) {
       for (const p of match.players) {
         if (!paused && recoil[p.id] > 0) recoil[p.id] -= dt;
         if (p.entering) continue; // 줄 타고 내려오는 요원은 헬리콥터 위에 그린다
-        if (cut && p.id === cut.bossId) continue; // 엔딩 컷씬의 스미스 요원은 따로 그린다
+        if (cut && p.id === cut.bossId) continue; // 엔딩 컷씬의 보스는 따로 그린다
         if (cut && p.id === cut.heroId) {
-          // 컷씬의 주인공: 권총을 들고 스미스 요원을 겨누며, 발차기 때 앞으로 뛰어든다
-          const pose = { ...p, x: cut.hero.x, y: cut.hero.y - cut.hero.lunge * 50, aim: cut.hero.aim, weapon: 'pistol' };
+          // 컷씬의 주인공: 권총(R-10 컷씬 끝에는 RPG)을 들고 보스를 겨누며, 발차기 때 앞으로 뛰어든다
+          const pose = { ...p, x: cut.hero.x, y: cut.hero.y - cut.hero.lunge * 50, aim: cut.hero.aim, weapon: cut.hero.weapon };
           drawPlayer(pose, { moveAxis: 0, aiming: false }, time, reducedMotion);
+          if (cut.hero.weapon === 'rpg' && !cut.rocket) drawHeldRpg(pose);
           continue;
         }
         drawPlayer(p, inputs[p.id], time, reducedMotion);
@@ -991,6 +1208,20 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
           continue;
         }
+        if (b.weapon === 'turret') {
+          // 복도 포탑 포탄: 검은 쇳덩이 + 노란 불꽃 꼬리
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate(Math.atan2(b.vy, b.vx));
+          ctx.fillStyle = '#FFB23F';
+          ctx.beginPath(); ctx.moveTo(-10, -6); ctx.lineTo(-28 - (reducedMotion ? 0 : Math.random() * 8), 0); ctx.lineTo(-10, 6); ctx.fill();
+          ctx.fillStyle = '#2A2E35';
+          ctx.strokeStyle = '#FFD45E';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.ellipse(0, 0, 14, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.restore();
+          continue;
+        }
         const rocket = b.weapon === 'rpg';
         const { img } = assets[rocket ? 'rocket' : 'bullet'];
         const sniper = b.weapon === 'sniper';
@@ -1004,10 +1235,11 @@ export function createRenderer(canvas, wrap, assets) {
       }
 
       if (match.jet) drawJet(match.jet);
-      if (cut) drawCutsceneActors(match, cut, time, reducedMotion);
+      if (cut?.kind === 'r10') drawR10Cutscene(match, cut, time, reducedMotion);
+      else if (cut) drawCutsceneActors(match, cut, time, reducedMotion);
       if (match.story) {
         drawStoryCraft(match.story, time, reducedMotion);
-        for (const p of match.players) if (p.entering) drawRappel(p, inputs[p.id], time, reducedMotion);
+        for (const p of match.players) if (p.entering) drawEntering(p, inputs[p.id], time, reducedMotion);
       }
 
       if (!paused) for (const fx of effects) fx.age += dt;

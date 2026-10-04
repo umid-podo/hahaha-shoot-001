@@ -1,32 +1,77 @@
-import { ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET } from './config.js';
-import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng } from './state.js';
+import {
+  ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS,
+} from './config.js';
+import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers } from './state.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
 
 /**
- * 스토리 모드(싱글 플레이). 플레이어(P1, 지구방위팀) 혼자 ISB팀 요원들을 웨이브마다 상대한다.
- * 1웨이브: 요원 1명(돌격소총) → 2웨이브: 헬리콥터에서 요원 2명 → 3웨이브: 헬리콥터에서 요원 3명
- * → 보스전: 전투기가 헬리콥터를 격추하고, 건쉽에서 스미스 요원(권총 + 보조무기 + 수류탄)이 내려온다. 스미스 요원을 쓰러뜨리면 승리.
- * 2·3웨이브 요원의 주무기는 RPG·저격총·아킴보 석궁을 뺀 주무기 중 무작위. 스미스 요원 말고는 보조무기·수류탄을 쓰지 않는다.
+ * 스토리 모드(싱글 플레이). 플레이어(P1, 지구방위팀) 혼자 ISB팀 요원들을 웨이브마다 상대한다. 스테이지는 두 개다.
+ * 1스테이지 옥상: 1웨이브 요원 1명(돌격소총) → 2웨이브 헬리콥터에서 요원 2명 → 3웨이브 요원 3명
+ *   → 중간보스: 전투기가 헬리콥터를 격추하고, 건쉽에서 스미스 요원(권총 + 보조무기 + 수류탄)이 내려온다.
+ *   스미스 요원을 쓰러뜨리면 엔딩 컷씬(발차기로 건물 밖으로) 뒤 다음 스테이지로. 스테이지를 깰 때마다 체력 100% 회복.
+ * 2스테이지 복도: 엘리베이터에서 요원이 나온다. 1웨이브 보통 요원 1명(무작위 무기) → 2웨이브 쉬움 돌격소총 + 보통 저격총
+ *   → 3웨이브 쉬움 요원 4명(쌍권총·권총·권총·돌격소총) → 보스전: 천장을 부수고 R-10(레이저 캐논, 체력 600)이 나온다.
+ *   R-10을 쓰러뜨리면 RPG 엔딩 컷씬 뒤 승리. 복도에는 전투기 대신 벽 포탑 2개가 플레이어를 쏜다(config.js TURRET).
+ * 일반 요원의 무작위 주무기는 RPG·저격총·아킴보 석궁을 뺀 주무기 중 하나. 스미스 요원 말고는 보조무기·수류탄을 쓰지 않는다.
  * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스는 스토리 설정(밸런스 칸)에서 바꾼다.
  */
 export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'crossbow'].includes(id));
 export const BOSS_NAME = '스미스 요원';
+export const R10_NAME = 'R-10';
 
-/** 웨이브 구성. from: 'start'(경기 시작부터 서 있음)·'heli'(헬리콥터)·'gunship'(건쉽). weapon 'random'은 STORY_WEAPONS 중 무작위. */
+export const STAGES = {
+  rooftop: { num: 1, name: '옥상' },
+  corridor: { num: 2, name: '복도' },
+};
+
+/**
+ * 웨이브 구성. from: 'start'(경기 시작부터 서 있음)·'heli'(헬리콥터)·'gunship'(건쉽)·'elevator'(엘리베이터)·'ceiling'(천장을 부수고).
+ * weapon 'random'은 STORY_WEAPONS 중 무작위. agents가 있으면 요원마다 { weapon, difficulty }(difficulty는 설정이 '기획대로'일 때).
+ * boss: 'smith'(중간보스)·'r10'(마지막 보스). end: 웨이브 마지막 요원을 쓰러뜨렸을 때의 장면(killcamShots).
+ * killLine: 그 웨이브의 마지막이 아닌 요원을 쓰러뜨렸을 때 나오는 한마디(없으면 LAST_WORDS 중 무작위).
+ */
 export const WAVES = [
-  { title: '1웨이브', count: 1, weapon: 'rifle', from: 'start' },
-  { title: '2웨이브', count: 2, weapon: 'random', from: 'heli' },
-  { title: '3웨이브', count: 3, weapon: 'random', from: 'heli' },
-  { title: '보스전', count: 1, weapon: 'pistol', from: 'gunship', boss: true },
-];
+  { stage: 'rooftop', title: '1웨이브', count: 1, weapon: 'rifle', from: 'start', end: 'radio' },
+  { stage: 'rooftop', title: '2웨이브', count: 2, weapon: 'random', from: 'heli', end: 'hero' },
+  { stage: 'rooftop', title: '3웨이브', count: 3, weapon: 'random', from: 'heli', end: 'smith' },
+  { stage: 'rooftop', title: '중간보스', count: 1, weapon: 'pistol', from: 'gunship', boss: 'smith' },
+  { stage: 'corridor', title: '1웨이브', count: 1, weapon: 'random', from: 'elevator', end: 'corridor-call' },
+  {
+    stage: 'corridor', title: '2웨이브', from: 'elevator', end: 'eikk', killLine: '나 이제 승급인데!!!',
+    agents: [{ weapon: 'rifle', difficulty: 'easy' }, { weapon: 'sniper', difficulty: 'normal' }],
+  },
+  {
+    stage: 'corridor', title: '3웨이브', from: 'elevator', end: 'rumble',
+    agents: ['dual', 'pistol', 'pistol', 'rifle'].map((weapon) => ({ weapon })),
+  },
+  { stage: 'corridor', title: '보스전', count: 1, from: 'ceiling', boss: 'r10' },
+].map((w) => ({ ...w, count: w.agents?.length ?? w.count }));
+
+/** '복도 2웨이브' */
+export const waveLabel = (i) => `${STAGES[WAVES[i].stage].name} ${WAVES[i].title}`;
+/** 스테이지 안에서 몇 번째 웨이브인지 { n, total } */
+export function stageProgress(i) {
+  const list = WAVES.filter((w) => w.stage === WAVES[i].stage);
+  return { n: list.indexOf(WAVES[i]) + 1, total: list.length };
+}
+/** 화면에 보여 줄 웨이브: 싸우는 중이면 그 웨이브, 웨이브 사이(클리어·등장 연출)면 다음에 올 웨이브 */
+export function currentWave(story) {
+  return ['fight', 'drop'].includes(story.phase) ? story.wave : Math.min(story.wave + 1, WAVES.length - 1);
+}
 
 /**
  * 웨이브별 요원 밸런스 기본값. damage·bulletSpeed·speed는 %, radius는 히트박스 반지름.
- * secondary(보스만): 보조무기 id 또는 'random'(경기마다 무작위).
+ * difficulty 'mixed'(기획대로)는 요원마다 WAVES의 난이도를 쓴다(복도 2웨이브: 쉬움·보통).
+ * secondary(스미스 요원만): 보조무기 id 또는 'random'(경기마다 무작위).
  */
 export function defaultStory() {
-  const agent = (hp) => ({ hp, difficulty: 'normal', damage: 100, bulletSpeed: 100, speed: 100, radius: 30 });
-  return { waves: [agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' }] };
+  const agent = (hp, difficulty = 'normal') => ({ hp, difficulty, damage: 100, bulletSpeed: 100, speed: 100, radius: 30 });
+  return {
+    waves: [
+      agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
+      agent(500), agent(300, 'mixed'), agent(200, 'easy'), { ...agent(600), radius: 48 },
+    ],
+  };
 }
 
 /** 저장된 값을 기본값 위에 덮고, 범위·선택지 밖의 값은 기본값으로 되돌린다. */
@@ -35,12 +80,13 @@ export function normalizeStory(saved) {
   const waves = Array.isArray(saved?.waves) ? saved.waves : [];
   story.waves.forEach((def, i) => {
     const w = waves[i] ?? {};
+    const mixable = def.difficulty === 'mixed';
     for (const key of Object.keys(STORY_FIELDS)) {
       const f = STORY_FIELDS[key];
       const v = Number(w[key]);
       if (w[key] !== undefined && w[key] !== '' && Number.isFinite(v)) def[key] = Math.min(f.max, Math.max(f.min, Math.round(v)));
     }
-    if (DIFFICULTY[w.difficulty]) def.difficulty = w.difficulty;
+    if (DIFFICULTY[w.difficulty] || (mixable && w.difficulty === 'mixed')) def.difficulty = w.difficulty;
     if ('secondary' in def && (w.secondary === 'random' || SECONDARY_IDS.includes(w.secondary))) def.secondary = w.secondary;
   });
   return story;
@@ -68,24 +114,44 @@ const STRIKE_MISSILE_SPEED = 1500;
 const FALL_TIME = 1.4;         // 격추된 헬리콥터가 떨어지는 시간
 const GUNSHIP_DELAY = 0.8;     // 격추 뒤 건쉽이 나타나기까지
 const OFF = 320;               // 화면 밖 대기 거리
+// 복도: 엘리베이터(위쪽 벽 가운데)와 천장
+export const ELEVATOR = { x: ARENA_WIDTH / 2, y: 34, w: 170 };
+const ELEVATOR_OPEN_TIME = 0.6; // 문이 다 열리거나 닫히는 시간
+const WALK_TIME = 1.0;          // 엘리베이터에서 걸어 나와 자기 자리까지
+const WALK_GAP = 0.35;
+export const CEILING_X = ARENA_WIDTH / 2 + 260; // R-10이 천장을 부수고 떨어지는 자리
+export const CRACK_TIME = 1.2;  // 천장이 흔들리다 부서지기까지
+const LAND_TIME = 0.7;          // R-10이 떨어져 내려앉는 시간
+const TURRET_MUZZLE = 44;
+const TURRET_SHELL_LIFE = 4;
 
 const ISB = SLOTS.find((s) => s.team === 'isb');
 
 /**
  * 스토리 모드 경기. playerPick은 플레이어(P1) 선택, settings는 defaultStory() 모양.
- * 1웨이브 요원은 경기 시작부터 서 있다.
+ * 1웨이브 요원은 경기 시작부터 서 있다. resume({ wave, hp })을 주면 저장한 웨이브가 오는 장면부터 그 체력으로 이어 한다.
  */
-export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now()) {
+export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null) {
   const player = createPlayer(SLOTS[0], playerPick);
   const match = createMatchWith([player], seed);
   const rng = createRng(seed ^ 0x5eed);
+  const start = Math.min(WAVES.length - 1, Math.max(0, Math.floor(Number(resume?.wave)) || 0));
   match.story = {
-    wave: 0, phase: 'fight', timer: 0, settings: normalizeStory(settings), rng,
+    stage: 'rooftop', wave: 0, phase: 'fight', timer: 0, settings: normalizeStory(settings), rng,
     brains: [], roster: [], nextId: 1,
-    carrier: null, jet: null, missile: null,
-    banner: banner(WAVES[0].title, waveInfo(0, settings)),
+    carrier: null, jet: null, missile: null, elevator: null, ceiling: null, turrets: null,
+    banner: banner(waveLabel(0), waveInfo(0, settings)),
+    started: start > 0,
   };
-  spawnWave(match, {}, 0); // 입력 칸은 경기를 시작할 때 createInputs(match.players)로 만든다
+  if (resume?.hp > 0) player.hp = Math.min(player.maxHp, Math.round(resume.hp));
+  if (start === 0) {
+    spawnWave(match, {}, 0); // 입력 칸은 경기를 시작할 때 createInputs(match.players)로 만든다
+    return match;
+  }
+  // 이어하기: 바로 앞 웨이브를 깬 직후처럼 시작해, 저장한 웨이브의 요원이 오는 장면부터
+  if (WAVES[start].stage === 'corridor') setupCorridor(match);
+  Object.assign(match.story, { wave: start - 1, phase: 'clear', timer: CLEAR_TIME / 2 });
+  match.story.banner = banner('이어하기', `${waveLabel(start)}부터`);
   return match;
 }
 
@@ -93,7 +159,8 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
 export function waveInfo(index, settings) {
   const wave = WAVES[index];
   const hp = normalizeStory(settings).waves[index].hp;
-  return wave.boss ? `${BOSS_NAME} · 체력 ${hp}` : `요원 ${wave.count}명 · 체력 ${hp}`;
+  const who = wave.boss === 'smith' ? BOSS_NAME : wave.boss === 'r10' ? R10_NAME : `요원 ${wave.count}명`;
+  return `${who} · 체력 ${hp}`;
 }
 
 function banner(text, sub = '') {
@@ -102,35 +169,47 @@ function banner(text, sub = '') {
 
 const pick = (rng, list) => list[Math.floor(rng() * list.length) % list.length];
 
-/** 웨이브 index의 요원들을 만든다. 헬리콥터·건쉽으로 오는 웨이브는 차례로 줄을 타고 내려온다(entering). */
+/** 웨이브 index의 요원들을 만든다. 헬리콥터·건쉽·엘리베이터·천장으로 오는 웨이브는 차례로 들어온다(entering). */
 function spawnWave(match, inputs, index) {
   const story = match.story;
   const wave = WAVES[index];
   const cfg = story.settings.waves[index];
-  const center = story.carrier?.x ?? ARENA_WIDTH / 2;
+  const center = wave.from === 'ceiling' ? CEILING_X : wave.from === 'elevator' ? ELEVATOR.x : story.carrier?.x ?? ARENA_WIDTH / 2;
   for (let i = 0; i < wave.count; i++) {
+    const spec = wave.agents?.[i] ?? {};
     const x = Math.min(MAX_X, Math.max(MIN_X, center + (i - (wave.count - 1) / 2) * DROP_SPREAD));
-    const weapon = wave.weapon === 'random' ? pick(story.rng, STORY_WEAPONS) : wave.weapon;
+    const kind = spec.weapon ?? wave.weapon;
+    const weapon = kind === 'random' ? pick(story.rng, STORY_WEAPONS) : kind;
     const id = wave.boss ? 'BOSS' : `E${story.nextId++}`;
+    const smith = wave.boss === 'smith', r10 = wave.boss === 'r10';
     const p = createPlayer({ ...ISB, id }, {
       ai: true, x, weapon,
-      // 스미스 요원은 권총을 든 요원 1 그림을 크게 그린다
-      characterId: wave.boss ? 'isb-agent-1' : pick(story.rng, AI_CHARACTERS),
-      name: wave.boss ? BOSS_NAME : undefined,
-      // 스미스 요원만 보조무기·수류탄을 쓴다
-      primaryOnly: !wave.boss, boss: !!wave.boss, scale: wave.boss ? 1.2 : undefined,
-      secondary: wave.boss ? (cfg.secondary === 'random' ? pick(story.rng, SECONDARY_IDS) : cfg.secondary) : undefined,
+      // 스미스 요원은 권총을 든 요원 1 그림을 크게, R-10은 드론 그림을 크게 그린다
+      characterId: smith ? 'isb-agent-1' : r10 ? 'r10' : pick(story.rng, AI_CHARACTERS),
+      name: smith ? BOSS_NAME : r10 ? R10_NAME : undefined,
+      // 스미스 요원만 보조무기·수류탄을 쓴다(R-10은 레이저 캐논 전용)
+      primaryOnly: !smith, boss: !!wave.boss, scale: smith ? 1.2 : r10 ? 1.6 : undefined,
+      secondary: smith ? (cfg.secondary === 'random' ? pick(story.rng, SECONDARY_IDS) : cfg.secondary) : undefined,
       maxHp: cfg.hp, radius: cfg.radius, bulletSpeedScale: cfg.bulletSpeed / 100,
       damageScale: cfg.damage / 100, speedScale: cfg.speed / 100,
     });
-    if (wave.from !== 'start') {
-      p.entering = { t: -i * DROP_GAP, duration: DROP_TIME, fromY: CARRIER_Y };
+    if (wave.from === 'heli' || wave.from === 'gunship') {
+      p.entering = { kind: 'rope', t: -i * DROP_GAP, duration: DROP_TIME, fromY: CARRIER_Y };
       p.y = CARRIER_Y;
+    } else if (wave.from === 'elevator') {
+      // 엘리베이터 안에서 차례로 걸어 나와 자기 자리로
+      p.entering = { kind: 'walk', t: -i * WALK_GAP, duration: WALK_TIME, fromX: ELEVATOR.x, fromY: ELEVATOR.y, toX: x };
+      p.x = p.previousX = ELEVATOR.x;
+      p.y = ELEVATOR.y;
+    } else if (wave.from === 'ceiling') {
+      // 천장에서 떨어진다: 처음엔 카메라 가까이(크게) 있다가 바닥(레일)에 내려앉는다
+      p.entering = { kind: 'fall', t: 0, duration: LAND_TIME };
     }
     match.players.push(p);
     inputs[id] = createInput(p);
     addStats(match, p);
-    story.brains.push(createAI(id, cfg.difficulty, Math.floor(story.rng() * 2 ** 32)));
+    const difficulty = cfg.difficulty === 'mixed' ? spec.difficulty ?? 'normal' : cfg.difficulty;
+    story.brains.push(createAI(id, difficulty, Math.floor(story.rng() * 2 ** 32)));
     story.roster.push(p);
   }
 }
@@ -141,12 +220,66 @@ export function holdsResult(match) {
 }
 
 const enemies = (match) => match.players.filter((p) => p.team === 'isb');
+const heroOf = (match) => match.players.find((p) => p.team === 'earth');
+
+/** 복도 스테이지 준비: 엘리베이터·포탑, 새 엄폐물. 전투기는 나오지 않는다. */
+function setupCorridor(match) {
+  const story = match.story;
+  story.stage = 'corridor';
+  story.elevator = { open: 0, target: 0 };
+  story.turrets = TURRETS.map((t) => ({ ...t, aim: t.dir > 0 ? 0 : Math.PI, fireTimer: 0 }));
+  story.turretTimer = TURRET.firstDelay;
+  story.turretFiring = false;
+  match.covers = createCovers(match.players.filter((p) => p.team === 'earth'));
+  match.jet = null;
+  match.jetTimer = Infinity;
+}
+
+/**
+ * 스테이지 클리어(스미스 요원 엔딩 컷씬 뒤): 체력 100% 회복, 경기장을 복도로 바꾸고 카운트다운부터 다시.
+ * 쓰러진 스미스 요원은 치우고(결과 화면용으로 roster에는 남는다), 복도 1웨이브 요원이 엘리베이터로 온다.
+ */
+function enterCorridor(match, events) {
+  const story = match.story;
+  match.cutscene = null;
+  match.players = match.players.filter((p) => p.team !== 'isb');
+  story.brains = [];
+  match.projectiles = [];
+  const hero = heroOf(match);
+  Object.assign(hero, {
+    hp: hero.maxHp, hurt: 0, x: ARENA_WIDTH / 2, previousX: ARENA_WIDTH / 2, y: RAIL_Y.earth, dash: null,
+    cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, sinceShot: Infinity,
+  });
+  setupCorridor(match);
+  Object.assign(story, { carrier: null, jet: null, missile: null, phase: 'clear', timer: 0 });
+  story.banner = banner(`${STAGES.corridor.num}스테이지 · ${STAGES.corridor.name}`, '체력 100% 회복!');
+  match.phase = 'countdown';
+  match.countdown = COUNTDOWN;
+  events.push({ type: 'stage', stage: 'corridor' }, { type: 'heal', playerId: hero.id });
+}
 
 /** 헬리콥터·건쉽이 오른쪽 화면 밖에서 날아온다. 요원·보스가 오므로 경고음(배경음악이 작아짐)을 울린다. */
 function callCarrier(story, kind, events) {
   events.push({ type: 'alarm', boss: kind === 'gunship' });
   story.carrier = { kind, x: ARENA_WIDTH + OFF, y: CARRIER_Y, targetX: ARENA_WIDTH / 2, state: 'in', t: 0, angle: 0 };
   story.phase = 'arrive';
+}
+
+/** 다음 웨이브 요원을 부른다: 헬리콥터, 엘리베이터 문 열기, 또는 천장 흔들기 */
+function callNext(story, next, events) {
+  const { from, boss } = WAVES[next];
+  story.phase = 'arrive';
+  if (from === 'elevator') {
+    events.push({ type: 'alarm', boss: false }, { type: 'elevator' });
+    story.elevator.target = 1;
+  } else if (from === 'ceiling') {
+    events.push({ type: 'alarm', boss: true }, { type: 'rumble' });
+    story.ceiling = { x: CEILING_X, y: RAIL_Y.isb, t: 0 };
+    story.banner = banner('경고!', '천장이 무너진다!');
+  } else {
+    callCarrier(story, 'heli', events);
+    if (boss) story.banner = banner('경고!', '헬리콥터 접근 중');
+  }
 }
 
 function moveCarrier(story, dt) {
@@ -167,6 +300,16 @@ function moveCarrier(story, dt) {
     c.angle += 7 * dt;
     if (c.fall >= FALL_TIME) story.carrier = null;
   }
+}
+
+/** 엘리베이터 문: open이 target(0 닫힘·1 열림) 쪽으로 움직인다. 천장: 흔들리는 시간을 센다. */
+function moveCorridor(story, dt) {
+  const e = story.elevator;
+  if (e) {
+    const step = dt / ELEVATOR_OPEN_TIME;
+    e.open = e.target > e.open ? Math.min(e.target, e.open + step) : Math.max(e.target, e.open - step);
+  }
+  if (story.ceiling) story.ceiling.t += dt;
 }
 
 /** 보스전 직전: 전투기가 왼쪽에서 날아와 헬리콥터에 미사일을 쏴 격추한다. */
@@ -194,9 +337,85 @@ function moveStrike(story, dt, events) {
   }
 }
 
+/** 들어오는 중인 요원(줄 타기·엘리베이터에서 걸어 나오기·천장에서 떨어지기)을 움직인다. */
+function moveEntering(match, dt, events) {
+  for (const p of enemies(match)) {
+    const e = p.entering;
+    if (!e) continue;
+    e.t += dt;
+    const k = Math.max(0, Math.min(1, e.t / e.duration));
+    const railY = RAIL_Y[p.team];
+    if (e.kind === 'walk') {
+      // 먼저 엘리베이터 밖으로(아래로) 나온 뒤 옆으로 걸어 자기 자리로
+      p.y = e.fromY + (railY - e.fromY) * Math.min(1, k / 0.35);
+      const side = Math.max(0, (k - 0.35) / 0.65);
+      p.x = e.fromX + (e.toX - e.fromX) * side;
+    } else if (e.kind === 'rope') {
+      p.y = e.fromY + (railY - e.fromY) * k;
+    }
+    if (k >= 1) {
+      p.y = railY;
+      if (e.toX !== undefined) p.x = e.toX;
+      p.previousX = p.x;
+      p.entering = null;
+      if (e.kind === 'fall') events.push({ type: 'land', x: p.x, y: p.y });
+    }
+  }
+}
+
 /**
- * 고정 틱마다 step()이 부른다(경기 중일 때만). 웨이브 클리어 판정, 헬리콥터·건쉽·전투기 연출, 요원 내려오기를 진행한다.
- * 새 요원의 입력 칸은 inputs에, AI는 match.story.brains에 더한다.
+ * 복도 벽 포탑: 웨이브 전투 중에만 돈다. TURRET.burst초 동안 interval마다 살아 있는 플레이어 쪽으로 포탄을 쏘고,
+ * TURRET.rest초 쉬었다 다시 쏜다. 쉬는 동안에도 포신은 플레이어를 따라 돈다.
+ */
+function updateTurrets(match, dt, events) {
+  const story = match.story;
+  const hero = match.players.find((p) => p.team === 'earth' && p.alive);
+  if (!hero) return;
+  for (const t of story.turrets) t.aim = Math.atan2(hero.y - t.y, hero.x - t.x);
+  if (story.phase !== 'fight') return;
+  story.turretTimer -= dt;
+  if (story.turretFiring) {
+    if (story.turretTimer <= 1e-9) {
+      story.turretFiring = false;
+      story.turretTimer += TURRET.rest;
+      return;
+    }
+    for (const t of story.turrets) {
+      t.fireTimer -= dt;
+      if (t.fireTimer <= 1e-9) {
+        t.fireTimer += TURRET.interval;
+        fireTurret(match, t, hero, events);
+      }
+    }
+  } else if (story.turretTimer <= 1e-9) {
+    story.turretFiring = true;
+    story.turretTimer += TURRET.burst;
+    for (const t of story.turrets) t.fireTimer = TURRET.interval;
+    for (const t of story.turrets) fireTurret(match, t, hero, events);
+  }
+}
+
+/**
+ * 포탄 한 발: ISB팀 탄이라 요원은 맞지 않는다. 엄폐물에 막히고, 맞히거나 플레이어 레일 선에서 터져 폭발 피해를 준다.
+ * 쏜 쪽(ownerId)은 'turret'이라 결과 화면에 '포탑'으로 나온다.
+ */
+function fireTurret(match, t, hero, events) {
+  const aim = Math.atan2(hero.y - t.y, hero.x - t.x);
+  t.aim = aim;
+  const x = t.x + Math.cos(aim) * TURRET_MUZZLE, y = t.y + Math.sin(aim) * TURRET_MUZZLE;
+  match.projectiles.push({
+    id: match.nextProjectileId++, ownerId: 'turret', team: 'isb', weapon: 'turret',
+    x, y, previousX: x, previousY: y,
+    vx: Math.cos(aim) * TURRET.speed, vy: Math.sin(aim) * TURRET.speed,
+    life: TURRET_SHELL_LIFE, damage: TURRET.damage, connected: false,
+    splash: { ...TURRET.splash }, endY: RAIL_Y[hero.team],
+  });
+  events.push({ type: 'turret-fire', x: t.x, y: t.y });
+}
+
+/**
+ * 고정 틱마다 step()이 부른다(경기 중일 때만). 웨이브 클리어 판정, 헬리콥터·건쉽·전투기·엘리베이터·천장 연출,
+ * 요원 들어오기, 복도 포탑을 진행한다. 새 요원의 입력 칸은 inputs에, AI는 match.story.brains에 더한다.
  */
 export function updateStory(match, inputs, dt, events) {
   const story = match.story;
@@ -211,16 +430,10 @@ export function updateStory(match, inputs, dt, events) {
   }
   moveCarrier(story, dt);
   moveStrike(story, dt, events);
-  // 줄 타고 내려오기
-  for (const p of enemies(match)) {
-    const e = p.entering;
-    if (!e) continue;
-    e.t += dt;
-    const k = Math.max(0, Math.min(1, e.t / e.duration));
-    p.y = e.fromY + (RAIL_Y[p.team] - e.fromY) * k;
-    if (k >= 1) { p.y = RAIL_Y[p.team]; p.entering = null; }
-  }
-  // 연출 중에는 평소의 전투기가 나오지 않게 미룬다
+  moveCorridor(story, dt);
+  moveEntering(match, dt, events);
+  if (story.turrets) updateTurrets(match, dt, events);
+  // 연출 중에는 평소의 전투기가 나오지 않게 미룬다(복도에는 아예 나오지 않음)
   if (story.phase !== 'fight') match.jetTimer = Math.max(match.jetTimer, 2);
 
   const next = story.wave + 1;
@@ -229,7 +442,7 @@ export function updateStory(match, inputs, dt, events) {
       if (next < WAVES.length && enemies(match).every((p) => !p.alive)) {
         story.phase = 'clear';
         story.timer = 0;
-        story.banner = banner(`${WAVES[story.wave].title} 클리어!`, next === WAVES.length - 1 ? '' : '다음 요원들이 온다');
+        story.banner = banner(`${WAVES[story.wave].title} 클리어!`, WAVES[next].boss ? '' : '다음 요원들이 온다');
         events.push({ type: 'wave-clear', wave: story.wave });
       }
       break;
@@ -239,19 +452,29 @@ export function updateStory(match, inputs, dt, events) {
         // 쓰러진 요원은 경기장에서 치우고(결과 화면용으로 roster에는 남는다) 다음 웨이브를 부른다
         match.players = match.players.filter((p) => p.team !== 'isb' || p.alive);
         story.brains = story.brains.filter((b) => match.players.some((p) => p.id === b.playerId));
-        callCarrier(story, 'heli', events);
-        if (WAVES[next].boss) story.banner = banner('경고!', '헬리콥터 접근 중');
+        callNext(story, next, events);
       }
       break;
-    case 'arrive':
-      if (story.carrier?.state !== 'hover') break;
-      if (WAVES[next].from === 'gunship' && story.carrier.kind === 'heli') {
-        // 보스전: 전투기가 헬리콥터를 격추한다
-        story.phase = 'strike';
-        story.timer = 0;
-        story.jet = { x: -OFF, y: CARRIER_Y, dir: 1, fired: false };
-        story.banner = banner('전투기 출현!');
-        break;
+    case 'arrive': {
+      const { from } = WAVES[next];
+      if (from === 'elevator') {
+        if (story.elevator.open < 1) break;
+      } else if (from === 'ceiling') {
+        if (story.ceiling.t < CRACK_TIME) break;
+        // 천장이 무너진다: 폭발과 파편 속에서 R-10이 떨어진다
+        events.push({ type: 'explode', x: story.ceiling.x, y: story.ceiling.y + 40, radius: 190 });
+        events.push({ type: 'ceiling-break', x: story.ceiling.x, y: story.ceiling.y + 40 });
+        story.ceiling = null;
+      } else {
+        if (story.carrier?.state !== 'hover') break;
+        if (from === 'gunship' && story.carrier.kind === 'heli') {
+          // 중간보스: 전투기가 헬리콥터를 격추한다
+          story.phase = 'strike';
+          story.timer = 0;
+          story.jet = { x: -OFF, y: CARRIER_Y, dir: 1, fired: false };
+          story.banner = banner('전투기 출현!');
+          break;
+        }
       }
       story.phase = 'drop';
       story.wave = next;
@@ -259,6 +482,7 @@ export function updateStory(match, inputs, dt, events) {
       spawnWave(match, inputs, next);
       events.push({ type: 'wave', wave: next, title: WAVES[next].title });
       break;
+    }
     case 'strike':
       if (story.carrier) break;
       story.timer += dt;
@@ -271,17 +495,55 @@ export function updateStory(match, inputs, dt, events) {
       if (enemies(match).some((p) => p.entering)) break;
       story.phase = 'fight';
       if (story.carrier) story.carrier.state = 'out';
+      if (story.elevator) story.elevator.target = 0;
+      // R-10이 내려앉으면 도발 장면
+      if (WAVES[story.wave].boss === 'r10') startTaunt(match);
       break;
     default:
       break;
   }
 }
 
+/* ───────── 저장하기 · 이어하기 ─────────
+ * 일시정지 화면의 '저장하기'는 지금 싸우는 웨이브(웨이브 사이라면 다음에 올 웨이브)와 체력을 저장한다.
+ * 이어하기는 그 웨이브의 요원이 오는 장면부터 시작한다(쓰러뜨리던 요원은 처음부터 다시).
+ */
+
+/** 지금 저장하면 이어할 { wave, hp, label }. 저장할 수 없으면 null(플레이어가 쓰러졌거나 마지막 엔딩 컷씬). */
+export function checkpoint(match) {
+  const story = match.story;
+  const hero = story && heroOf(match);
+  if (!hero?.alive || match.phase === 'result') return null;
+  let wave = currentWave(story);
+  if (match.cutscene) {
+    if (WAVES[story.wave].boss === 'r10') return null; // 이미 스토리를 깼다
+    wave = story.wave + 1;
+  } else if (match.killcam?.waveEnd || (story.phase === 'fight' && enemies(match).every((p) => !p.alive))) {
+    wave = story.wave + 1;
+  }
+  wave = Math.min(wave, WAVES.length - 1);
+  // 다음 스테이지로 넘어가는 길이면 체력은 100% 회복된 값
+  const hp = WAVES[wave].stage !== story.stage ? hero.maxHp : hero.hp;
+  return { wave, hp, label: waveLabel(wave) };
+}
+
+/** 저장해 둔 값 검사: 웨이브 번호·체력·캐릭터 선택이 맞지 않으면 null. label은 지금 웨이브 이름으로 다시 만든다. */
+export function normalizeStorySave(save) {
+  const wave = Number(save?.wave), hp = Number(save?.hp);
+  if (!Number.isInteger(wave) || wave < 0 || wave >= WAVES.length || !(hp > 0) || typeof save.pick !== 'object' || !save.pick) return null;
+  const { characterId, weapon, secondary } = save.pick;
+  return {
+    wave, hp: Math.round(hp), label: waveLabel(wave), pick: { characterId, weapon, secondary },
+    savedAt: Number(save.savedAt) || 0,
+  };
+}
+
 /* ───────── 엔딩 컷씬 ─────────
- * 스미스 요원을 쓰러뜨리면 바로 끝나지 않고 컷씬이 나온다: 스미스 요원이 다시 일어나 주인공에게 달려들고,
- * 주인공은 권총을 쏘지만 스미스 요원은 모두 피한다. 코앞까지 온 스미스 요원을 주인공이 발로 차서
- * 옥상(건물) 밖으로 떨어뜨린다. 컷씬이 끝나면 승리 결과.
- * 시간표(초): 0~1 일어남, 1~4.2 달려듦(그동안 총 6발, 모두 피함), 4.2~4.7 발차기, 4.7~7 날아가 건물 밖으로 추락, ~8.2 끝.
+ * 보스를 쓰러뜨리면 바로 끝나지 않고 컷씬이 나온다.
+ * 스미스 요원(옥상 중간보스): 다시 일어나 주인공에게 달려들고, 주인공은 권총을 쏘지만 스미스 요원은 모두 피한다.
+ *   코앞까지 온 스미스 요원을 주인공이 발로 차서 옥상(건물) 밖으로 떨어뜨린다. 컷씬이 끝나면 2스테이지(복도)로.
+ *   시간표(초): 0~1 일어남, 1~4.2 달려듦(그동안 총 6발, 모두 피함), 4.2~4.7 발차기, 4.7~7 날아가 건물 밖으로 추락, ~8.2 끝.
+ * R-10(복도 보스): 아래 R-10 엔딩 컷씬. 끝나면 승리 결과.
  */
 export const CUTSCENE_TIME = 8.2;
 const RUN_START = 1, RUN_END = 4.2, KICK_AT = 4.5, FLY_END = 5.6, FALL_END = 7;
@@ -293,14 +555,19 @@ const DODGE_SPEED = 1300;       // 비키는 속도(초당)
 const STOP_GAP = 120;           // 주인공 앞 멈추는 거리
 const CUT_BULLET_SPEED = 1300;
 
-/** 마지막 웨이브(보스)를 쓰러뜨리면 결과 대신 컷씬을 시작하는지 */
+/** 보스(스미스 요원·R-10)를 쓰러뜨리면 결과·다음 웨이브 대신 컷씬을 시작하는지 */
 export function startsCutscene(match) {
-  if (!match.story || match.story.wave !== WAVES.length - 1) return false;
+  if (!match.story || !WAVES[match.story.wave].boss) return false;
   const hero = match.players.find((p) => p.team === 'earth' && p.alive);
-  return !!hero && !!match.players.find((p) => p.boss);
+  const boss = match.players.find((p) => p.boss);
+  return !!hero && !!boss && !boss.alive;
 }
 
 export function startCutscene(match) {
+  if (WAVES[match.story.wave].boss === 'r10') {
+    startR10Cutscene(match);
+    return;
+  }
   const hero = match.players.find((p) => p.team === 'earth' && p.alive);
   const boss = match.players.find((p) => p.boss);
   match.phase = 'cutscene';
@@ -310,10 +577,10 @@ export function startCutscene(match) {
   match.story.carrier = null;
   const dir = boss.x < ARENA_WIDTH / 2 ? -1 : 1; // 가까운 쪽 건물 끝으로 차 낸다
   match.cutscene = {
-    t: 0, heroId: hero.id, bossId: boss.id, bossScale: boss.scale,
+    kind: 'smith', t: 0, heroId: hero.id, bossId: boss.id, bossScale: boss.scale,
     from: { x: boss.x, y: boss.y }, to: { x: hero.x, y: hero.y - STOP_GAP }, dir,
     fired: 0, bullets: [], dodge: { x: 0, y: 0 }, kicked: false, screamed: false,
-    hero: { x: hero.x, y: hero.y, aim: hero.aim, lunge: 0 },
+    hero: { x: hero.x, y: hero.y, aim: hero.aim, lunge: 0, weapon: 'pistol' },
     smith: { x: boss.x, y: boss.y, scale: boss.scale, angle: 0, alpha: 1, standing: 0, trail: [] },
     caption: '',
   };
@@ -355,8 +622,12 @@ function dodgeOffset(c, base, dt) {
   return c.dodge;
 }
 
-/** 컷씬 한 틱. 끝나면 결과(지구방위팀 승리)로 넘어간다. */
+/** 컷씬 한 틱. 스미스 요원 컷씬이 끝나면 2스테이지(복도)로, R-10 컷씬이 끝나면 결과(지구방위팀 승리)로 넘어간다. */
 export function updateCutscene(match, dt, events) {
+  if (match.cutscene.kind === 'r10') {
+    updateR10Cutscene(match, dt, events);
+    return;
+  }
   const c = match.cutscene;
   const t = (c.t += dt);
   const { smith, hero } = c;
@@ -424,10 +695,114 @@ export function updateCutscene(match, dt, events) {
       c.screamed = true;
       events.push({ type: 'scream' });
     }
-    c.caption = t < FLY_END ? '퍽!!' : t < FALL_END ? `${BOSS_NAME}: 으아아아아…!` : `${BOSS_NAME}을 물리쳤다!`;
+    c.caption = t < FLY_END ? '퍽!!' : t < FALL_END ? `${BOSS_NAME}: 으아아아아…!` : `${BOSS_NAME}을 물리쳤다! 다음은 복도다!`;
   }
 
-  if (t >= CUTSCENE_TIME) {
+  if (t >= CUTSCENE_TIME) enterCorridor(match, events);
+}
+
+/* ───────── R-10 엔딩 컷씬 ─────────
+ * R-10을 쓰러뜨리면: R-10이 다시 떠올라 레이저 광선을 마구 쏘지만 주인공은 좌우로 피한다(모두 빗나감).
+ * 주인공 "후, RPG가 남아있었지." → R-10 "그게 무슨-" → 주인공이 RPG를 쏴 R-10을 폭발시키고 게임이 끝난다.
+ * 시간표(초): 0~0.8 떠오름, 0.8~3.6 레이저 난사, 3.6~5 주인공 대사, 5~6 R-10 대사, 6 RPG 발사, 명중하면 폭발, 9 끝.
+ */
+export const R10_CUTSCENE_TIME = 9;
+const R10_RISE = 0.8, R10_FIRE_END = 3.6, R10_LINE = 5, R10_SHOOT = 6;
+const R10_LASER_EVERY = 0.16;
+const R10_STEP_EVERY = 0.4;     // 주인공이 옆으로 비키는 간격
+const R10_STEP = 110;           // 비키는 거리
+const R10_MISS = [110, 230];    // 레이저가 주인공 옆으로 비껴 가는 거리(레일 선에서)
+const CUT_ROCKET_SPEED = 1400;
+
+function startR10Cutscene(match) {
+  const hero = match.players.find((p) => p.team === 'earth' && p.alive);
+  const boss = match.players.find((p) => p.boss);
+  match.phase = 'cutscene';
+  match.projectiles = [];
+  match.story.banner = null;
+  match.cutscene = {
+    kind: 'r10', t: 0, heroId: hero.id, bossId: boss.id,
+    hero: { x: hero.x, y: hero.y, aim: hero.aim, lunge: 0, weapon: 'pistol', baseX: hero.x, side: hero.x < ARENA_WIDTH / 2 ? 1 : -1 },
+    r10: { x: boss.x, y: boss.y, scale: boss.scale, alpha: 1, angle: 0, rise: 0 },
+    lasers: 0, steps: 0, rocket: null, boomed: false, booms: 0, caption: '',
+  };
+}
+
+function updateR10Cutscene(match, dt, events) {
+  const c = match.cutscene;
+  const t = (c.t += dt);
+  const { hero, r10 } = c;
+  const rng = match.story.rng;
+  r10.rise = Math.min(1, t / R10_RISE);
+
+  // 주인공: 레이저를 피해 좌우로 비킨다(벽에 막히면 반대로)
+  const steps = t < R10_FIRE_END ? Math.floor(Math.max(0, t - R10_RISE) / R10_STEP_EVERY) : c.steps;
+  while (c.steps < steps) {
+    c.steps++;
+    if (hero.baseX + hero.side * R10_STEP < MIN_X || hero.baseX + hero.side * R10_STEP > MAX_X) hero.side = -hero.side;
+    hero.baseX += hero.side * R10_STEP;
+    hero.side = -hero.side * (rng() < 0.3 ? -1 : 1);
+  }
+  hero.x += (hero.baseX - hero.x) * Math.min(1, dt * 18);
+
+  // 레이저 난사: 주인공이 있던 자리 옆으로 비껴 간다
+  if (t >= R10_RISE && t < R10_FIRE_END) {
+    while (c.lasers < Math.floor((t - R10_RISE) / R10_LASER_EVERY) + 1) {
+      c.lasers++;
+      const side = c.lasers % 2 ? 1 : -1;
+      const miss = R10_MISS[0] + rng() * (R10_MISS[1] - R10_MISS[0]);
+      let x2 = hero.x + side * miss;
+      if (x2 < 30 || x2 > ARENA_WIDTH - 30) x2 = hero.x - side * miss;
+      const aim = Math.atan2(hero.y - r10.y, x2 - r10.x);
+      const x1 = r10.x + Math.cos(aim) * MUZZLE_OFFSET * r10.scale, y1 = r10.y + Math.sin(aim) * MUZZLE_OFFSET * r10.scale;
+      // 바닥(레일 선 조금 아래)까지 뻗는다
+      const y2 = hero.y + 70, x3 = x1 + (x2 - x1) * ((y2 - y1) / (hero.y - y1));
+      events.push({ type: 'fire', playerId: c.bossId, weapon: 'laser' });
+      events.push({ type: 'laser', playerId: c.bossId, x1, y1, x2: x3, y2 });
+      if (c.lasers % 3 === 0) events.push({ type: 'dodge', x: hero.x, y: hero.y });
+    }
+  }
+  hero.aim = Math.atan2(r10.y - hero.y, r10.x - hero.x);
+  if (t >= R10_FIRE_END) hero.weapon = 'rpg';
+
+  if (t < R10_RISE) c.caption = 'R-10: 삐-빅! 오류… 전부 쏴 버린다!';
+  else if (t < R10_FIRE_END) c.caption = 'R-10이 레이저 광선을 마구 쏜다!';
+  else if (t < R10_LINE) c.caption = '주인공: 후, RPG가 남아있었지.';
+  else if (t < R10_SHOOT) c.caption = 'R-10: 그게 무슨-';
+
+  // RPG 발사 → 명중하면 연달아 폭발
+  if (!c.rocket && t >= R10_SHOOT) {
+    const x = hero.x + Math.cos(hero.aim) * MUZZLE_OFFSET, y = hero.y + Math.sin(hero.aim) * MUZZLE_OFFSET;
+    c.rocket = { x, y, angle: hero.aim, hit: false };
+    events.push({ type: 'fire', playerId: c.heroId, weapon: 'rpg' });
+    c.caption = '쾅!!';
+  }
+  const rocket = c.rocket;
+  if (rocket && !rocket.hit) {
+    const angle = Math.atan2(r10.y - rocket.y, r10.x - rocket.x);
+    rocket.angle = angle;
+    const move = CUT_ROCKET_SPEED * dt;
+    const dist = Math.hypot(r10.x - rocket.x, r10.y - rocket.y);
+    if (dist <= move + 20) {
+      rocket.hit = true;
+      c.boomAt = t;
+    } else {
+      rocket.x += Math.cos(angle) * move;
+      rocket.y += Math.sin(angle) * move;
+    }
+  }
+  if (c.boomAt !== undefined) {
+    // 0.25초 간격으로 세 번 펑, 그동안 R-10은 사라진다
+    while (c.booms < 3 && t >= c.boomAt + c.booms * 0.25) {
+      const k = c.booms++;
+      events.push({ type: 'explode', x: r10.x + (k - 1) * 50, y: r10.y + (k % 2 ? 30 : -10), radius: 150 + k * 40 });
+      if (k === 0) events.push({ type: 'cover-break', x: r10.x, y: r10.y });
+    }
+    r10.alpha = Math.max(0, 1 - (t - c.boomAt) / 0.5);
+    c.caption = t < c.boomAt + 1 ? '콰콰쾅!!' : `${R10_NAME}을 물리쳤다! 스토리 클리어!`;
+  }
+
+  if (t >= R10_CUTSCENE_TIME) {
     match.cutscene.done = true;
     match.phase = 'result';
     match.winner = 'earth';
@@ -437,11 +812,15 @@ export function updateCutscene(match, dt, events) {
 
 /* ───────── 처치 컷씬(킬캠) ─────────
  * 스토리 모드에서 요원을 쓰러뜨릴 때마다 경기가 잠깐 멈추고 카메라가 쓰러진 요원을 확대하며 마지막 한마디가 나온다.
- * 웨이브의 마지막 요원이면 웨이브마다 다른 장면이 이어진다(보스는 엔딩 컷씬).
- *   1웨이브: 쓰러진 요원이 무전기로 본부에 지원 요청 → 헬리콥터가 오는 이유
- *   2웨이브: 카메라가 주인공에게 넘어가 한마디
- *   3웨이브: 화면이 붉어지고 스미스 요원이 무전으로 경고 → 보스전
- * 장면은 shots 목록: { until(초), focus('victim'|'hero'|null), zoom, caption, mode }. 앞에서부터 until까지 그 장면.
+ * 웨이브의 마지막 요원이면 웨이브마다 다른 장면(WAVES의 end)이 이어진다(보스는 엔딩 컷씬).
+ *   옥상 1웨이브: 쓰러진 요원이 무전기로 본부에 지원 요청 → 헬리콥터가 오는 이유
+ *   옥상 2웨이브: 카메라가 주인공에게 넘어가 한마디
+ *   옥상 3웨이브: 화면이 붉어지고 스미스 요원이 무전으로 경고 → 중간보스
+ *   복도 1웨이브: 요원이 무전으로 "요원들은 복도로 와라!"
+ *   복도 2웨이브: 첫 요원은 "나 이제 승급인데!!!", 마지막 요원 뒤 주인공이 "에잇크."
+ *   복도 3웨이브: 주인공 "이 정도냐? 들어와—" (쿠쿵!) "…이게 뭐야?" → 천장이 부서지며 R-10
+ * 장면은 shots 목록: { until(초), focus('victim'|'hero'|null), zoom, caption, mode, bubble }. 앞에서부터 until까지 그 장면.
+ * R-10이 내려앉을 때의 도발 장면(startTaunt)도 같은 방식으로 보여 준다.
  */
 export const LAST_WORDS = [
   '으윽… 보고서를… 아직 못 썼는데…',
@@ -455,35 +834,62 @@ export const LAST_WORDS = [
 ];
 const KILL_TIME = 1.4;
 
-function killcamShots(wave, line) {
+function killcamShots(end, line) {
   const kill = { until: KILL_TIME, focus: 'victim', zoom: 1.8, caption: `요원: ${line}`, mode: 'kill' };
-  if (wave === 0) {
-    return [kill,
-      { until: 2.4, focus: 'victim', zoom: 2.1, caption: '(치지직…) 요원이 무전기를 꺼낸다', mode: 'radio' },
-      { until: 3.9, focus: 'victim', zoom: 2.1, caption: '요원(무전): 본부… 지원 요청… 헬기를 보내라…', mode: 'radio' }];
+  switch (end) {
+    case 'radio':
+      return [kill,
+        { until: 2.4, focus: 'victim', zoom: 2.1, caption: '(치지직…) 요원이 무전기를 꺼낸다', mode: 'radio', bubble: '치지직…' },
+        { until: 3.9, focus: 'victim', zoom: 2.1, caption: '요원(무전): 본부… 지원 요청… 헬기를 보내라…', mode: 'radio', bubble: '지원 요청!' }];
+    case 'hero':
+      return [kill, { until: 3.4, focus: 'hero', zoom: 1.7, caption: '주인공: 아직 몸풀기도 안 끝났다고!', mode: 'hero' }];
+    case 'smith':
+      return [kill,
+        { until: 2.4, focus: null, zoom: 1, caption: '(치지직…) 낯선 무전이 끼어든다…', mode: 'smith' },
+        { until: 4.4, focus: null, zoom: 1, caption: `${BOSS_NAME}(무전): 쓸모없는 녀석들… 내가 직접 상대해 주지.`, mode: 'smith' }];
+    case 'corridor-call':
+      return [kill,
+        { until: 2.4, focus: 'victim', zoom: 2.1, caption: '(치지직…) 요원이 무전기를 꺼낸다', mode: 'radio', bubble: '치지직…' },
+        { until: 4.0, focus: 'victim', zoom: 2.1, caption: '요원(무전): 요원들은 복도로 와라!', mode: 'radio', bubble: '복도로 와라!' }];
+    case 'eikk':
+      return [kill, { until: 3.2, focus: 'hero', zoom: 1.8, caption: '주인공: 에잇크.', mode: 'sigh' }];
+    case 'rumble':
+      return [kill,
+        { until: 3.2, focus: 'hero', zoom: 1.7, caption: '주인공: 이 정도냐? 들어와—', mode: 'hero' },
+        { until: 4.4, focus: null, zoom: 1, caption: '(쿠쿵!)', mode: 'rumble' },
+        { until: 5.8, focus: 'hero', zoom: 1.8, caption: '주인공: …이게 뭐야?', mode: 'what' }];
+    default:
+      return [kill];
   }
-  if (wave === 1) {
-    return [kill,
-      { until: 3.4, focus: 'hero', zoom: 1.7, caption: '주인공: 아직 몸풀기도 안 끝났다고!', mode: 'hero' }];
-  }
-  if (wave === 2) {
-    return [kill,
-      { until: 2.4, focus: null, zoom: 1, caption: '(치지직…) 낯선 무전이 끼어든다…', mode: 'smith' },
-      { until: 4.4, focus: null, zoom: 1, caption: `${BOSS_NAME}(무전): 쓸모없는 녀석들… 내가 직접 상대해 주지.`, mode: 'smith' }];
-  }
-  return [kill];
 }
 
 /** 쓰러진 요원 victim으로 킬캠을 시작한다. waveEnd면 그 웨이브의 마무리 장면까지. */
 export function startKillcam(match, victim, waveEnd) {
   const story = match.story;
-  const line = LAST_WORDS[Math.floor(story.rng() * LAST_WORDS.length) % LAST_WORDS.length];
-  const hero = match.players.find((p) => p.team === 'earth');
-  const shots = killcamShots(waveEnd ? story.wave : -1, line);
+  const wave = WAVES[story.wave];
+  const line = !waveEnd && wave.killLine ? wave.killLine
+    : LAST_WORDS[Math.floor(story.rng() * LAST_WORDS.length) % LAST_WORDS.length];
+  const hero = heroOf(match);
+  const shots = killcamShots(waveEnd ? wave.end : null, line);
   match.phase = 'killcam';
   match.killcam = {
     t: 0, duration: shots.at(-1).until, shots, shot: shots[0], victimId: victim.id,
     victim: { x: victim.x, y: victim.y }, hero: { x: hero.x, y: hero.y }, waveEnd, wave: story.wave, cues: new Set(),
+  };
+}
+
+/** R-10이 천장에서 내려앉으면: 경기가 잠깐 멈추고 R-10을 확대하며 도발한다. */
+function startTaunt(match) {
+  const r10 = match.players.find((p) => p.boss);
+  const hero = heroOf(match);
+  const shots = [
+    { until: 1.3, focus: 'victim', zoom: 1.4, caption: 'R-10: 넌 나를 이길 수 없음!', mode: 'taunt', bubble: '삐빅!' },
+    { until: 2.8, focus: 'victim', zoom: 1.5, caption: 'R-10: 넌 나를 이길 수 없음! 도발하기!', mode: 'taunt', bubble: '도발하기!' },
+  ];
+  match.phase = 'killcam';
+  match.killcam = {
+    t: 0, duration: shots.at(-1).until, shots, shot: shots[0], victimId: r10.id,
+    victim: { x: r10.x, y: r10.y }, hero: { x: hero.x, y: hero.y }, waveEnd: false, wave: match.story.wave, cues: new Set(),
   };
 }
 
@@ -497,10 +903,14 @@ export function updateKillcam(match, dt, events) {
     k.cues.add(name);
     events.push({ type: name, wave: k.wave });
   };
-  cue('killcam');
+  if (k.shots[0].mode === 'kill') cue('killcam');
   if (k.shot.mode === 'radio' || k.shot.mode === 'smith') cue('radio');
   if (k.shot.mode === 'smith' && k.t >= KILL_TIME + 1) cue('smith-voice');
   if (k.shot.mode === 'hero') cue('hero-pose');
+  if (k.shot.mode === 'sigh') cue('sigh');
+  if (k.shot.mode === 'rumble') cue('rumble');
+  if (k.shot.mode === 'what') cue('what');
+  if (k.shot.mode === 'taunt') cue('taunt');
   if (k.t >= k.duration) {
     match.killcam = null;
     match.phase = 'playing';

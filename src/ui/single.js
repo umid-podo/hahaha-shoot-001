@@ -115,7 +115,7 @@ export function createSingleSetup(onChange) {
   function buildMode() {
     const modes = [
       ['free', '자유 대전', 'AI 1명과 1:1. 무기·체력·난이도를 직접 정함'],
-      ['story', '스토리 모드', '웨이브 3개 + 보스전(스미스 요원)'],
+      ['story', '스토리 모드', '옥상(스미스 요원) → 복도(R-10)'],
     ];
     $('#single-mode').replaceChildren(...modes.map(([id, name, hint]) => {
       const label = document.createElement('span');

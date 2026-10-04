@@ -6,7 +6,7 @@ import { PAD_LABEL } from '../input/gamepad.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
 import { createStorySetup } from './story.js';
-import { WAVES } from '../game/story.js';
+import { R10_NAME, waveLabel } from '../game/story.js';
 import { weaponInfo, secretChoiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -25,7 +25,10 @@ function formatTime(seconds) {
   const s = Math.max(0, Math.round(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
-const sourceName = (players, id) => (id === 'jet' ? '전투기' : players.find((p) => p.id === id)?.name ?? id);
+const OTHER_SOURCES = { jet: '전투기', turret: '포탑' };
+const sourceName = (players, id) => OTHER_SOURCES[id] ?? players.find((p) => p.id === id)?.name ?? id;
+/** 쓰러뜨린 무기 이름. 전투기·포탑은 무기표에 없다. */
+const killWeaponName = (killedBy) => WEAPONS[killedBy.weapon]?.name ?? (killedBy.weapon === 'turret' ? '포탄' : '미사일');
 
 /** 한 플레이어의 무기별 통계 합계 */
 function totals(stats) {
@@ -145,6 +148,9 @@ export function createScreens(handlers) {
   pauseBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); handlers.onPause(); });
   pauseBtn.addEventListener('click', (e) => { if (e.detail === 0) handlers.onPause(); }); // 키보드로 누른 경우
   $('#resume-btn').addEventListener('click', handlers.onResume);
+  $('#save-btn').addEventListener('click', handlers.onSave);
+  for (const btn of document.querySelectorAll('.continue-btn')) btn.addEventListener('click', handlers.onContinue);
+  $('#clear-save-btn').addEventListener('click', handlers.onClearSave);
   for (const btn of document.querySelectorAll('.restart-btn')) btn.addEventListener('click', handlers.onStart);
   for (const btn of document.querySelectorAll('.menu-btn')) btn.addEventListener('click', handlers.onMenu);
   for (const btn of document.querySelectorAll('.mute-toggle')) btn.addEventListener('click', handlers.onToggleMute);
@@ -165,6 +171,23 @@ export function createScreens(handlers) {
       $('#load-status').hidden = true;
       $('#setup-btn').disabled = false;
       $('#single-btn').disabled = false;
+    },
+    /** 일시정지 화면. 스토리 모드면 '저장하기' 버튼을 보인다. */
+    showPause(story) {
+      $('#save-btn').hidden = !story;
+      $('#save-status').textContent = '';
+      show('pause');
+    },
+    setSaveStatus(text) { $('#save-status').textContent = text; },
+    /** 스토리 저장이 있으면 메인 메뉴·싱글 플레이 화면에 '스토리 이어하기'와 저장 위치를 보인다. */
+    setContinue(save) {
+      const text = save ? `저장: ${save.label} · 체력 ${save.hp}` : '';
+      for (const btn of document.querySelectorAll('.continue-btn')) btn.hidden = !save;
+      for (const info of document.querySelectorAll('.continue-info')) {
+        info.hidden = !save;
+        info.textContent = text;
+      }
+      $('#clear-save-btn').hidden = !save;
     },
     /** 메인 메뉴에 밸런스 변경 여부를 알린다. */
     setBalanceStatus(changedCount) {
@@ -189,10 +212,10 @@ export function createScreens(handlers) {
       // 스토리 모드는 경기장에서 치운 요원까지 나온 요원 전원을 보여 준다
       const players = story ? [...match.players.filter((p) => !p.ai), ...story.roster] : match.players;
       const time = match.tick * TICK;
-      $('#result-time').textContent = `경기 시간 ${formatTime(time)}` + (story ? ` · 스토리 모드 ${WAVES[story.wave].title}` : '');
+      $('#result-time').textContent = `경기 시간 ${formatTime(time)}` + (story ? ` · 스토리 모드 ${waveLabel(story.wave)}` : '');
       const winnerPlayer = players.find((p) => p.team === winner);
       $('#result-title').textContent = winner === 'draw' ? '무승부'
-        : story ? (winner === 'earth' ? '스토리 클리어! 스미스 요원을 쓰러뜨렸다!' : `${WAVES[story.wave].title}에서 패배…`)
+        : story ? (winner === 'earth' ? `스토리 클리어! ${R10_NAME}을 쓰러뜨렸다!` : `${waveLabel(story.wave)}에서 패배…`)
         : winnerPlayer.ai ? `${winnerPlayer.name} 승리…`
         : `${winnerPlayer.id} ${winnerPlayer.name} (${TEAM_NAME[winner]}) 승리!`;
 
@@ -225,8 +248,9 @@ export function createScreens(handlers) {
         fact('명중률', `${percent(t.hits, t.shots)} (${t.hits}/${t.shots})`);
         fact('엄폐물 피해', String(t.coverDamage));
         fact('전투기에게 받은 피해', String(s.takenFrom.jet ?? 0));
+        if (story && p.team === 'earth') fact('포탑에게 받은 피해', String(s.takenFrom.turret ?? 0));
         if (s.killedBy) {
-          fact('쓰러짐', `${formatTime(s.downAt ?? time)} · ${sourceName(players, s.killedBy.ownerId)}의 ${WEAPONS[s.killedBy.weapon]?.name ?? '미사일'}`);
+          fact('쓰러짐', `${formatTime(s.downAt ?? time)} · ${sourceName(players, s.killedBy.ownerId)}의 ${killWeaponName(s.killedBy)}`);
         }
         card.append(head, hp, facts);
         return card;

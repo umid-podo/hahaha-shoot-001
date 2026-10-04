@@ -1,6 +1,6 @@
 import { WEAPONS, SECONDARY_IDS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
-import { WAVES, STORY_FIELDS, STORY_WEAPONS, BOSS_NAME, defaultStory } from '../game/story.js';
+import { WAVES, STAGES, STORY_FIELDS, STORY_WEAPONS, BOSS_NAME, R10_NAME, defaultStory } from '../game/story.js';
 import { choiceButton } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -12,14 +12,25 @@ function el(tag, className, text) {
   return node;
 }
 
+const FROM = {
+  start: '처음부터 옥상에', heli: '헬리콥터에서 내려옴', gunship: '전투기가 헬리콥터를 격추한 뒤 건쉽에서 내려옴',
+  elevator: '엘리베이터에서 나옴', ceiling: '천장을 부수고 나타남',
+};
+const DIFFICULTY_NAME = Object.fromEntries(DIFFICULTY_IDS.map((id) => [id, DIFFICULTY[id].name]));
+
 /** 웨이브 설명: 어디서 오는지와 무기 */
 function waveNote(wave) {
-  const from = { start: '처음부터 옥상에', heli: '헬리콥터에서 내려옴', gunship: '전투기가 헬리콥터를 격추한 뒤 건쉽에서 내려옴' }[wave.from];
-  const weapon = wave.weapon === 'random'
-    ? `${STORY_WEAPONS.map((id) => WEAPONS[id].name).join('·')} 중 무작위`
-    : WEAPONS[wave.weapon].name;
+  const from = FROM[wave.from];
+  if (wave.boss === 'r10') return `${from} · 레이저 캐논(3초 쏘고 2초 재장전) · 보조무기·수류탄 없음`;
+  const name = (id) => (id === 'random' ? `${STORY_WEAPONS.map((w) => WEAPONS[w].name).join('·')} 중 무작위` : WEAPONS[id].name);
+  const weapon = wave.agents
+    ? wave.agents.map((a) => `${WEAPONS[a.weapon].name}${a.difficulty ? `(${DIFFICULTY_NAME[a.difficulty]})` : ''}`).join(', ')
+    : name(wave.weapon);
   return wave.boss ? `${from} · ${weapon} + 보조무기 + 수류탄` : `${from} · ${weapon} · 보조무기·수류탄 없음`;
 }
+
+/** '기획대로' 난이도 설명: 요원마다 정해진 난이도 */
+const mixedName = (wave) => `기획대로(${wave.agents.map((a) => DIFFICULTY_NAME[a.difficulty ?? 'normal']).join('·')})`;
 
 /**
  * 싱글 플레이 화면의 스토리 모드 설정 칸: 웨이브마다 요원 난이도·체력·피해·탄속·이동 속도·히트박스, 보스는 보조무기도.
@@ -35,13 +46,15 @@ export function createStorySetup(onChange) {
     const cfg = story.waves[i];
     const def = defaultStory().waves[i];
     const box = el('fieldset', `story-wave${wave.boss ? ' boss' : ''}`);
-    box.append(el('legend', '', `${wave.title} · ${wave.boss ? BOSS_NAME : `요원 ${wave.count}명`}`), el('small', '', waveNote(wave)));
+    const who = wave.boss === 'smith' ? BOSS_NAME : wave.boss === 'r10' ? R10_NAME : `요원 ${wave.count}명`;
+    box.append(el('legend', '', `${wave.title} · ${who}`), el('small', '', waveNote(wave)));
 
     box.append(el('div', 'field-label', '난이도'));
-    const difficulty = el('div', 'choices difficulty');
+    const difficulty = el('div', `choices difficulty${def.difficulty === 'mixed' ? ' mixed' : ''}`);
     difficulty.setAttribute('role', 'group');
     difficulty.setAttribute('aria-label', `${wave.title} 난이도`);
-    difficulty.append(...DIFFICULTY_IDS.map((id) => choiceButton(DIFFICULTY[id].name, cfg.difficulty === id, () => {
+    const choices = def.difficulty === 'mixed' ? ['mixed', ...DIFFICULTY_IDS] : DIFFICULTY_IDS;
+    difficulty.append(...choices.map((id) => choiceButton(id === 'mixed' ? mixedName(wave) : DIFFICULTY[id].name, cfg.difficulty === id, () => {
       cfg.difficulty = id;
       changed();
     })));
@@ -79,8 +92,17 @@ export function createStorySetup(onChange) {
     return box;
   }
 
+  /** 스테이지마다 제목 + 웨이브 칸 */
   function build() {
-    $('#story-waves').replaceChildren(...WAVES.map(waveBox));
+    const nodes = [];
+    WAVES.forEach((wave, i) => {
+      if (i === 0 || WAVES[i - 1].stage !== wave.stage) {
+        const stage = STAGES[wave.stage];
+        nodes.push(el('h3', 'story-stage', `${stage.num}스테이지 · ${stage.name}`));
+      }
+      nodes.push(waveBox(wave, i));
+    });
+    $('#story-waves').replaceChildren(...nodes);
   }
 
   $('#story-reset-btn').addEventListener('click', () => {
