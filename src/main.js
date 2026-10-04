@@ -10,7 +10,7 @@ import { pollPadMenu } from './input/padmenu.js';
 import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
-import { unlock, setMuted, playEvents, updateEngine } from './audio/synth.js';
+import { unlock, setMuted, playEvents, updateEngine, updateBattleMusic, restartMusic } from './audio/synth.js';
 import {
   loadSettings, saveSettings, loadBalance, saveBalance, loadSingle, saveSingle, loadStory, saveStory,
 } from './storage/settings.js';
@@ -37,7 +37,8 @@ let ai = null;
 // 키보드·터치·컨트롤러로 조작하는 사람 플레이어(싱글 플레이에서는 AI 자리 제외)
 let humans = [];
 
-const active = () => match && (match.phase === 'playing' || match.phase === 'countdown');
+// cutscene: 스토리 모드 엔딩 컷씬(입력은 받지 않지만 시간은 흐른다)
+const active = () => match && ['playing', 'countdown', 'cutscene'].includes(match.phase);
 
 function cancelAllInput() {
   controls.cancelAll();
@@ -89,6 +90,7 @@ function startMatch() {
   if (match.story) groups.isb.replaceChildren(aiPanel('isb', '스토리 모드 · ISB팀', WAVES[0].title));
   else if (aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
   renderer.reset();
+  restartMusic();
   screens.show('game');
 }
 
@@ -100,6 +102,12 @@ function pause() {
 }
 
 function resume() {
+  // 컷씬 중에 멈췄으면 카운트다운 없이 컷씬으로 돌아간다
+  if (match.cutscene) {
+    match.phase = 'cutscene';
+    screens.show('game');
+    return;
+  }
   match.phase = 'countdown';
   match.countdown = COUNTDOWN;
   screens.show('game');
@@ -201,6 +209,8 @@ function frame(now) {
     controls.sync(match.players, match.tick * TICK);
   }
   updateEngine(match?.phase === 'playing' ? match.jet : null);
+  // 신나는 전투 음악: 카운트다운부터 경기·컷씬 동안. 일시정지·결과·메뉴에서는 작아지며 멈춘다.
+  updateBattleMusic(active());
   requestAnimationFrame(frame);
 }
 

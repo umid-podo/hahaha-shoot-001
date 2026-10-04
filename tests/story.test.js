@@ -5,7 +5,7 @@ import { createInputs } from '../src/game/state.js';
 import { step, spawnProjectile } from '../src/game/update.js';
 import { updateAI } from '../src/game/ai.js';
 import {
-  createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME,
+  createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, CUTSCENE_TIME,
 } from '../src/game/story.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS } from '../src/game/config.js';
 
@@ -86,8 +86,10 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
   assert.equal(boss.primaryOnly, false, '스미스 요원만 보조무기·수류탄 사용');
   assert.ok(SECONDARY_IDS.includes(boss.secondary));
 
-  // 스미스 요원을 쓰러뜨리면 승리
+  // 스미스 요원을 쓰러뜨리면 엔딩 컷씬 뒤 승리
   killAll(match, inputs);
+  assert.equal(match.phase, 'cutscene');
+  for (let t = 0; t < CUTSCENE_TIME + 0.1 && match.phase === 'cutscene'; t += TICK) step(match, inputs);
   assert.equal(match.phase, 'result');
   assert.equal(match.winner, 'earth');
   assert.equal(match.story.roster.length, 7, '결과 화면용: 나온 요원 전원(1+2+3+1)');
@@ -162,4 +164,65 @@ test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이�
   assert.equal(fixed.waves[0].damage, 100);
   assert.equal(fixed.waves[3].secondary, 'random');
   assert.equal(WAVES.length, 4);
+});
+
+test('요원·보스가 올 때마다 경고음(alarm): 전투 시작, 헬리콥터, 보스 건쉽', () => {
+  const { match, inputs } = story();
+  const alarms = [];
+  const collect = (events) => alarms.push(...events.filter((e) => e.type === 'alarm'));
+  collect(step(match, inputs));
+  assert.equal(alarms.length, 1, '1웨이브 요원 등장');
+  for (let w = 0; w < 3; w++) {
+    killAll(match, inputs);
+    collect(untilFight(match, inputs));
+  }
+  assert.equal(alarms.filter((a) => !a.boss).length, 4, '1웨이브 + 헬리콥터 3번(2·3웨이브, 보스전 직전)');
+  assert.equal(alarms.filter((a) => a.boss).length, 1, '건쉽(스미스 요원)');
+});
+
+test('엔딩 컷씬: 스미스 요원이 달려들며 권총 6발을 모두 피하고, 발차기에 건물 밖으로 떨어짐', () => {
+  const { match, inputs } = story();
+  for (let w = 0; w < 3; w++) { killAll(match, inputs); untilFight(match, inputs); }
+  const [P1] = match.players;
+  const hp = P1.hp;
+  killAll(match, inputs);
+  const c = match.cutscene;
+  assert.ok(c);
+  const events = [];
+  let closest = Infinity;
+  while (match.phase === 'cutscene') {
+    events.push(...step(match, inputs));
+    for (const b of c.bullets) closest = Math.min(closest, Math.hypot(b.x - c.smith.x, b.y - c.smith.y));
+    if (!c.kicked) assert.ok(c.smith.y >= 92 - 1e-6 && c.smith.y <= P1.y, '옥상 위를 달려듦');
+  }
+  const shots = events.filter((e) => e.type === 'fire' && e.weapon === 'pistol');
+  assert.equal(shots.length, 6, '주인공이 권총을 쏨');
+  assert.equal(events.filter((e) => e.type === 'dodge').length, 6, '모두 피함');
+  assert.ok(closest > 30 + 5 + 20, `총알이 몸에 닿지 않음(가장 가까이 ${closest.toFixed(0)})`);
+  assert.equal(events.filter((e) => e.type === 'kick').length, 1, '발차기');
+  assert.ok(c.smith.x < 22 || c.smith.x > 1578, '난간(옥상 끝)을 넘어 건물 밖으로');
+  assert.ok(c.smith.alpha <= 0.01 && c.smith.scale < 0.3, '떨어져 사라짐');
+  assert.equal(P1.hp, hp, '컷씬 동안 주인공은 다치지 않음');
+  assert.equal(match.phase, 'result');
+  assert.equal(match.winner, 'earth');
+  assert.equal(events.filter((e) => e.type === 'result').length, 1);
+});
+
+test('엔딩 컷씬: 보스·주인공이 어디에 있든 총알은 모두 빗나감', () => {
+  for (const [bx, hx] of [[90, 1500], [1510, 100], [800, 800], [300, 320], [1400, 1200]]) {
+    const { match, inputs } = story();
+    for (let w = 0; w < 3; w++) { killAll(match, inputs); untilFight(match, inputs); }
+    const [P1] = match.players;
+    P1.x = hx;
+    enemies(match)[0].x = bx;
+    killAll(match, inputs);
+    const c = match.cutscene;
+    let closest = Infinity;
+    while (match.phase === 'cutscene') {
+      step(match, inputs);
+      if (!c.kicked) for (const b of c.bullets) closest = Math.min(closest, Math.hypot(b.x - c.smith.x, b.y - c.smith.y));
+    }
+    assert.ok(closest > 45, `보스 ${bx}, 주인공 ${hx}: 가장 가까이 ${closest.toFixed(0)}`);
+    assert.equal(match.winner, 'earth');
+  }
 });

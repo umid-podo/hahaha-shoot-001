@@ -4,7 +4,7 @@ import {
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
-import { updateStory, holdsResult } from './story.js';
+import { updateStory, holdsResult, startsCutscene, startCutscene, updateCutscene } from './story.js';
 
 const OUT_MARGIN = 40;
 const HURT_TIME = 0.2;
@@ -462,6 +462,11 @@ export function step(match, inputs, dt = TICK) {
     if (match.countdown <= 0) match.phase = 'playing';
     return events;
   }
+  // 스토리 모드 엔딩 컷씬: 입력은 받지 않고 연출만 진행한다
+  if (match.phase === 'cutscene') {
+    updateCutscene(match, dt, events);
+    return events;
+  }
   if (match.phase !== 'playing') return events;
   match.tick++;
 
@@ -581,6 +586,11 @@ export function step(match, inputs, dt = TICK) {
   const earthUp = match.players.some((p) => p.team === 'earth' && p.alive);
   const isbUp = match.players.some((p) => p.team === 'isb' && p.alive);
   // 스토리 모드는 남은 웨이브가 있으면 ISB팀이 전멸해도 끝나지 않는다(다음 웨이브는 story.js가 불러온다).
+  if (earthUp && !isbUp && startsCutscene(match)) {
+    // 스토리 모드 보스를 쓰러뜨리면 결과 전에 엔딩 컷씬
+    startCutscene(match);
+    return events;
+  }
   if ((!earthUp || !isbUp) && !(earthUp && holdsResult(match))) {
     match.winner = !earthUp && !isbUp ? 'draw' : earthUp ? 'earth' : 'isb';
     match.phase = 'result';

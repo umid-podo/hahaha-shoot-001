@@ -1,5 +1,8 @@
 // 짧은 Web Audio 합성 효과음. 첫 사용자 입력 이후 unlock()으로 켠다.
 import { ARENA_WIDTH } from '../game/config.js';
+import { updateMusic, duckMusic, setMusicMuted, restartMusic } from './music.js';
+
+export { restartMusic };
 
 const GAIN = 0.08;
 const ENGINE_GAIN = 0.12;
@@ -17,6 +20,7 @@ export function unlock() {
 
 export function setMuted(value) {
   muted = value;
+  setMusicMuted(value);
   if (muted) updateEngine(null);
 }
 
@@ -105,6 +109,53 @@ function laserZap() {
   osc.stop(start + 0.1);
 }
 
+/** 전투 배경음악: 매 프레임 호출. on이면 재생(경기·카운트다운·컷씬), 아니면 줄여서 멈춤. */
+export function updateBattleMusic(on) {
+  updateMusic(ctx, on);
+}
+
+/** 경고 사이렌: 높낮이가 오르내리는 경보음을 cycles번. 그동안 배경음악은 작아진다. */
+function alarm(cycles = 3) {
+  if (!ctx || muted) return;
+  const cycle = 0.7;
+  duckMusic(cycles * cycle + 0.6);
+  const start = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'square';
+  for (let i = 0; i < cycles; i++) {
+    osc.frequency.setValueAtTime(620, start + i * cycle);
+    osc.frequency.linearRampToValueAtTime(980, start + i * cycle + cycle * 0.5);
+    osc.frequency.linearRampToValueAtTime(620, start + (i + 1) * cycle);
+  }
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.linearRampToValueAtTime(GAIN * 1.1, start + 0.05);
+  gain.gain.setValueAtTime(GAIN * 1.1, start + cycles * cycle - 0.1);
+  gain.gain.linearRampToValueAtTime(0.0001, start + cycles * cycle);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 2200;
+  osc.connect(lp).connect(gain).connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + cycles * cycle + 0.05);
+}
+
+/** 미끄러지는 음(휙·으아아): from에서 to Hz로 duration초 */
+function slide(from, to, duration, type = 'sine', volume = 1) {
+  if (!ctx || muted) return;
+  const start = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(from, start);
+  osc.frequency.exponentialRampToValueAtTime(to, start + duration);
+  gain.gain.setValueAtTime(GAIN * volume, start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + duration);
+}
+
 export function playEvents(events) {
   // 돌격소총 연사처럼 한 틱에 같은 소리가 겹치면 한 번만 낸다.
   const played = new Set();
@@ -128,6 +179,11 @@ export function playEvents(events) {
     // 스토리 모드: 웨이브 클리어(올라가는 음), 새 웨이브(경고음)
     if (e.type === 'wave-clear') [523, 784, 1047].forEach((f, i) => tone(f, 0.14, 'triangle', i * 0.1));
     if (e.type === 'wave') [440, 330, 440, 330].forEach((f, i) => tone(f, 0.12, 'square', i * 0.14));
+    // 스토리 모드: 요원·보스 등장 경고(음악이 작아짐), 엔딩 컷씬의 피하기·발차기·추락
+    if (e.type === 'alarm') alarm(e.boss ? 4 : 3);
+    if (e.type === 'dodge') slide(900, 300, 0.15, 'triangle', 0.8);
+    if (e.type === 'kick') { gunshot({ filter: 300, q: 0.4, decay: 0.35, thump: 120, volume: 1.6 }); tone(90, 0.25, 'square', 0.02); }
+    if (e.type === 'scream') slide(700, 120, 1.6, 'sawtooth', 0.7);
     if (e.type === 'result') [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', i * 0.13 + 0.3));
   }
 }

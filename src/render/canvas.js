@@ -673,6 +673,63 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.restore();
   }
 
+  /**
+   * 엔딩 컷씬의 스미스 요원과 총알. 스미스 요원은 달릴 때 잔상이 남고, 차인 뒤에는 빙글빙글 돌며
+   * 건물 밖으로 날아가 작아지며(아래로 떨어지며) 사라진다.
+   */
+  function drawCutsceneActors(match, cut, time, reducedMotion) {
+    const boss = match.players.find((p) => p.id === cut.bossId);
+    const { smith } = cut;
+    const { img, anchor } = assets[boss.characterId];
+    const facing = cut.hero.x < smith.x ? -1 : 1;
+    const sprite = (x, y, alpha) => {
+      const size = SPRITE_SIZE * smith.scale;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(x, y);
+      ctx.rotate(smith.angle);
+      // 쓰러졌다가 일어나는 모습: 처음엔 옆으로 누워 있다
+      ctx.rotate((1 - smith.standing) * Math.PI / 2);
+      ctx.scale(facing, 1);
+      ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
+      ctx.restore();
+    };
+    if (!reducedMotion) smith.trail.forEach((p, i) => sprite(p.x, p.y, smith.alpha * 0.25 * (1 - i / smith.trail.length)));
+    if (!cut.kicked) {
+      // 보스의 붉은 기운
+      const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(time * 8);
+      ctx.fillStyle = `rgba(217,68,58,${0.15 + 0.15 * pulse})`;
+      ctx.beginPath();
+      ctx.arc(smith.x, smith.y, boss.radius + 30, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    sprite(smith.x, smith.y, smith.alpha);
+
+    const { img: bullet } = assets.bullet;
+    for (const b of cut.bullets) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(Math.atan2(b.vy, b.vx));
+      ctx.drawImage(bullet, -16, -8, 32, 16);
+      ctx.restore();
+    }
+  }
+
+  /** 컷씬: 위아래 검은 띠(영화처럼)와 아래 띠의 자막 */
+  function drawLetterbox(cut) {
+    const k = Math.min(1, cut.t / 0.5);
+    const h = 70 * k;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, ARENA_WIDTH, 22 * k); // 위 띠는 얇게(ISB 레일의 스미스 요원이 가리지 않게)
+    ctx.fillRect(0, ARENA_HEIGHT - h, ARENA_WIDTH, h);
+    if (!cut.caption || k < 1) return;
+    ctx.font = 'bold 34px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(cut.caption, ARENA_WIDTH / 2, ARENA_HEIGHT - h / 2);
+  }
+
   function floatText(text, x, y, color) {
     ctx.font = 'bold 30px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -695,6 +752,8 @@ export function createRenderer(canvas, wrap, assets) {
         if (e.type === 'megalaser') effects.push({ kind: 'megalaser', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, aim: e.aim, hit: e.hit, age: 0 });
         if (e.type === 'laser') effects.push({ kind: 'laser', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, age: 0 });
         if (e.type === 'cover-break') effects.push({ kind: 'debris', x: e.x, y: e.y, age: 0 });
+        if (e.type === 'dodge') effects.push({ kind: 'miss', x: e.x, y: e.y, age: 0 });
+        if (e.type === 'kick') effects.push({ kind: 'kick', x: e.x, y: e.y, age: 0 });
       }
     },
     reset() { effects = []; for (const id of Object.keys(recoil)) delete recoil[id]; },
@@ -717,9 +776,17 @@ export function createRenderer(canvas, wrap, assets) {
       drawCovers(match.covers);
 
       const paused = match.phase === 'paused';
+      const cut = match.cutscene;
       for (const p of match.players) {
         if (!paused && recoil[p.id] > 0) recoil[p.id] -= dt;
         if (p.entering) continue; // 줄 타고 내려오는 요원은 헬리콥터 위에 그린다
+        if (cut && p.id === cut.bossId) continue; // 엔딩 컷씬의 스미스 요원은 따로 그린다
+        if (cut && p.id === cut.heroId) {
+          // 컷씬의 주인공: 권총을 들고 스미스 요원을 겨누며, 발차기 때 앞으로 뛰어든다
+          const pose = { ...p, x: cut.hero.x, y: cut.hero.y - cut.hero.lunge * 50, aim: cut.hero.aim, weapon: 'pistol' };
+          drawPlayer(pose, { moveAxis: 0, aiming: false }, time, reducedMotion);
+          continue;
+        }
         drawPlayer(p, inputs[p.id], time, reducedMotion);
       }
 
@@ -801,6 +868,7 @@ export function createRenderer(canvas, wrap, assets) {
       }
 
       if (match.jet) drawJet(match.jet);
+      if (cut) drawCutsceneActors(match, cut, time, reducedMotion);
       if (match.story) {
         drawStoryCraft(match.story, time, reducedMotion);
         for (const p of match.players) if (p.entering) drawRappel(p, inputs[p.id], time, reducedMotion);
@@ -828,6 +896,26 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.lineWidth = 2;
           ctx.beginPath(); ctx.moveTo(fx.x1, fx.y1); ctx.lineTo(fx.x2, fx.y2); ctx.stroke();
           ctx.lineCap = 'butt';
+          ctx.globalAlpha = 1;
+          continue;
+        }
+        if (fx.kind === 'miss') {
+          ctx.globalAlpha = 1 - fx.age / EFFECT_TIME;
+          floatText('MISS', fx.x + 60, fx.y - 40 - (reducedMotion ? 0 : fx.age * 60), '#9A9EA5');
+          ctx.globalAlpha = 1;
+          continue;
+        }
+        if (fx.kind === 'kick') {
+          const size = 150 * (reducedMotion ? 1 : 0.6 + fx.age * 1.5);
+          ctx.globalAlpha = 1 - fx.age / EFFECT_TIME;
+          ctx.drawImage(assets['hit-spark'].img, fx.x - size / 2, fx.y - size / 2, size, size);
+          ctx.font = 'bold 72px system-ui, sans-serif';
+          ctx.lineWidth = 10;
+          ctx.strokeStyle = '#fff';
+          ctx.fillStyle = '#D9443A';
+          ctx.textAlign = 'center';
+          ctx.strokeText('퍽!', fx.x + 90, fx.y - 30);
+          ctx.fillText('퍽!', fx.x + 90, fx.y - 30);
           ctx.globalAlpha = 1;
           continue;
         }
@@ -861,9 +949,13 @@ export function createRenderer(canvas, wrap, assets) {
         }
       }
 
-      drawTeam('isb', match.players);
-      drawTeam('earth', match.players);
-      if (match.story) drawStoryHud(match.story);
+      if (cut) {
+        drawLetterbox(cut);
+      } else {
+        drawTeam('isb', match.players);
+        drawTeam('earth', match.players);
+        if (match.story) drawStoryHud(match.story);
+      }
 
       if (match.phase === 'countdown') {
         ctx.font = 'bold 200px system-ui, sans-serif';
