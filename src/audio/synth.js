@@ -184,6 +184,11 @@ export function playEvents(events) {
     if (e.type === 'dodge') slide(900, 300, 0.15, 'triangle', 0.8);
     if (e.type === 'kick') { gunshot({ filter: 300, q: 0.4, decay: 0.35, thump: 120, volume: 1.6 }); tone(90, 0.25, 'square', 0.02); }
     if (e.type === 'scream') slide(700, 120, 1.6, 'sawtooth', 0.7);
+    // 처치 컷씬(킬캠): 쿵 + 휙, 무전 잡음, 스미스 요원의 낮고 불길한 목소리, 주인공의 반짝
+    if (e.type === 'killcam') { gunshot({ filter: 200, q: 0.4, decay: 0.5, thump: 90, volume: 1.2 }); slide(1400, 200, 0.4, 'triangle', 0.6); }
+    if (e.type === 'radio') { duckMusic(e.wave === 2 ? 3.2 : 2.6); gunshot({ filter: 2500, q: 3, decay: 0.5, thump: 0, volume: 0.6 }); }
+    if (e.type === 'smith-voice') [110, 104, 98, 92].forEach((f, i) => tone(f, 0.35, 'sawtooth', i * 0.3));
+    if (e.type === 'hero-pose') [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12, 'triangle', i * 0.07));
     if (e.type === 'result') [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', i * 0.13 + 0.3));
   }
 }

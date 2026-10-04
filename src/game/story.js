@@ -434,3 +434,75 @@ export function updateCutscene(match, dt, events) {
     events.push({ type: 'result', winner: 'earth' });
   }
 }
+
+/* ───────── 처치 컷씬(킬캠) ─────────
+ * 스토리 모드에서 요원을 쓰러뜨릴 때마다 경기가 잠깐 멈추고 카메라가 쓰러진 요원을 확대하며 마지막 한마디가 나온다.
+ * 웨이브의 마지막 요원이면 웨이브마다 다른 장면이 이어진다(보스는 엔딩 컷씬).
+ *   1웨이브: 쓰러진 요원이 무전기로 본부에 지원 요청 → 헬리콥터가 오는 이유
+ *   2웨이브: 카메라가 주인공에게 넘어가 한마디
+ *   3웨이브: 화면이 붉어지고 스미스 요원이 무전으로 경고 → 보스전
+ * 장면은 shots 목록: { until(초), focus('victim'|'hero'|null), zoom, caption, mode }. 앞에서부터 until까지 그 장면.
+ */
+export const LAST_WORDS = [
+  '으윽… 보고서를… 아직 못 썼는데…',
+  '내 선글라스가… 깨졌어…',
+  '이건… 연습이었다…',
+  '다음 생엔… 지구방위팀으로…',
+  'ISB… 만세…',
+  '월급이… 이것밖에 안 되는데…',
+  '엄마… 나 옥상이야…',
+  '조금만… 쉬었다 갈게…',
+];
+const KILL_TIME = 1.4;
+
+function killcamShots(wave, line) {
+  const kill = { until: KILL_TIME, focus: 'victim', zoom: 1.8, caption: `요원: ${line}`, mode: 'kill' };
+  if (wave === 0) {
+    return [kill,
+      { until: 2.4, focus: 'victim', zoom: 2.1, caption: '(치지직…) 요원이 무전기를 꺼낸다', mode: 'radio' },
+      { until: 3.9, focus: 'victim', zoom: 2.1, caption: '요원(무전): 본부… 지원 요청… 헬기를 보내라…', mode: 'radio' }];
+  }
+  if (wave === 1) {
+    return [kill,
+      { until: 3.4, focus: 'hero', zoom: 1.7, caption: '주인공: 아직 몸풀기도 안 끝났다고!', mode: 'hero' }];
+  }
+  if (wave === 2) {
+    return [kill,
+      { until: 2.4, focus: null, zoom: 1, caption: '(치지직…) 낯선 무전이 끼어든다…', mode: 'smith' },
+      { until: 4.4, focus: null, zoom: 1, caption: `${BOSS_NAME}(무전): 쓸모없는 녀석들… 내가 직접 상대해 주지.`, mode: 'smith' }];
+  }
+  return [kill];
+}
+
+/** 쓰러진 요원 victim으로 킬캠을 시작한다. waveEnd면 그 웨이브의 마무리 장면까지. */
+export function startKillcam(match, victim, waveEnd) {
+  const story = match.story;
+  const line = LAST_WORDS[Math.floor(story.rng() * LAST_WORDS.length) % LAST_WORDS.length];
+  const hero = match.players.find((p) => p.team === 'earth');
+  const shots = killcamShots(waveEnd ? story.wave : -1, line);
+  match.phase = 'killcam';
+  match.killcam = {
+    t: 0, duration: shots.at(-1).until, shots, shot: shots[0], victimId: victim.id,
+    victim: { x: victim.x, y: victim.y }, hero: { x: hero.x, y: hero.y }, waveEnd, wave: story.wave, cues: new Set(),
+  };
+}
+
+/** 킬캠 한 틱. 장면이 바뀔 때 효과음 이벤트를 내고, 끝나면 경기로 돌아간다. */
+export function updateKillcam(match, dt, events) {
+  const k = match.killcam;
+  k.t += dt;
+  k.shot = k.shots.find((s) => k.t < s.until) ?? k.shots.at(-1);
+  const cue = (name) => {
+    if (k.cues.has(name)) return;
+    k.cues.add(name);
+    events.push({ type: name, wave: k.wave });
+  };
+  cue('killcam');
+  if (k.shot.mode === 'radio' || k.shot.mode === 'smith') cue('radio');
+  if (k.shot.mode === 'smith' && k.t >= KILL_TIME + 1) cue('smith-voice');
+  if (k.shot.mode === 'hero') cue('hero-pose');
+  if (k.t >= k.duration) {
+    match.killcam = null;
+    match.phase = 'playing';
+  }
+}

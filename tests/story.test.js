@@ -5,7 +5,7 @@ import { createInputs } from '../src/game/state.js';
 import { step, spawnProjectile } from '../src/game/update.js';
 import { updateAI } from '../src/game/ai.js';
 import {
-  createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, CUTSCENE_TIME,
+  createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, CUTSCENE_TIME, LAST_WORDS,
 } from '../src/game/story.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS } from '../src/game/config.js';
 
@@ -26,9 +26,12 @@ function untilFight(match, inputs, max = 20) {
   }
   return events;
 }
+/** 경기장의 요원을 모두 쓰러뜨리고, 처치 컷씬(킬캠)이 나오면 끝날 때까지 돌린다. */
 function killAll(match, inputs) {
   for (const p of enemies(match)) p.hp = 0;
-  return step(match, inputs);
+  const events = step(match, inputs);
+  while (match.phase === 'killcam') events.push(...step(match, inputs));
+  return events;
 }
 
 test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명 → 전투기 격추·건쉽 스미스 요원 → 승리', () => {
@@ -225,4 +228,61 @@ test('엔딩 컷씬: 보스·주인공이 어디에 있든 총알은 모두 빗�
     assert.ok(closest > 45, `보스 ${bx}, 주인공 ${hx}: 가장 가까이 ${closest.toFixed(0)}`);
     assert.equal(match.winner, 'earth');
   }
+});
+
+test('요원을 쓰러뜨릴 때마다 킬캠: 경기가 멈추고 확대·마지막 한마디, 웨이브 마지막 요원은 웨이브별 장면', () => {
+  const { match, inputs } = story();
+  killAll(match, inputs);
+  untilFight(match, inputs); // 2웨이브(요원 2명)
+  const [a, b] = enemies(match);
+  const P1 = match.players[0];
+
+  // 첫 요원: 짧은 킬캠, 그동안 탄·플레이어·AI는 멈춤
+  a.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'killcam');
+  const k = match.killcam;
+  assert.equal(k.victimId, a.id);
+  assert.equal(k.waveEnd, false);
+  assert.equal(k.shots.length, 1);
+  assert.ok(LAST_WORDS.some((line) => k.shot.caption.includes(line)), '마지막 한마디');
+  const x = P1.x;
+  inputs.P1.moveAxis = 1;
+  const events = [];
+  while (match.phase === 'killcam') events.push(...step(match, inputs));
+  inputs.P1.moveAxis = 0;
+  assert.equal(P1.x, x, '킬캠 동안 멈춤');
+  assert.ok(events.some((e) => e.type === 'killcam'));
+  assert.equal(match.phase, 'playing');
+  assert.equal(match.story.phase, 'fight', '남은 요원이 있으면 웨이브 계속');
+
+  // 웨이브 마지막 요원: 주인공 장면까지
+  b.hp = 0;
+  step(match, inputs);
+  assert.equal(match.killcam.waveEnd, true);
+  assert.ok(match.killcam.shots.some((s) => s.mode === 'hero'));
+  const end = [];
+  while (match.phase === 'killcam') end.push(...step(match, inputs));
+  assert.ok(end.some((e) => e.type === 'hero-pose'));
+  step(match, inputs);
+  assert.equal(match.story.phase, 'clear', '킬캠이 끝나면 웨이브 클리어');
+});
+
+test('웨이브 마무리 장면: 1웨이브 무전 지원 요청, 3웨이브 스미스 요원 무전, 보스는 킬캠 없이 엔딩 컷씬', () => {
+  const { match, inputs } = story();
+  const modes = [];
+  for (let w = 0; w < 3; w++) {
+    for (const p of enemies(match)) p.hp = 0;
+    step(match, inputs);
+    modes.push(match.killcam.shots.map((s) => s.mode));
+    while (match.phase === 'killcam') step(match, inputs);
+    untilFight(match, inputs);
+  }
+  assert.ok(modes[0].includes('radio'));
+  assert.ok(modes[1].includes('hero'));
+  assert.ok(modes[2].includes('smith'));
+  for (const p of enemies(match)) p.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'cutscene');
+  assert.equal(match.killcam ?? null, null);
 });

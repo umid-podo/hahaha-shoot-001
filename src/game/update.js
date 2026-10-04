@@ -4,7 +4,9 @@ import {
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
-import { updateStory, holdsResult, startsCutscene, startCutscene, updateCutscene } from './story.js';
+import {
+  updateStory, holdsResult, startsCutscene, startCutscene, updateCutscene, startKillcam, updateKillcam,
+} from './story.js';
 
 const OUT_MARGIN = 40;
 const HURT_TIME = 0.2;
@@ -467,6 +469,11 @@ export function step(match, inputs, dt = TICK) {
     updateCutscene(match, dt, events);
     return events;
   }
+  // 스토리 모드 처치 컷씬(킬캠): 경기가 멈춘 채 연출만 진행한다
+  if (match.phase === 'killcam') {
+    updateKillcam(match, dt, events);
+    return events;
+  }
   if (match.phase !== 'playing') return events;
   match.tick++;
 
@@ -568,8 +575,10 @@ export function step(match, inputs, dt = TICK) {
   }
 
   // 같은 틱의 피해를 모두 반영한 뒤 쓰러짐을 판정한다.
+  const downed = [];
   for (const p of match.players) {
     if (p.alive && p.hp <= 0) {
+      downed.push(p);
       p.alive = false;
       // 돌진 중에 쓰러지면 자기 레일에 쓰러진다
       if (p.dash) { p.y = RAIL_Y[p.team]; p.dash = null; }
@@ -589,6 +598,12 @@ export function step(match, inputs, dt = TICK) {
   if (earthUp && !isbUp && startsCutscene(match)) {
     // 스토리 모드 보스를 쓰러뜨리면 결과 전에 엔딩 컷씬
     startCutscene(match);
+    return events;
+  }
+  // 스토리 모드에서 요원을 쓰러뜨리면 킬캠(웨이브 마지막 요원이면 웨이브 마무리 장면까지)
+  const downedAgent = downed.find((p) => p.team === 'isb');
+  if (match.story && earthUp && downedAgent) {
+    startKillcam(match, downedAgent, !isbUp);
     return events;
   }
   if ((!earthUp || !isbUp) && !(earthUp && holdsResult(match))) {
