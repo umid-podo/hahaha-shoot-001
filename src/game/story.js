@@ -424,7 +424,7 @@ export function updateCutscene(match, dt, events) {
       c.screamed = true;
       events.push({ type: 'scream' });
     }
-    c.caption = t < FLY_END ? '퍽!!' : t < FALL_END ? `${BOSS_NAME}: 으아아아아…!` : `${BOSS_NAME}를 물리쳤다!`;
+    c.caption = t < FLY_END ? '퍽!!' : t < FALL_END ? `${BOSS_NAME}: 으아아아아…!` : `${BOSS_NAME}을 물리쳤다!`;
   }
 
   if (t >= CUTSCENE_TIME) {
