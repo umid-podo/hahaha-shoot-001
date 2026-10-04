@@ -38,7 +38,8 @@ let ai = null;
 let humans = [];
 
 // cutscene: 스토리 모드 엔딩 컷씬(입력은 받지 않지만 시간은 흐른다)
-const active = () => match && ['playing', 'countdown', 'cutscene'].includes(match.phase);
+// killcam: 스토리 모드에서 요원을 쓰러뜨릴 때의 짧은 처치 컷씬
+const active = () => match && ['playing', 'countdown', 'cutscene', 'killcam'].includes(match.phase);
 
 function cancelAllInput() {
   controls.cancelAll();
@@ -102,9 +103,9 @@ function pause() {
 }
 
 function resume() {
-  // 컷씬 중에 멈췄으면 카운트다운 없이 컷씬으로 돌아간다
-  if (match.cutscene) {
-    match.phase = 'cutscene';
+  // 컷씬·킬캠 중에 멈췄으면 카운트다운 없이 그 장면으로 돌아간다
+  if (match.cutscene || match.killcam) {
+    match.phase = match.cutscene ? 'cutscene' : 'killcam';
     screens.show('game');
     return;
   }

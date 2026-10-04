@@ -71,6 +71,8 @@ export function createRenderer(canvas, wrap, assets) {
   const ctx = canvas.getContext('2d');
   let elapsedTime = 0; // 경기 시작 뒤 흐른 시간(즉사기 충전 표시용)
   let effects = [];
+  // 킬캠 카메라: 지금 보는 중심(x, y)과 확대 배율(z). 매 프레임 목표로 부드럽게 따라간다.
+  const cam = { x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2, z: 1 };
   const recoil = {};
 
   function resize() {
@@ -730,6 +732,125 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillText(cut.caption, ARENA_WIDTH / 2, ARENA_HEIGHT - h / 2);
   }
 
+  /** 킬캠 카메라 목표: 장면의 focus(쓰러진 요원·주인공)와 zoom. 킬캠이 아니면 전체 화면. */
+  function moveCamera(killcam, dt, reducedMotion) {
+    const shot = killcam?.shot;
+    const focus = shot?.focus ? killcam[shot.focus] : null;
+    const target = focus ? { x: focus.x, y: focus.y, z: shot.zoom } : { x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2, z: 1 };
+    const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 7);
+    cam.x += (target.x - cam.x) * k;
+    cam.y += (target.y - cam.y) * k;
+    cam.z += (target.z - cam.z) * k;
+  }
+
+  /** 킬캠 중 경기장 위(카메라와 함께 확대)에 그리는 것: 무전기와 말풍선, 주인공 둘레의 반짝이 */
+  function drawKillcamWorld(match, k, time, reducedMotion) {
+    const mode = k.shot.mode;
+    if (mode === 'radio') {
+      const { x, y } = k.victim;
+      // 바닥에 누운 요원 손의 무전기
+      ctx.fillStyle = '#30353E';
+      ctx.fillRect(x + 26, y - 8, 14, 24);
+      ctx.strokeStyle = '#30353E';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x + 36, y - 8); ctx.lineTo(x + 40, y - 24); ctx.stroke();
+      const blink = reducedMotion || Math.sin(time * 12) > 0;
+      ctx.fillStyle = blink ? '#FF3B30' : '#7A2A33';
+      ctx.beginPath(); ctx.arc(x + 33, y - 2, 3, 0, Math.PI * 2); ctx.fill();
+      // 말풍선
+      const text = k.t < 2.4 ? '치지직…' : '지원 요청!';
+      ctx.font = 'bold 22px system-ui, sans-serif';
+      const w = ctx.measureText(text).width + 24;
+      const bx = x + 50, by = y + 30;
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(bx, by, w, 38, 12); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bx + 10, by); ctx.lineTo(x + 38, y + 14); ctx.lineTo(bx + 26, by); ctx.fill();
+      ctx.fillStyle = INK;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, bx + 12, by + 20);
+    }
+    if (mode === 'hero') {
+      const { x, y } = k.hero;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + (reducedMotion ? 0 : time * 2);
+        const r = 70 + (reducedMotion ? 0 : Math.sin(time * 6 + i) * 8);
+        star(x + Math.cos(a) * r, y - 20 + Math.sin(a) * r * 0.7, i % 2 ? 9 : 14, i % 2 ? '#FFD45E' : '#FFFFFF');
+      }
+    }
+  }
+
+  /** 반짝이 별 */
+  function star(x, y, r, color) {
+    ctx.fillStyle = color;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+      const rr = i % 2 ? r * 0.4 : r;
+      ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  /** 킬캠 화면 안내: 검은 띠·자막, 처치 순간 'K.O.!', 스미스 요원 무전(붉은 화면 + 초상) */
+  function drawKillcamOverlay(k, time, reducedMotion) {
+    const mode = k.shot.mode;
+    if (mode === 'smith') {
+      const t = k.t - 1.4;
+      const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(time * 4);
+      ctx.fillStyle = `rgba(110,0,0,${0.35 + 0.1 * pulse})`;
+      ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+      // 무전 화면: 오른쪽에서 밀려 들어오는 스미스 요원 초상
+      const slide = reducedMotion ? 1 : Math.min(1, t / 0.4);
+      const { img, anchor } = assets['isb-agent-1'];
+      const size = 520;
+      const px = ARENA_WIDTH - 330 + (1 - slide) * 500, py = 560;
+      ctx.save();
+      ctx.fillStyle = '#1A0B0D';
+      ctx.beginPath(); ctx.roundRect(px - 250, py - 400, 500, 520, 24); ctx.fill();
+      ctx.strokeStyle = '#FF3B30';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(px - 250, py - 400, 500, 520, 24); ctx.clip();
+      ctx.drawImage(img, px - anchor[0] * size, py - anchor[1] * size, size, size);
+      ctx.fillStyle = 'rgba(200,20,30,0.28)'; // 붉은 무전 화면 색
+      ctx.fillRect(px - 250, py - 400, 500, 520);
+      // 무전 잡음 줄
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      for (let y = py - 400; y < py + 120; y += 8) ctx.fillRect(px - 250, y + ((time * 60) % 8), 500, 2);
+      ctx.restore();
+      ctx.font = 'bold 30px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#FF3B30';
+      ctx.fillText(reducedMotion || Math.sin(time * 6) > -0.3 ? '● 무전 수신 중' : '', px, py - 430);
+    }
+    if (mode === 'kill') {
+      // 처치 순간: 'K.O.!'가 커졌다 자리 잡는다
+      const s = reducedMotion ? 1 : 1 + Math.max(0, 0.6 - k.t) * 1.5;
+      ctx.save();
+      ctx.translate(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.5); // 확대된 요원(레일 쪽)을 가리지 않게 가운데
+      ctx.scale(s, s);
+      ctx.font = 'bold 96px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = '#fff';
+      ctx.fillStyle = '#D9443A';
+      ctx.strokeText('K.O.!', 0, 0);
+      ctx.fillText('K.O.!', 0, 0);
+      ctx.restore();
+    }
+    drawLetterbox({ t: k.t, caption: k.shot.caption });
+  }
+
   function floatText(text, x, y, color) {
     ctx.font = 'bold 30px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -756,10 +877,25 @@ export function createRenderer(canvas, wrap, assets) {
         if (e.type === 'kick') effects.push({ kind: 'kick', x: e.x, y: e.y, age: 0 });
       }
     },
-    reset() { effects = []; for (const id of Object.keys(recoil)) delete recoil[id]; },
+    reset() {
+      effects = [];
+      for (const id of Object.keys(recoil)) delete recoil[id];
+      Object.assign(cam, { x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2, z: 1 });
+    },
     draw(match, inputs, dt, time, reducedMotion) {
       elapsedTime = match.tick * TICK;
       ctx.setTransform(canvas.width / ARENA_WIDTH, 0, 0, canvas.height / ARENA_HEIGHT, 0, 0);
+      const killcam = match.killcam;
+      moveCamera(killcam, dt, reducedMotion);
+      ctx.save();
+      if (cam.z > 1.001) {
+        // 확대해도 경기장 밖이 보이지 않게 중심을 가둔다
+        const hw = ARENA_WIDTH / 2 / cam.z, hh = ARENA_HEIGHT / 2 / cam.z;
+        const cx = Math.min(ARENA_WIDTH - hw, Math.max(hw, cam.x)), cy = Math.min(ARENA_HEIGHT - hh, Math.max(hh, cam.y));
+        ctx.translate(ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
+        ctx.scale(cam.z, cam.z);
+        ctx.translate(-cx, -cy);
+      }
       ctx.drawImage(assets.arena.img, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
 
       // 배경 레일은 장식이므로 정확한 판정 Y에 기준선을 덧그린다.
@@ -949,7 +1085,12 @@ export function createRenderer(canvas, wrap, assets) {
         }
       }
 
-      if (cut) {
+      if (killcam) drawKillcamWorld(match, killcam, time, reducedMotion);
+      ctx.restore(); // 카메라 끝: 아래는 화면에 고정된 안내
+
+      if (killcam) {
+        drawKillcamOverlay(killcam, time, reducedMotion);
+      } else if (cut) {
         drawLetterbox(cut);
       } else {
         drawTeam('isb', match.players);
