@@ -20,7 +20,7 @@ export const TICK = 1 / 60;
  * trigger: 'release'인 무기는 조준한 뒤 손을 뗄 때 한 발 쏘고, interval은 발사 후 쿨타임이다.
  * burst는 한 번에 나가는 발 수, burstGap은 점사 사이 간격. splash는 RPG 폭발 범위 피해.
  * homing.turnRate(rad/s)는 가장 가까운 적을 향해 초당 꺾을 수 있는 최대 각도. RPG는 빗나가도 적 레일 선·경기장 끝·수명 끝에서 터진다.
- * beam: 탄 대신 즉시 닿는 레이저. battery.shots발을 쏘면 방전되고, 마지막 발사 후 battery.recharge초가 지나면 가득 찬다.
+ * battery: battery.shots발을 쏘면 방전되고, 마지막 발사 후 battery.recharge초가 지나면 가득 찬다(R-10 레이저 캐논).
  * heat: 연속 사격 max초를 채우면 과열되어 cooldown초 동안 쏘지 못한다. 쉬는 동안에는 초당 decay만큼 식는다.
  * ownCooldown: 쿨타임(interval)을 이 무기만 따로 센다(단검·샷건). 쿨타임 중에도 다른 무기는 바로 쏠 수 있다.
  * dash: 쏘는 대신 조준 방향으로 dash.speed(초당)로 돌진해 상대 몸에 닿으면 damage를 준다(단검).
@@ -56,7 +56,11 @@ export const WEAPONS = {
     id: 'instakill', name: '즉사기', interval: 10, damage: 9999, burst: 1, instakill: true, readyAfter: 30, homing: 180, beamWidth: 40,
   },
   // 드론(R-10) 전용 주무기
-  laser: { id: 'laser', name: '레이저 캐논', interval: 0.1, damage: 4, burst: 1, beam: true, battery: { shots: 30, recharge: 2 } },
+  // R-10 레이저 캐논: 붉은 레이저 탄환을 3점사. 배터리 15발(5번 점사, 약 3초)을 쏘면 방전되고 2초 쉬면 가득 찬다.
+  laser: {
+    id: 'laser', name: '레이저 캐논', interval: 0.7, damage: 20, speed: 1400, burst: 3, burstGap: 0.08,
+    battery: { shots: 15, recharge: 2 },
+  },
   // 보조무기
   smg: { id: 'smg', name: '기관단총', interval: 0.1, damage: 4, speed: 800, burst: 1, heat: { max: 4, cooldown: 2, decay: 1 } },
   // 단검: 조준한 뒤 떼면 조준 방향으로 매우 빠르게 돌진해, 상대 몸에 닿으면 큰 피해. 돌진 뒤 자기 레일로 돌아온다.

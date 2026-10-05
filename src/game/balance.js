@@ -60,6 +60,8 @@ export const SECTIONS = [
     title: '드론 무기 · 보조무기 · 아이템',
     params: [
       ...gun('laser', [
+        ['점사 수', ['burst'], { min: 1, max: 10 }],
+        ['점사 간격', ['burstGap'], { min: 0.02, max: 1, step: 0.01, unit: SEC }],
         ['배터리(발)', ['battery', 'shots'], { min: 1, max: 500 }],
         ['완충 대기', ['battery', 'recharge'], { max: 30, step: 0.1, unit: SEC }],
       ]),

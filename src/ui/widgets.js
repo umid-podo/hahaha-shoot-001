@@ -1,7 +1,7 @@
 /** 여러 화면에서 쓰는 작은 DOM 조각 */
 
 export function weaponInfo(w) {
-  if (w.beam) return `${w.interval}초마다 ${w.damage} · 배터리 ${w.battery.shots}발, 쉬면 ${w.battery.recharge}초 뒤 완충`;
+  if (w.battery) return `${w.interval}초마다 ${w.burst}점사 레이저 탄 · 한 발 ${w.damage} · 배터리 ${w.battery.shots}발, 쉬면 ${w.battery.recharge}초 뒤 완충`;
   if (w.heat) return `${w.interval}초마다 ${w.damage} · ${w.heat.max}초 연사하면 과열 ${w.heat.cooldown}초`;
   if (w.thrown) return `아이템 버튼으로 던짐 · 반경 ${w.splash.radius} 폭발 ${w.splash.damage} · 쿨타임 ${w.interval}초`;
   if (w.instakill) {

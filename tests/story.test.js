@@ -7,7 +7,7 @@ import { step, spawnProjectile } from '../src/game/update.js';
 import { updateAI, nearestTarget } from '../src/game/ai.js';
 import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
-  LAST_WORDS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
+  LAST_WORDS, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
 
@@ -109,8 +109,9 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
   P1.hp = 123;
   killAll(match, inputs);
   assert.equal(match.phase, 'cutscene');
-  for (let t = 0; t < CUTSCENE_TIME + 0.1 && match.phase === 'cutscene'; t += TICK) events = step(match, inputs);
-  assert.ok(events.some((e) => e.type === 'stage' && e.stage === 'corridor'));
+  const all = [];
+  for (let t = 0; t < CUTSCENE_TIME + STAIRS_TIME + 0.1 && match.phase === 'cutscene'; t += TICK) all.push(...step(match, inputs));
+  assert.ok(all.some((e) => e.type === 'stage' && e.stage === 'corridor'));
   assert.equal(match.phase, 'countdown', '복도에서 카운트다운부터');
   assert.equal(match.story.stage, 'corridor');
   assert.equal(P1.hp, P1.maxHp, '스테이지를 깨면 체력 100% 회복');
@@ -460,7 +461,7 @@ test('복도 장면: 1웨이브 "요원들은 복도로 와라!", 2웨이브 "�
   assert.equal(enemies(match)[0].name, R10_NAME);
 });
 
-test('R-10 AI: 레이저를 3초 동안 쏘고 2초 재장전', () => {
+test('R-10 AI: 레이저 탄환 3점사를 약 3초 동안(5번) 쏘고 2초 재장전', () => {
   const { match, inputs } = story();
   toCorridor(match, inputs);
   for (let w = 0; w < 3; w++) { killAll(match, inputs); untilFight(match, inputs); }
@@ -476,11 +477,12 @@ test('R-10 AI: 레이저를 3초 동안 쏘고 2초 재장전', () => {
     updateAI(brain, match, inputs);
     for (const e of step(match, inputs)) if (e.type === 'fire' && e.playerId === r10.id) shots.push(match.tick * TICK);
   }
-  // 30발(3초) 쏘고, 2초 쉬고, 다시 30발
-  assert.ok(shots.length >= 60, `${shots.length}발`);
-  const pause = shots[30] - shots[29];
+  // 15발(3점사 5번, 약 3초) 쏘고, 2초 쉬고, 다시 15발
+  assert.ok(shots.length >= 30, `${shots.length}발`);
+  const pause = shots[15] - shots[14];
   assert.ok(pause >= 2 - 1e-6 && pause < 2.2, `재장전 ${pause.toFixed(2)}초`);
-  assert.ok(Math.abs(shots[29] - shots[0] - 2.9) < 0.05, '3초 동안 연사');
+  assert.ok(Math.abs(shots[14] - shots[0] - 2.96) < 0.05, `약 3초 동안 연사(${(shots[14] - shots[0]).toFixed(2)}초)`);
+  assert.ok(shots[1] - shots[0] < 0.1 && shots[3] - shots[2] > 0.5, '3발씩 끊어 쏨');
 });
 
 test('R-10 엔딩 컷씬: 레이저를 마구 쏘지만 모두 빗나가고, RPG로 R-10 폭발 → 승리', () => {
@@ -718,4 +720,43 @@ test('요원별 주무기: 모든 요원(R-10 빼고)의 주무기를 정할 수
   assert.deepEqual(fixed.waves[1].weapons, ['sniper', 'random']);
   assert.deepEqual(fixed.waves[5].weapons, ['rifle', 'sniper']);
   assert.deepEqual(fixed.waves[7].weapons, []);
+});
+
+test('계단 컷씬: 스미스 요원 컷씬 뒤 주인공이 옥상 계단실로 내려가고, 어두워진 동안 복도로 바뀌어 계단 문에서 나옴', () => {
+  const { match, inputs } = coop();
+  for (let w = 0; w < 3; w++) { killAll(match, inputs); untilFight(match, inputs); }
+  const [P1, P2] = match.players;
+  P2.hp = 0;
+  step(match, inputs);
+  while (match.phase === 'killcam') step(match, inputs);
+  killAll(match, inputs);
+  assert.equal(match.cutscene.kind, 'smith');
+  while (match.cutscene?.kind === 'smith') step(match, inputs);
+  const c = match.cutscene;
+  assert.equal(c.kind, 'stairs');
+  assert.equal(match.phase, 'cutscene');
+  assert.equal(enemies(match).length, 0, '스미스 요원은 떨어졌다');
+  assert.equal(c.heroes.length, 2, '2인 협동이면 둘 다(쓰러진 동료도 일어나) 내려감');
+  assert.equal(checkpoint(match).wave, 4, '계단 컷씬 중 저장하면 복도 1웨이브');
+
+  const events = [];
+  let reachedDoor = false, fadedOut = false, stageWhileDark = null;
+  while (match.phase === 'cutscene') {
+    const ev = step(match, inputs);
+    events.push(...ev);
+    if (!c.switched && c.heroes.every((h) => Math.abs(h.x - ROOF_STAIRS.x) < 1 && h.alpha < 0.05)) reachedDoor = true;
+    if (c.fade > 0.99) fadedOut = true;
+    if (ev.some((e) => e.type === 'stage')) stageWhileDark = c.fade;
+    assert.equal(match.story.stage === 'corridor', c.switched || !match.cutscene, '어두워진 뒤에야 복도');
+  }
+  assert.ok(reachedDoor, '옥상 계단실 문으로 걸어가 계단을 내려감');
+  assert.ok(fadedOut);
+  assert.ok(stageWhileDark > 0.99, '화면이 어두울 때 복도로 바뀜');
+  assert.ok(c.t >= STAIRS_TIME);
+  assert.ok(c.heroes[0].x > CORRIDOR_STAIRS.x && c.heroes[1].x > c.heroes[0].x, '복도 계단 문에서 나와 자리로');
+  assert.equal(match.phase, 'countdown');
+  assert.equal(match.story.stage, 'corridor');
+  assert.deepEqual([P1.hp, P2.hp, P2.alive], [P1.maxHp, P2.maxHp, true], '체력 100% 회복, 동료도 일어남');
+  assert.deepEqual([P1.x, P2.x], [c.heroes[0].x, c.heroes[1].x], '컷씬이 끝난 자리에서 시작');
+  assert.equal(events.filter((e) => e.type === 'result').length, 0);
 });

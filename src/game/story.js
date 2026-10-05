@@ -275,12 +275,11 @@ function setupCorridor(match) {
 }
 
 /**
- * 스테이지 클리어(스미스 요원 엔딩 컷씬 뒤): 체력 100% 회복(2인 협동에서 쓰러진 동료도 일어남), 경기장을 복도로 바꾸고
- * 카운트다운부터 다시. 쓰러진 스미스 요원은 치우고(결과 화면용으로 roster에는 남는다), 복도 1웨이브 요원이 엘리베이터로 온다.
+ * 스테이지 클리어(계단 컷씬 중 화면이 어두워졌을 때): 체력 100% 회복(2인 협동에서 쓰러진 동료도 일어남), 경기장을 복도로 바꾼다.
+ * 쓰러진 스미스 요원은 치우고(결과 화면용으로 roster에는 남는다), 컷씬이 끝나면 카운트다운 뒤 복도 1웨이브 요원이 엘리베이터로 온다.
  */
-function enterCorridor(match, events) {
+function moveToCorridor(match, events) {
   const story = match.story;
-  match.cutscene = null;
   match.players = match.players.filter((p) => p.team !== 'isb');
   story.brains = [];
   match.projectiles = [];
@@ -294,9 +293,6 @@ function enterCorridor(match, events) {
   });
   setupCorridor(match);
   Object.assign(story, { carrier: null, jet: null, missile: null, phase: 'clear', timer: 0 });
-  story.banner = banner(`${STAGES.corridor.num}스테이지 · ${STAGES.corridor.name}`, '체력 100% 회복!');
-  match.phase = 'countdown';
-  match.countdown = COUNTDOWN;
   events.push({ type: 'stage', stage: 'corridor' }, ...list.map((hero) => ({ type: 'heal', playerId: hero.id })));
 }
 
@@ -693,8 +689,12 @@ function dodgeOffset(c, base, dt) {
   return c.dodge;
 }
 
-/** 컷씬 한 틱. 스미스 요원 컷씬이 끝나면 2스테이지(복도)로, R-10 컷씬이 끝나면 결과(지구방위팀 승리)로 넘어간다. */
+/** 컷씬 한 틱. 스미스 요원 컷씬이 끝나면 계단 컷씬 뒤 2스테이지(복도)로, R-10 컷씬이 끝나면 결과(지구방위팀 승리)로 넘어간다. */
 export function updateCutscene(match, dt, events) {
+  if (match.cutscene.kind === 'stairs') {
+    updateStairs(match, dt, events);
+    return;
+  }
   if (match.cutscene.kind === 'r10') {
     updateR10Cutscene(match, dt, events);
     return;
@@ -769,7 +769,92 @@ export function updateCutscene(match, dt, events) {
     c.caption = t < FLY_END ? '퍽!!' : t < FALL_END ? `${BOSS_NAME}: 으아아아아…!` : `${BOSS_NAME}을 물리쳤다! 다음은 복도다!`;
   }
 
-  if (t >= CUTSCENE_TIME) enterCorridor(match, events);
+  if (t >= CUTSCENE_TIME) startStairs(match);
+}
+
+/* ───────── 계단 컷씬(옥상 → 복도) ─────────
+ * 스미스 요원 엔딩 컷씬 뒤: 주인공(2인 협동이면 둘 다)이 옥상 계단실 문으로 걸어가 계단을 내려간다.
+ * 화면이 어두워지는 동안 경기장이 복도로 바뀌고(체력 100% 회복), 주인공이 복도 왼쪽 벽의 계단 문으로 나와 자기 자리로 걸어간다.
+ * 시간표(초): 0~0.9 대사, 0.9~3.3 계단실 문까지 걸어감(문이 열림), 3.3~4.1 계단으로 내려감, 4.1~4.7 어두워짐,
+ *   4.7 복도로 바뀜, 4.7~5.3 밝아짐, 5.3~7.3 계단 문에서 나와 자리로, 7.8 끝(카운트다운).
+ */
+export const STAIRS_TIME = 7.8;
+const STAIRS_WALK = 0.9, STAIRS_DOOR = 3.3, STAIRS_DOWN = 4.1, STAIRS_SWITCH = 4.7, STAIRS_LIGHT = 5.3, STAIRS_OUT = 7.3;
+const STAIRS_GAP = 0.35;   // 2인 협동에서 둘째가 따라가는 간격
+const STAIRS_HOP = 0.45;   // 레일에서 문 앞까지 올라가는 데 쓰는 비율(걷는 시간 중 뒤쪽)
+/** 옥상 계단실 문(배경 그림의 계단실)과 복도 왼쪽 벽 아래쪽 문 */
+export const ROOF_STAIRS = { x: 155, y: 700, w: 70, h: 50 };
+export const CORRIDOR_STAIRS = { x: 42, y: 855, w: 16, h: 110 };
+
+function startStairs(match) {
+  const story = match.story;
+  // 스미스 요원은 건물 밖으로 떨어졌다
+  match.players = match.players.filter((p) => p.team !== 'isb');
+  story.brains = [];
+  match.projectiles = [];
+  const list = heroes(match);
+  match.cutscene = {
+    kind: 'stairs', t: 0, door: 0, fade: 0, switched: false,
+    // 2인 협동에서 쓰러져 있던 동료도 일어나 함께 내려간다(체력은 복도로 바뀔 때 회복)
+    heroes: list.map((p, i) => ({ id: p.id, fromX: p.x, x: p.x, y: p.y, alpha: 1, scale: 1, walk: 0, delay: i * STAIRS_GAP, alive: true })),
+    caption: list.length > 1 ? '주인공: 계단으로 내려가자! 둘이 같이!' : '주인공: 계단으로 내려가자!',
+  };
+}
+
+const ease = (k) => k * k * (3 - 2 * k);
+const clamp01 = (k) => Math.max(0, Math.min(1, k));
+
+function updateStairs(match, dt, events) {
+  const c = match.cutscene;
+  const t = (c.t += dt);
+  const story = match.story;
+  if (!c.switched) {
+    // 옥상: 계단실 문까지 걸어가(레일을 따라 옆으로 → 문 앞으로) 계단으로 내려간다
+    c.door = clamp01((t - (STAIRS_DOOR - 0.8)) / 0.4);
+    for (const h of c.heroes) {
+      const k = clamp01((t - STAIRS_WALK - h.delay) / (STAIRS_DOOR - STAIRS_WALK - STAIRS_GAP));
+      const side = ease(clamp01(k / (1 - STAIRS_HOP)));
+      const up = ease(clamp01((k - (1 - STAIRS_HOP)) / STAIRS_HOP));
+      const prevX = h.x, prevY = h.y;
+      h.x = h.fromX + (ROOF_STAIRS.x - h.fromX) * side;
+      h.y = RAIL_Y.earth + (ROOF_STAIRS.y + 10 - RAIL_Y.earth) * up;
+      h.walk = Math.sign(h.x - prevX) || (h.y !== prevY ? -1 : 0);
+      // 계단을 내려가며 작아지고 흐려진다
+      const down = clamp01((t - STAIRS_DOOR - h.delay) / (STAIRS_DOWN - STAIRS_DOOR - STAIRS_GAP));
+      h.scale = 1 - 0.45 * down;
+      h.alpha = 1 - down;
+      if (down > 0) h.walk = 0;
+    }
+    c.fade = clamp01((t - STAIRS_DOWN) / (STAIRS_SWITCH - STAIRS_DOWN));
+    if (t >= STAIRS_WALK) c.caption = t < STAIRS_DOWN ? '(터벅터벅…) 옥상 계단실로' : '계단을 내려간다…';
+    if (t >= STAIRS_SWITCH) {
+      // 어두운 동안 복도로 바뀐다: 체력 회복, 엄폐물·포탑·엘리베이터
+      c.switched = true;
+      moveToCorridor(match, events);
+      const xs = heroXs(c.heroes.length);
+      c.heroes.forEach((h, i) => Object.assign(h, {
+        fromX: CORRIDOR_STAIRS.x - 20, toX: xs[i], x: CORRIDOR_STAIRS.x - 20, y: RAIL_Y.earth, alpha: 0, scale: 1, walk: 0, alive: true,
+      }));
+    }
+    return;
+  }
+  // 복도: 밝아지고, 왼쪽 벽 계단 문으로 나와 자기 자리까지 걷는다
+  c.fade = 1 - clamp01((t - STAIRS_SWITCH) / (STAIRS_LIGHT - STAIRS_SWITCH));
+  c.door = 1 - clamp01((t - STAIRS_OUT) / 0.4);
+  for (const h of c.heroes) {
+    const k = clamp01((t - STAIRS_LIGHT - h.delay) / (STAIRS_OUT - STAIRS_LIGHT - STAIRS_GAP));
+    const prevX = h.x;
+    h.x = h.fromX + (h.toX - h.fromX) * ease(k);
+    h.alpha = clamp01(k * 6);
+    h.walk = Math.sign(h.x - prevX);
+  }
+  c.caption = t < STAIRS_LIGHT + 0.6 ? `${STAGES.corridor.num}스테이지 · ISB 본부 ${STAGES.corridor.name}` : '주인공: 여기가 놈들의 본부인가…';
+  if (t >= STAIRS_TIME) {
+    match.cutscene = null;
+    story.banner = banner(`${STAGES.corridor.num}스테이지 · ${STAGES.corridor.name}`, '체력 100% 회복!');
+    match.phase = 'countdown';
+    match.countdown = COUNTDOWN;
+  }
 }
 
 /* ───────── R-10 엔딩 컷씬 ─────────

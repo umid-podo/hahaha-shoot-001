@@ -23,7 +23,7 @@ const DIFFICULTY_NAME = Object.fromEntries(DIFFICULTY_IDS.map((id) => [id, DIFFI
 /** 웨이브 설명: 어디서 오는지와 보조무기·수류탄(주무기는 아래 요원별 칸에서 고른다) */
 function waveNote(wave) {
   const from = FROM[wave.from];
-  if (wave.boss === 'r10') return `${from} · 레이저 캐논(3초 쏘고 2초 재장전) · 보조무기·수류탄 없음`;
+  if (wave.boss === 'r10') return `${from} · 레이저 캐논(피해 20 레이저 탄 3점사, 약 3초 쏘고 2초 재장전) · 보조무기·수류탄 없음`;
   const levels = wave.agents?.some((a) => a.difficulty)
     ? ` · 기획 난이도 ${wave.agents.map((a) => DIFFICULTY_NAME[a.difficulty ?? 'normal']).join('·')}` : '';
   return wave.boss ? `${from} · 주무기 + 보조무기 + 수류탄` : `${from} · 주무기만(보조무기·수류탄 없음)${levels}`;
