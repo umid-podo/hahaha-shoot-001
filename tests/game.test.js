@@ -250,8 +250,11 @@ test('전투기는 하늘 높이 날아 양 팀 총알·레이저를 막지 않�
   d.match.jet = { x: 300, previousX: 300, y: JET.y, dir: 1, fireTimer: Infinity };
   d.P1.x = d.P1.previousX = 300; d.P2.x = d.P2.previousX = 300;
   d.inputs.P1.aiming = true;
-  const laser = step(d.match, d.inputs).find((e) => e.type === 'laser');
-  assert.ok(Math.abs(laser.y2 - d.P2.y) < d.P2.radius + 1, '레이저도 전투기를 지나 적에게 닿음');
+  step(d.match, d.inputs);
+  d.inputs.P1.aiming = false;
+  const ev = run(d.match, d.inputs, 0.8); // 점사는 조준을 풀어도 3발 모두 나간다
+  assert.equal(ev.filter((e) => e.type === 'block').length, 0);
+  assert.equal(d.P2.hp, MAX_HP - 3 * WEAPONS.laser.damage, '레이저 탄도 전투기 밑을 지나 적에게 닿음');
 });
 
 test('사각형 선분 판정', () => {
@@ -660,7 +663,7 @@ test('수류탄(아이템): 버튼을 누르면 든 무기와 상관없이 조�
   assert.equal(shots(step(drone.match, drone.inputs), 'P1'), 0, '드론은 아이템 없음');
 });
 
-test('R-10 드론: 레이저 캐논 고정, 무기 전환 불가, 체력 400, 0.1초마다 4 피해 레이저가 즉시 닿음', () => {
+test('R-10 드론: 레이저 캐논 고정, 무기 전환 불가, 체력 400, 피해 20짜리 레이저 탄환을 3점사', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'r10', weapon: 'rpg' } });
   assert.equal(P1.name, 'R-10');
   assert.equal(P1.hp, 400);
@@ -672,40 +675,43 @@ test('R-10 드론: 레이저 캐논 고정, 무기 전환 불가, 체력 400, 0.
   assert.equal(P1.weapon, 'laser');
 
   P1.x = P1.previousX = 300; P2.x = P2.previousX = 300; // 엄폐물 없는 줄
+  assert.equal(WEAPONS.laser.damage, 20);
+  assert.equal(WEAPONS.laser.burst, 3);
   inputs.P1.aiming = true;
-  const events = run(match, inputs, 1);
-  assert.equal(shots(events, 'P1'), 10, '0.1초 간격');
-  assert.equal(match.projectiles.length, 0, '탄환이 아니라 레이저');
-  const lasers = events.filter((e) => e.type === 'laser');
-  assert.equal(lasers.length, 10);
-  assert.ok(Math.abs(lasers[0].y2 - P2.y) < BODY_RADIUS + 1, '적에게 닿은 곳에서 멈춤');
-  assert.equal(P2.hp, MAX_HP - 40);
+  const events = run(match, inputs, 0.2);
+  assert.equal(shots(events, 'P1'), 3, '한 번에 3점사');
+  assert.equal(match.projectiles.filter((b) => b.weapon === 'laser').length, 3, '즉시 닿는 빛줄기가 아니라 날아가는 탄환');
+  assert.equal(P2.hp, MAX_HP, '아직 날아가는 중');
+  const later = run(match, inputs, 0.9);
+  assert.equal(shots(later, 'P1'), 3, '0.7초 뒤 다음 3점사');
+  assert.equal(P2.hp, MAX_HP - 3 * 20, '첫 3점사 모두 명중');
 });
 
-test('R-10 배터리: 30발 쏘면 방전돼 못 쏘고, 마지막 발사 2초 뒤 가득 참', () => {
+test('R-10 배터리: 15발(3점사 5번) 쏘면 방전돼 못 쏘고, 마지막 발사 2초 뒤 가득 참', () => {
   const { match, inputs, P1 } = playing({ P1: { characterId: 'r10' } });
   P1.x = P1.previousX = 300; // 적과 엄폐물이 없는 줄
   match.players[1].x = match.players[1].previousX = 1400;
   inputs.P1.aiming = true;
-  assert.equal(shots(run(match, inputs, 3), 'P1'), 30);
+  assert.equal(shots(run(match, inputs, 3), 'P1'), 15);
   assert.equal(P1.battery, 0);
-  assert.equal(shots(run(match, inputs, 1.9), 'P1'), 0, '방전 중');
+  assert.equal(shots(run(match, inputs, 1.8), 'P1'), 0, '방전 중');
   run(match, inputs, 0.2);
   assert.ok(P1.battery > 0, '2초 뒤 회복');
   inputs.P1.aiming = false;
-  run(match, inputs, 2.1);
+  run(match, inputs, 2.3); // 회복되자마자 나간 점사의 마지막 발부터 2초
   assert.equal(P1.battery, WEAPONS.laser.battery.shots, '가득');
 });
 
-test('레이저는 엄폐물에 막히고 엄폐물을 4씩 깎음', () => {
+test('레이저 탄환은 엄폐물에 막히고 엄폐물을 한 발 피해(20)씩 깎음', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'r10' } });
   const cover = coverById(match, 'center');
   P1.x = P1.previousX = cover.x; P2.x = P2.previousX = cover.x;
   inputs.P1.aiming = true;
-  const events = step(match, inputs);
-  const laser = events.find((e) => e.type === 'laser');
-  assert.ok(Math.abs(laser.y2 - (cover.y + cover.h / 2)) <= 6, '엄폐물 아래 면에서 멈춤');
-  assert.equal(cover.hp, COVER.hp - 4);
+  step(match, inputs);
+  inputs.P1.aiming = false;
+  const events = run(match, inputs, 0.6);
+  assert.equal(events.filter((e) => e.type === 'block').length, 3);
+  assert.equal(cover.hp, COVER.hp - 60);
   assert.equal(P2.hp, MAX_HP);
 });
 

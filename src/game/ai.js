@@ -239,7 +239,7 @@ export function updateAI(ai, match, inputs, dt = TICK) {
     }
     return;
   }
-  // 배터리 무기(R-10 레이저 캐논)는 계속 누르고 있는다: 배터리가 바닥날 때까지(3초) 쏘고, 완충(2초)되면 다시 쏜다.
+  // 배터리 무기(R-10 레이저 캐논)는 계속 누르고 있는다: 배터리가 바닥날 때까지(3점사 5번, 약 3초) 쏘고, 완충(2초)되면 다시 쏜다.
   if (weapon.battery) {
     frame.aiming = true;
     return;

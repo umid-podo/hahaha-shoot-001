@@ -2,7 +2,9 @@ import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
   MAX_HP, WEAPONS, COVER, TICK,
 } from '../game/config.js';
-import { WAVES, ELEVATOR, CRACK_TIME, currentWave, stageProgress, waveLabel } from '../game/story.js';
+import {
+  WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel,
+} from '../game/story.js';
 
 const INK = '#30353E';
 const MAX_DPR = 2;
@@ -846,6 +848,42 @@ export function createRenderer(canvas, wrap, assets) {
     }
   }
 
+  /**
+   * 계단 컷씬의 문: 옥상에서는 계단실(배경 그림의 작은 건물) 문이 열려 어두운 계단이 보이고,
+   * 복도에서는 왼쪽 벽 아래쪽 문이 열린다. 문 위에 '계단' 표지.
+   */
+  function drawStairsDoor(cut, stage) {
+    const roof = stage !== 'corridor';
+    const d = roof ? ROOF_STAIRS : CORRIDOR_STAIRS;
+    const x = d.x - d.w / 2, y = d.y - d.h / 2;
+    ctx.save();
+    // 열린 문 안쪽: 어두운 계단
+    ctx.fillStyle = '#1E2228';
+    ctx.fillRect(x, y, d.w, d.h);
+    ctx.strokeStyle = '#5E6672';
+    ctx.lineWidth = 3;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath();
+      if (roof) { ctx.moveTo(x + 6, y + (d.h * i) / 4); ctx.lineTo(x + d.w - 6, y + (d.h * i) / 4); }
+      else { ctx.moveTo(x + (d.w * i) / 4, y + 6); ctx.lineTo(x + (d.w * i) / 4, y + d.h - 6); }
+      ctx.stroke();
+    }
+    // 문짝: 열리는 만큼 접힌다
+    ctx.fillStyle = '#8A5A2B';
+    if (roof) ctx.fillRect(x, y, d.w * (1 - cut.door * 0.85), d.h);
+    else ctx.fillRect(x, y, d.w, d.h * (1 - cut.door * 0.85));
+    // '계단' 표지
+    const sx = roof ? d.x : d.x + 46, sy = roof ? y - 22 : y - 18;
+    ctx.fillStyle = '#2E9E5B';
+    ctx.beginPath(); ctx.roundRect(sx - 34, sy - 13, 68, 26, 6); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 17px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(roof ? '계단 ▼' : '계단', sx, sy + 1);
+    ctx.restore();
+  }
+
   /** 컷씬: 위아래 검은 띠(영화처럼)와 아래 띠의 자막 */
   function drawLetterbox(cut) {
     const k = Math.min(1, cut.t / 0.5);
@@ -1113,6 +1151,7 @@ export function createRenderer(canvas, wrap, assets) {
       if (story?.elevator) drawElevator(story.elevator);
       if (story?.turrets) for (const t of story.turrets) drawTurret(t, story, time, reducedMotion);
       if (story?.ceiling) drawCeiling(story.ceiling, time, reducedMotion);
+      if (match.cutscene?.kind === 'stairs') drawStairsDoor(match.cutscene, story.stage);
 
       // 배경 레일은 장식이므로 정확한 판정 Y에 기준선을 덧그린다.
       ctx.lineWidth = 2;
@@ -1132,6 +1171,17 @@ export function createRenderer(canvas, wrap, assets) {
       for (const p of match.players) {
         if (!paused && recoil[p.id] > 0) recoil[p.id] -= dt;
         if (p.entering) continue; // 줄 타고 내려오는 요원은 헬리콥터 위에 그린다
+        if (cut?.kind === 'stairs' && p.team === 'earth') {
+          // 계단 컷씬의 주인공: 계단실 문으로 걸어가 내려가며 작아지고 흐려진다(복도에서는 문에서 걸어 나온다)
+          const h = cut.heroes.find((c) => c.id === p.id);
+          if (!h || h.alpha <= 0.01) continue;
+          ctx.save();
+          ctx.globalAlpha = h.alpha;
+          drawPlayer({ ...p, alive: h.alive, x: h.x, y: h.y, scale: p.scale * h.scale, aim: -Math.PI / 2, hurt: 0 },
+            { moveAxis: h.walk, aiming: false }, time, reducedMotion);
+          ctx.restore();
+          continue;
+        }
         if (cut && p.id === cut.bossId) continue; // 엔딩 컷씬의 보스는 따로 그린다
         if (cut && p.id === cut.heroId) {
           // 컷씬의 주인공: 권총(R-10 컷씬 끝에는 RPG)을 들고 보스를 겨누며, 발차기 때 앞으로 뛰어든다
@@ -1208,6 +1258,24 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
           continue;
         }
+        if (b.weapon === 'laser') {
+          // R-10 레이저 탄환: 붉게 빛나는 짧은 빛줄기
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate(Math.atan2(b.vy, b.vx));
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = 'rgba(255,40,40,0.35)';
+          ctx.lineWidth = 14;
+          ctx.beginPath(); ctx.moveTo(-26, 0); ctx.lineTo(16, 0); ctx.stroke();
+          ctx.strokeStyle = '#FF2A2A';
+          ctx.lineWidth = 6;
+          ctx.beginPath(); ctx.moveTo(-22, 0); ctx.lineTo(14, 0); ctx.stroke();
+          ctx.strokeStyle = '#FFE3E3';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(12, 0); ctx.stroke();
+          ctx.restore();
+          continue;
+        }
         if (b.weapon === 'turret') {
           // 복도 포탑 포탄: 검은 쇳덩이 + 노란 불꽃 꼬리
           ctx.save();
@@ -1236,7 +1304,7 @@ export function createRenderer(canvas, wrap, assets) {
 
       if (match.jet) drawJet(match.jet);
       if (cut?.kind === 'r10') drawR10Cutscene(match, cut, time, reducedMotion);
-      else if (cut) drawCutsceneActors(match, cut, time, reducedMotion);
+      else if (cut?.kind === 'smith') drawCutsceneActors(match, cut, time, reducedMotion);
       if (match.story) {
         drawStoryCraft(match.story, time, reducedMotion);
         for (const p of match.players) if (p.entering) drawEntering(p, inputs[p.id], time, reducedMotion);
@@ -1323,6 +1391,11 @@ export function createRenderer(canvas, wrap, assets) {
       if (killcam) {
         drawKillcamOverlay(killcam, time, reducedMotion);
       } else if (cut) {
+        // 계단 컷씬: 스테이지가 바뀌는 동안 화면이 어두워졌다 밝아진다
+        if (cut.kind === 'stairs' && cut.fade > 0) {
+          ctx.fillStyle = `rgba(0,0,0,${cut.fade})`;
+          ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+        }
         drawLetterbox(cut);
       } else {
         drawTeam('isb', match.players);

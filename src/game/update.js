@@ -11,7 +11,6 @@ import {
 const OUT_MARGIN = 40;
 const HURT_TIME = 0.2;
 const ENEMY_RAIL = { earth: RAIL_Y.isb, isb: RAIL_Y.earth };
-const LASER_LENGTH = 2400;
 // 0.1초 같은 간격이 1/60초 틱의 부동소수 오차로 한 틱 밀리지 않도록 쓰는 여유
 const EPS = 1e-9;
 
@@ -268,31 +267,6 @@ function throwGrenade(match, p, events) {
   events.push({ type: 'fire', playerId: p.id, weapon: grenade.id });
 }
 
-/** 레이저: 조준 방향으로 즉시 뻗어 가장 먼저 닿는 엄폐물·전투기·적에서 멈춘다. */
-function fireLaser(match, p, weapon, events) {
-  const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
-  const x0 = p.x + cos * MUZZLE_OFFSET, y0 = p.y + sin * MUZZLE_OFFSET;
-  const x1 = x0 + cos * LASER_LENGTH, y1 = y0 + sin * LASER_LENGTH;
-  const ray = { previousX: x0, previousY: y0, x: x1, y: y1 };
-  let best = { t: 1 };
-  const cover = coverContact(match, ray);
-  if (cover) best = cover;
-  // 전투기는 하늘 높이 날아 레이저도 막지 않는다.
-  for (const q of match.players) {
-    if (!q.alive || q.team === p.team || invulnerable(q)) continue;
-    const t = segmentCircleTime(x0 - q.x, y0 - q.y, x1 - q.x, y1 - q.y, q.radius);
-    if (t !== null && t < best.t) best = { t, victim: q };
-  }
-  const x = x0 + (x1 - x0) * best.t, y = y0 + (y1 - y0) * best.t;
-  events.push({ type: 'fire', playerId: p.id, weapon: weapon.id });
-  events.push({ type: 'laser', playerId: p.id, x1: x0, y1: y0, x2: x, y2: y });
-  const shot = { team: p.team, ownerId: p.id, weapon: weapon.id, connected: false };
-  const amount = weaponDamage(p, weapon.id).damage;
-  if (best.victim) damage(match, best.victim, amount, shot, events);
-  else if (best.cover) events.push({ type: 'block', x, y });
-  if (best.cover) damageCover(match, best.cover, amount, shot, events);
-}
-
 function fire(match, p, events) {
   const weapon = WEAPONS[p.weapon];
   p.sinceShot = 0;
@@ -306,7 +280,6 @@ function fire(match, p, events) {
       events.push({ type: 'overheat', playerId: p.id });
     }
   }
-  if (weapon.beam) { fireLaser(match, p, weapon, events); return; }
   if (weapon.instakill) { fireInstakill(match, p, weapon, events); return; }
   if (weapon.dash) { startDash(p, weapon, events); return; }
   const group = { connected: false };
