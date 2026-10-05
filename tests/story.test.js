@@ -7,7 +7,7 @@ import { step, spawnProjectile } from '../src/game/update.js';
 import { updateAI, nearestTarget } from '../src/game/ai.js';
 import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
-  LAST_WORDS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT,
+  LAST_WORDS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
 
@@ -128,11 +128,11 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
   assert.equal(match.story.brains[0].diff.name, '보통');
   assert.equal(wave[0].y, RAIL_Y.isb, '엘리베이터에서 걸어 나와 레일로');
 
-  // 복도 2웨이브: 쉬움 돌격소총 + 보통 저격총
+  // 복도 2웨이브: 쉬움 돌격소총 + 보통 돌격소총(기획의 저격총에서 바뀜)
   killAll(match, inputs);
   untilFight(match, inputs);
   wave = enemies(match);
-  assert.deepEqual(wave.map((p) => p.primary), ['rifle', 'sniper']);
+  assert.deepEqual(wave.map((p) => p.primary), ['rifle', 'rifle']);
   assert.deepEqual(match.story.brains.map((b) => b.diff.name), ['쉬움', '보통']);
 
   // 복도 3웨이브: 쉬움 요원 4명(쌍권총·권총·권총·돌격소총)
@@ -559,7 +559,7 @@ test('이어하기: 저장한 웨이브의 요원이 오는 장면부터 저장�
   const events = untilFight(match, inputs);
   assert.ok(events.some((e) => e.type === 'elevator'));
   assert.equal(match.story.wave, 5);
-  assert.deepEqual(enemies(match).map((p) => p.primary), ['rifle', 'sniper']);
+  assert.deepEqual(enemies(match).map((p) => p.primary), ['rifle', 'rifle']);
   assert.equal(match.jet, null);
 
   // 옥상 중간보스부터: 헬리콥터 격추 → 건쉽
@@ -688,4 +688,34 @@ test('2인 협동: 스테이지를 깨면 쓰러진 동료도 체력 가득으�
   assert.equal(R1.alive, false);
   assert.equal(R2.hp, 77);
   assert.equal(resumed.story.stage, 'corridor');
+});
+
+test('요원별 주무기: 모든 요원(R-10 빼고)의 주무기를 정할 수 있고, 기본은 기획 무기(복도 2웨이브는 둘 다 돌격소총)', () => {
+  const settings = defaultStory();
+  assert.deepEqual(settings.waves.map((w) => w.weapons), [
+    ['rifle'], ['random', 'random'], ['random', 'random', 'random'], ['pistol'],
+    ['random'], ['rifle', 'rifle'], ['dual', 'pistol', 'pistol', 'rifle'], [],
+  ]);
+  assert.deepEqual(AGENT_WEAPON_CHOICES, ['random', 'rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow']);
+
+  // 정한 무기대로 나온다(무작위가 아니면 RPG·저격총·석궁도)
+  settings.waves[0].weapons = ['sniper'];
+  settings.waves[1].weapons = ['rpg', 'crossbow'];
+  settings.waves[3].weapons = ['dual'];
+  const { match, inputs } = story(settings);
+  assert.equal(enemies(match)[0].primary, 'sniper');
+  killAll(match, inputs); untilFight(match, inputs);
+  assert.deepEqual(enemies(match).map((p) => p.primary), ['rpg', 'crossbow']);
+  killAll(match, inputs); untilFight(match, inputs);
+  for (const p of enemies(match)) assert.ok(STORY_WEAPONS.includes(p.primary), '무작위는 그대로');
+  killAll(match, inputs); untilFight(match, inputs);
+  assert.equal(enemies(match)[0].name, BOSS_NAME);
+  assert.equal(enemies(match)[0].primary, 'dual');
+
+  // 저장값 검사: 모르는 무기·빠진 칸은 기본값, 예전 저장값(weapons 없음)도 기본값
+  const fixed = normalizeStory({ waves: [{ weapons: ['laser'] }, { weapons: ['sniper'] }, {}, {}, {}, { weapons: ['rifle', 'sniper'] }] });
+  assert.deepEqual(fixed.waves[0].weapons, ['rifle']);
+  assert.deepEqual(fixed.waves[1].weapons, ['sniper', 'random']);
+  assert.deepEqual(fixed.waves[5].weapons, ['rifle', 'sniper']);
+  assert.deepEqual(fixed.waves[7].weapons, []);
 });

@@ -352,6 +352,10 @@ button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; 
 .story-wave.boss legend { color: #D9443A; }
 .story-wave > small { color: var(--muted); font-size: 12px; }
 .story-wave .choices.secondary { grid-template-columns: repeat(4, 1fr); }
+/* 요원별 주무기: 무작위 + 주무기 6종. 기본값과 다르면 노랗게 */
+.story-wave .choices.agent-weapon { grid-template-columns: repeat(4, 1fr); border-radius: 10px; }
+.story-wave .choices.agent-weapon.changed { background: #fff3c4; box-shadow: 0 0 0 4px #fff3c4; }
+.story-wave .weapon-default { color: var(--muted); font-weight: 400; }
 .story-wave .ai-numbers { grid-template-columns: 1fr; }
 
 /* 타이틀 화면(스파이 대전쟁): 손그림 기획서처럼 테두리 안에 제목, 왼쪽 지구방위팀 둘과 오른쪽 요원 둘이 서로 겨눈다 */

@@ -9,11 +9,11 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
  * 1스테이지 옥상: 1웨이브 요원 1명(돌격소총) → 2웨이브 헬리콥터에서 요원 2명 → 3웨이브 요원 3명
  *   → 중간보스: 전투기가 헬리콥터를 격추하고, 건쉽에서 스미스 요원(권총 + 보조무기 + 수류탄)이 내려온다.
  *   스미스 요원을 쓰러뜨리면 엔딩 컷씬(발차기로 건물 밖으로) 뒤 다음 스테이지로. 스테이지를 깰 때마다 체력 100% 회복.
- * 2스테이지 복도: 엘리베이터에서 요원이 나온다. 1웨이브 보통 요원 1명(무작위 무기) → 2웨이브 쉬움 돌격소총 + 보통 저격총
+ * 2스테이지 복도: 엘리베이터에서 요원이 나온다. 1웨이브 보통 요원 1명(무작위 무기) → 2웨이브 쉬움 돌격소총 + 보통 돌격소총
  *   → 3웨이브 쉬움 요원 4명(쌍권총·권총·권총·돌격소총) → 보스전: 천장을 부수고 R-10(레이저 캐논, 체력 600)이 나온다.
  *   R-10을 쓰러뜨리면 RPG 엔딩 컷씬 뒤 승리. 복도에는 전투기 대신 벽 포탑 2개가 플레이어를 쏜다(config.js TURRET).
  * 일반 요원의 무작위 주무기는 RPG·저격총·아킴보 석궁을 뺀 주무기 중 하나. 스미스 요원 말고는 보조무기·수류탄을 쓰지 않는다.
- * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스는 스토리 설정(밸런스 칸)에서 바꾼다.
+ * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스와 요원마다의 주무기(R-10 빼고)는 스토리 설정(밸런스 칸)에서 바꾼다.
  * 2인 협동: P2도 지구방위팀으로 함께 싸운다(COOP_SLOT). 둘 다 쓰러지면 패배, 한 명이라도 서 있으면 계속한다.
  *   쓰러진 동료는 스테이지를 깰 때 체력 가득으로 다시 일어난다. 요원·포탑은 가까운 쪽 주인공을 노린다.
  */
@@ -40,7 +40,7 @@ export const WAVES = [
   { stage: 'corridor', title: '1웨이브', count: 1, weapon: 'random', from: 'elevator', end: 'corridor-call' },
   {
     stage: 'corridor', title: '2웨이브', from: 'elevator', end: 'eikk', killLine: '나 이제 승급인데!!!',
-    agents: [{ weapon: 'rifle', difficulty: 'easy' }, { weapon: 'sniper', difficulty: 'normal' }],
+    agents: [{ weapon: 'rifle', difficulty: 'easy' }, { weapon: 'rifle', difficulty: 'normal' }],
   },
   {
     stage: 'corridor', title: '3웨이브', from: 'elevator', end: 'rumble',
@@ -61,19 +61,25 @@ export function currentWave(story) {
   return ['fight', 'drop'].includes(story.phase) ? story.wave : Math.min(story.wave + 1, WAVES.length - 1);
 }
 
+/** 요원 주무기로 고를 수 있는 값: 'random'(STORY_WEAPONS 중 무작위) 또는 주무기 id */
+export const AGENT_WEAPON_CHOICES = ['random', ...PRIMARY_IDS];
+/** 웨이브 i 요원들의 기획 무기(요원마다 'random' 또는 주무기 id). R-10은 레이저 캐논 전용이라 없음([]). */
+export const defaultWeapons = (i) => (WAVES[i].boss === 'r10' ? []
+  : Array.from({ length: WAVES[i].count }, (_, k) => WAVES[i].agents?.[k]?.weapon ?? WAVES[i].weapon));
+
 /**
  * 웨이브별 요원 밸런스 기본값. damage·bulletSpeed·speed는 %, radius는 히트박스 반지름.
  * difficulty 'mixed'(기획대로)는 요원마다 WAVES의 난이도를 쓴다(복도 2웨이브: 쉬움·보통).
  * secondary(스미스 요원만): 보조무기 id 또는 'random'(경기마다 무작위).
+ * weapons: 요원마다의 주무기(AGENT_WEAPON_CHOICES). R-10은 빈 목록.
  */
 export function defaultStory() {
   const agent = (hp, difficulty = 'normal') => ({ hp, difficulty, damage: 100, bulletSpeed: 100, speed: 100, radius: 30 });
-  return {
-    waves: [
-      agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
-      agent(500), agent(300, 'mixed'), agent(200, 'easy'), { ...agent(600), radius: 48 },
-    ],
-  };
+  const waves = [
+    agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
+    agent(500), agent(300, 'mixed'), agent(200, 'easy'), { ...agent(600), radius: 48 },
+  ];
+  return { waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
 }
 
 /** 저장된 값을 기본값 위에 덮고, 범위·선택지 밖의 값은 기본값으로 되돌린다. */
@@ -90,6 +96,9 @@ export function normalizeStory(saved) {
     }
     if (DIFFICULTY[w.difficulty] || (mixable && w.difficulty === 'mixed')) def.difficulty = w.difficulty;
     if ('secondary' in def && (w.secondary === 'random' || SECONDARY_IDS.includes(w.secondary))) def.secondary = w.secondary;
+    if (Array.isArray(w.weapons)) {
+      def.weapons = def.weapons.map((d, k) => (AGENT_WEAPON_CHOICES.includes(w.weapons[k]) ? w.weapons[k] : d));
+    }
   });
   return story;
 }
@@ -199,7 +208,8 @@ function spawnWave(match, inputs, index) {
   for (let i = 0; i < wave.count; i++) {
     const spec = wave.agents?.[i] ?? {};
     const x = Math.min(MAX_X, Math.max(MIN_X, center + (i - (wave.count - 1) / 2) * DROP_SPREAD));
-    const kind = spec.weapon ?? wave.weapon;
+    // 스토리 설정에서 요원마다 고른 주무기(없으면 기획 무기). R-10은 레이저 캐논 고정.
+    const kind = cfg.weapons?.[i] ?? spec.weapon ?? wave.weapon;
     const weapon = kind === 'random' ? pick(story.rng, STORY_WEAPONS) : kind;
     const id = wave.boss ? 'BOSS' : `E${story.nextId++}`;
     const smith = wave.boss === 'smith', r10 = wave.boss === 'r10';
