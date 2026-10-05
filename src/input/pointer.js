@@ -73,13 +73,15 @@ function actionButton(className, onPress) {
  * 플레이어별 조작 패널: 이동키 | 가운데 무기·아이템 버튼 | 발사키. 패널이 화면 절반을 채우고 두 스틱을 양 끝에 둬
  * 이동키와 발사키 사이를 최대한 벌린다. 가운데 빈 곳에는 고른 주무기·보조무기 바로 선택과 수류탄(아이템) 던지기 버튼.
  * cancelAll()은 모든 스틱을 놓아 사격을 멈추고, sync(players)는 매 프레임 버튼 상태(든 무기·수류탄 쿨타임)를 맞춘다.
+ * sideOf(p)는 패널을 놓을 쪽('earth' 왼쪽·'isb' 오른쪽). 기본은 팀 쪽이고, 스토리 모드 2인 협동의 P2는 지구방위팀이어도 오른쪽.
  */
-export function createControls(groups, players, inputs) {
+export function createControls(groups, players, inputs, sideOf = (p) => p.team) {
   const cancels = [];
   const buttons = {};
-  for (const team of ['earth', 'isb']) {
-    groups[team].replaceChildren();
-    for (const p of players.filter((pl) => pl.team === team)) {
+  for (const side of ['earth', 'isb']) {
+    groups[side].replaceChildren();
+    for (const p of players.filter((pl) => sideOf(pl) === side)) {
+      const { team } = p;
       const frame = inputs[p.id];
       const panel = document.createElement('div');
       panel.className = `panel team-${team}`;
@@ -116,7 +118,7 @@ export function createControls(groups, players, inputs) {
       middle.className = 'panel-mid';
       middle.append(header, actions);
       panel.append(move, middle, aim);
-      groups[team].append(panel);
+      groups[side].append(panel);
 
       cancels.push(bindStick(move, {
         drag(dx, _dy, radius, knob) {

@@ -2,7 +2,7 @@ import { TICK, COUNTDOWN, TEAM_NAME } from './game/config.js';
 import { SLOTS, createMatch, createInputs, cancelInputs, defaultLoadout } from './game/state.js';
 import { step } from './game/update.js';
 import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
-import { createStoryMatch, checkpoint, waveLabel } from './game/story.js';
+import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT } from './game/story.js';
 import { createControls } from './input/pointer.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
 import { pollGamepads, applyGamepads, clearGamepads } from './input/gamepad.js';
@@ -25,6 +25,8 @@ const settings = loadSettings();
 // 밸런스 메뉴에서 바꿔 저장해 둔 수치를 가장 먼저 적용한다.
 applyOverrides(loadBalance());
 const loadout = defaultLoadout();
+// 스토리 모드 2인 협동의 P2(지구방위팀) 선택. 2인 대결의 P2(ISB팀) 선택과는 따로 둔다.
+const coopLoadout = { P2: { characterId: COOP_SLOT.characterId, weapon: COOP_SLOT.weapon, secondary: loadout.P2.secondary } };
 // 'versus'(2인 대결) 또는 'single'(싱글 플레이, P2는 AI)
 let mode = 'versus';
 const single = loadSingle();
@@ -77,13 +79,18 @@ function aiPanel(team, title, text) {
 }
 
 const storyMode = () => mode === 'single' && single.mode === 'story';
+/** 스토리 모드 2인 협동 P2 선택. 이어하기·저장한 판은 저장할 때의 인원을 따르고, 1인이면 null. */
+function storyPartner() {
+  if (resumeFrom) return resumeFrom.coop ? resumeFrom.pick2 : null;
+  return single.storyPlayers === 2 ? coopLoadout.P2 : null;
+}
 /** 이번 틱에 움직일 AI들: 스토리 모드는 지금 경기장의 요원 전원, 자유 대전은 1명 */
 const brains = () => (match?.story ? match.story.brains : ai ? [ai] : []);
 
 function startMatch() {
   unlock();
   if (!storyMode()) resumeFrom = null;
-  match = storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom)
+  match = storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom, storyPartner())
     : createMatch(mode === 'single' ? singleLoadout() : loadout);
   inputs = createInputs(match.players);
   humans = match.players.filter((p) => !p.ai);
@@ -92,9 +99,12 @@ function startMatch() {
   clearKeys();
   clearGamepads();
   const groups = { earth: document.querySelector('#controls-earth'), isb: document.querySelector('#controls-isb') };
-  controls = createControls(groups, humans, inputs);
-  if (match.story) groups.isb.replaceChildren(aiPanel('isb', '스토리 모드 · ISB팀', waveLabel(resumeFrom?.wave ?? 0)));
-  else if (aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
+  // 스토리 모드 2인 협동의 P2는 지구방위팀이지만 조작 패널은 오른쪽(평소 P2 자리)에 둔다
+  controls = createControls(groups, humans, inputs, (p) => (p.team === 'earth' && p.id === 'P2' ? 'isb' : p.team));
+  if (match.story) {
+    // 2인 협동이면 오른쪽은 P2 패널이라 웨이브 안내 칸을 두지 않는다
+    if (!match.story.coop) groups.isb.replaceChildren(aiPanel('isb', '스토리 모드 · ISB팀', waveLabel(resumeFrom?.wave ?? 0)));
+  } else if (aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
   renderer.reset();
   restartMusic();
   screens.show('game');
@@ -133,12 +143,15 @@ function saveStoryProgress() {
     screens.setSaveStatus('지금은 저장할 수 없습니다.');
     return;
   }
-  const hero = match.players.find((p) => !p.ai);
-  const save = { ...point, pick: { characterId: hero.characterId, weapon: hero.primary, secondary: hero.secondary }, savedAt: Date.now() };
+  const [hero, partner] = match.players.filter((p) => !p.ai);
+  const pickOf = (p) => ({ characterId: p.characterId, weapon: p.primary, secondary: p.secondary });
+  const save = { ...point, pick: pickOf(hero), savedAt: Date.now() };
+  if (partner) save.pick2 = pickOf(partner);
   saveStorySave(save);
   resumeFrom = save;
   screens.setContinue(save);
-  screens.setSaveStatus(`저장했습니다: ${point.label} · 체력 ${point.hp}. 메인 메뉴의 '스토리 이어하기'로 이어서 할 수 있어요.`);
+  const hp = partner ? `체력 P1 ${point.hp} · P2 ${point.hp2}` : `체력 ${point.hp}`;
+  screens.setSaveStatus(`저장했습니다: ${point.label} · ${hp}. 메인 메뉴의 '스토리 이어하기'로 이어서 할 수 있어요.`);
 }
 
 /** 저장한 곳부터 스토리 모드 이어하기 */
@@ -147,8 +160,10 @@ function continueStory() {
   if (!save) { screens.setContinue(null); return; }
   mode = 'single';
   single.mode = 'story';
+  single.storyPlayers = save.coop ? 2 : 1;
   saveSingle(single);
   loadout.P1 = { ...loadout.P1, ...save.pick };
+  if (save.coop) coopLoadout.P2 = { ...coopLoadout.P2, ...save.pick2 };
   resumeFrom = save;
   startMatch();
 }
@@ -157,7 +172,7 @@ function showSetup() {
   unlock();
   match = null;
   resumeFrom = null;
-  if (mode === 'single') screens.showSingle(SLOTS[0], loadout, single, story);
+  if (mode === 'single') screens.showSingle(SLOTS[0], loadout, single, story, coopLoadout);
   else screens.showReady(SLOTS, loadout);
 }
 
@@ -170,6 +185,9 @@ const screens = createScreens({
   onStoryChange(value) { saveStory(value); },
   onPick(slotId, key, value) {
     loadout[slotId] = { ...loadout[slotId], [key]: value };
+  },
+  onCoopPick(slotId, key, value) {
+    coopLoadout[slotId] = { ...coopLoadout[slotId], [key]: value };
   },
   onStart: startMatch,
   onSave: saveStoryProgress,

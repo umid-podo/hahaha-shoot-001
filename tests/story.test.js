@@ -4,10 +4,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInputs } from '../src/game/state.js';
 import { step, spawnProjectile } from '../src/game/update.js';
-import { updateAI } from '../src/game/ai.js';
+import { updateAI, nearestTarget } from '../src/game/ai.js';
 import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
-  LAST_WORDS, checkpoint, normalizeStorySave, waveLabel, currentWave,
+  LAST_WORDS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
 
@@ -128,11 +128,11 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
   assert.equal(match.story.brains[0].diff.name, '보통');
   assert.equal(wave[0].y, RAIL_Y.isb, '엘리베이터에서 걸어 나와 레일로');
 
-  // 복도 2웨이브: 쉬움 돌격소총 + 보통 저격총
+  // 복도 2웨이브: 쉬움 돌격소총 + 보통 돌격소총(기획의 저격총에서 바뀜)
   killAll(match, inputs);
   untilFight(match, inputs);
   wave = enemies(match);
-  assert.deepEqual(wave.map((p) => p.primary), ['rifle', 'sniper']);
+  assert.deepEqual(wave.map((p) => p.primary), ['rifle', 'rifle']);
   assert.deepEqual(match.story.brains.map((b) => b.diff.name), ['쉬움', '보통']);
 
   // 복도 3웨이브: 쉬움 요원 4명(쌍권총·권총·권총·돌격소총)
@@ -559,7 +559,7 @@ test('이어하기: 저장한 웨이브의 요원이 오는 장면부터 저장�
   const events = untilFight(match, inputs);
   assert.ok(events.some((e) => e.type === 'elevator'));
   assert.equal(match.story.wave, 5);
-  assert.deepEqual(enemies(match).map((p) => p.primary), ['rifle', 'sniper']);
+  assert.deepEqual(enemies(match).map((p) => p.primary), ['rifle', 'rifle']);
   assert.equal(match.jet, null);
 
   // 옥상 중간보스부터: 헬리콥터 격추 → 건쉽
@@ -579,4 +579,143 @@ test('이어하기: 저장한 웨이브의 요원이 오는 장면부터 저장�
   assert.equal(normalizeStorySave({ wave: 2, hp: 10 }), null);
   assert.deepEqual(normalizeStorySave({ wave: 6, hp: 10.4, pick: { characterId: 'r10', weapon: 'laser', secondary: 'smg' }, savedAt: 5 }),
     { wave: 6, hp: 10, label: waveLabel(6), pick: { characterId: 'r10', weapon: 'laser', secondary: 'smg' }, savedAt: 5 });
+});
+
+/* ───────── 2인 협동 ───────── */
+function coop(resume = null, seed = 7) {
+  const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, seed, resume,
+    { characterId: 'earth-pizza', weapon: 'pistol' });
+  match.phase = 'playing';
+  match.jetTimer = Infinity;
+  const inputs = createInputs(match.players);
+  return { match, inputs };
+}
+
+test('2인 협동: P2도 지구방위팀으로 함께, 한 명이 쓰러져도 계속하고 둘 다 쓰러지면 패배', () => {
+  const { match, inputs } = coop();
+  const [P1, P2] = match.players;
+  assert.equal(match.story.coop, true);
+  assert.deepEqual([P1.id, P1.team, P2.id, P2.team], ['P1', 'earth', 'P2', 'earth']);
+  assert.equal(P2.characterId, 'earth-pizza');
+  assert.equal(P2.primary, 'pistol');
+  assert.equal(P2.y, RAIL_Y.earth);
+  assert.ok(P1.x < P2.x, '두 주인공은 떨어져 선다');
+  assert.equal(enemies(match).length, 1, '1웨이브 요원 수는 그대로');
+
+  P1.hp = 0;
+  step(match, inputs);
+  assert.equal(P1.alive, false);
+  assert.equal(match.phase, 'playing', '동료가 서 있으면 계속');
+  assert.equal(checkpoint(match).hp, 0, '쓰러진 P1은 체력 0으로 저장');
+  assert.equal(checkpoint(match).hp2, P2.hp);
+
+  P2.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'result');
+  assert.equal(match.winner, 'isb');
+  assert.equal(checkpoint(match), null);
+
+  // 1인 스토리에는 P2가 없다
+  assert.equal(story().match.players.filter((p) => p.team === 'earth').length, 1);
+  assert.equal(COOP_SLOT.team, 'earth');
+});
+
+test('2인 협동: 요원·포탑은 가까운 주인공을 노리고, 킬캠은 쓰러뜨린 주인공을 비춤', () => {
+  const { match, inputs } = coop();
+  const [P1, P2] = match.players;
+  const [agent] = enemies(match);
+  agent.x = P2.x + 30;
+  assert.equal(nearestTarget(match, agent), P2);
+  agent.x = P1.x - 30;
+  assert.equal(nearestTarget(match, agent), P1);
+  P1.alive = false;
+  assert.equal(nearestTarget(match, agent), P2, '쓰러진 주인공은 노리지 않음');
+  P1.alive = true;
+
+  // P2가 쓰러뜨리면 킬캠의 주인공 장면은 P2
+  match.stats[agent.id].killedBy = { ownerId: 'P2', weapon: 'pistol' };
+  agent.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'killcam');
+  assert.deepEqual(match.killcam.hero, { x: P2.x, y: P2.y });
+
+  // 복도 포탑: 포탑마다 가까운 주인공 쪽으로 쏜다
+  const corridor = coop({ wave: 4, hp: 500, hp2: 500 });
+  const [C1, C2] = corridor.match.players;
+  C1.x = 200; C2.x = 1400;
+  untilFight(corridor.match, corridor.inputs);
+  for (const e of enemies(corridor.match)) e.hp = 99999;
+  for (let t = 0; t < TURRET.firstDelay + 1; t += TICK) {
+    if (step(corridor.match, corridor.inputs).some((e) => e.type === 'turret-fire')) break;
+  }
+  const shells = corridor.match.projectiles.filter((b) => b.ownerId === 'turret');
+  assert.equal(shells.length, 2);
+  // 왼쪽 포탑은 왼쪽의 P1을, 오른쪽 포탑은 오른쪽의 P2를 겨눈다
+  const [left, right] = [...corridor.match.story.turrets].sort((a, b) => a.x - b.x);
+  const aimAt = (t, p) => Math.atan2(p.y - t.y, p.x - t.x);
+  assert.ok(Math.abs(left.aim - aimAt(left, C1)) < 1e-6);
+  assert.ok(Math.abs(right.aim - aimAt(right, C2)) < 1e-6);
+});
+
+test('2인 협동: 스테이지를 깨면 쓰러진 동료도 체력 가득으로 일어남, 저장·이어하기', () => {
+  const { match, inputs } = coop();
+  const [P1, P2] = match.players;
+  P2.hp = 0;
+  step(match, inputs);
+  while (match.phase === 'killcam') step(match, inputs);
+  assert.equal(P2.alive, false);
+  P1.hp = 123;
+  toCorridor(match, inputs);
+  assert.equal(match.story.stage, 'corridor');
+  assert.equal(P1.hp, P1.maxHp);
+  assert.equal(P2.alive, true);
+  assert.equal(P2.hp, P2.maxHp);
+  assert.ok(P1.x < P2.x);
+
+  // 저장값: P2 체력·선택도 함께
+  P2.hp = 77;
+  assert.deepEqual(checkpoint(match), { wave: 4, hp: P1.maxHp, hp2: 77, coop: true, label: '복도 1웨이브' });
+  const pick = { characterId: 'earth-arrow', weapon: 'rifle', secondary: 'smg' };
+  const pick2 = { characterId: 'earth-pizza', weapon: 'pistol', secondary: 'dagger' };
+  assert.deepEqual(normalizeStorySave({ wave: 4, hp: 0, hp2: 77, coop: true, pick, pick2, savedAt: 1 }),
+    { wave: 4, hp: 0, hp2: 77, coop: true, label: waveLabel(4), pick, pick2, savedAt: 1 });
+  assert.equal(normalizeStorySave({ wave: 4, hp: 0, hp2: 0, coop: true, pick, pick2 }), null, '둘 다 쓰러진 저장은 없음');
+  assert.equal(normalizeStorySave({ wave: 4, hp: 5, hp2: 5, coop: true, pick }), null, 'P2 선택이 없으면 무효');
+
+  // 이어하기: 쓰러진 채 저장한 P1은 쓰러진 채로, P2는 저장한 체력으로
+  const resumed = coop({ wave: 5, hp: 0, hp2: 77 }).match;
+  const [R1, R2] = resumed.players;
+  assert.equal(R1.alive, false);
+  assert.equal(R2.hp, 77);
+  assert.equal(resumed.story.stage, 'corridor');
+});
+
+test('요원별 주무기: 모든 요원(R-10 빼고)의 주무기를 정할 수 있고, 기본은 기획 무기(복도 2웨이브는 둘 다 돌격소총)', () => {
+  const settings = defaultStory();
+  assert.deepEqual(settings.waves.map((w) => w.weapons), [
+    ['rifle'], ['random', 'random'], ['random', 'random', 'random'], ['pistol'],
+    ['random'], ['rifle', 'rifle'], ['dual', 'pistol', 'pistol', 'rifle'], [],
+  ]);
+  assert.deepEqual(AGENT_WEAPON_CHOICES, ['random', 'rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow']);
+
+  // 정한 무기대로 나온다(무작위가 아니면 RPG·저격총·석궁도)
+  settings.waves[0].weapons = ['sniper'];
+  settings.waves[1].weapons = ['rpg', 'crossbow'];
+  settings.waves[3].weapons = ['dual'];
+  const { match, inputs } = story(settings);
+  assert.equal(enemies(match)[0].primary, 'sniper');
+  killAll(match, inputs); untilFight(match, inputs);
+  assert.deepEqual(enemies(match).map((p) => p.primary), ['rpg', 'crossbow']);
+  killAll(match, inputs); untilFight(match, inputs);
+  for (const p of enemies(match)) assert.ok(STORY_WEAPONS.includes(p.primary), '무작위는 그대로');
+  killAll(match, inputs); untilFight(match, inputs);
+  assert.equal(enemies(match)[0].name, BOSS_NAME);
+  assert.equal(enemies(match)[0].primary, 'dual');
+
+  // 저장값 검사: 모르는 무기·빠진 칸은 기본값, 예전 저장값(weapons 없음)도 기본값
+  const fixed = normalizeStory({ waves: [{ weapons: ['laser'] }, { weapons: ['sniper'] }, {}, {}, {}, { weapons: ['rifle', 'sniper'] }] });
+  assert.deepEqual(fixed.waves[0].weapons, ['rifle']);
+  assert.deepEqual(fixed.waves[1].weapons, ['sniper', 'random']);
+  assert.deepEqual(fixed.waves[5].weapons, ['rifle', 'sniper']);
+  assert.deepEqual(fixed.waves[7].weapons, []);
 });

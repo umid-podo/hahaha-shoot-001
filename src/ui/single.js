@@ -105,7 +105,7 @@ export function createSingleSetup(onChange) {
     });
   }
   $('#ai-reset-btn').addEventListener('click', () => {
-    Object.assign(single, defaultSingle(), { mode: single.mode });
+    Object.assign(single, defaultSingle(), { mode: single.mode, storyPlayers: single.storyPlayers });
     buildChoices();
     syncSecondary();
     changed();
@@ -131,15 +131,41 @@ export function createSingleSetup(onChange) {
     syncMode();
   }
 
+  /** 스토리 모드 인원: 혼자 · 2인 협동(P2도 지구방위팀) */
+  function buildPlayers() {
+    const options = [
+      [1, '1인', '혼자서 P1 조작'],
+      [2, '2인 협동', 'P2도 지구방위팀으로 함께. 둘 다 쓰러지면 패배'],
+    ];
+    $('#story-players').replaceChildren(...options.map(([n, name, hint]) => {
+      const label = document.createElement('span');
+      label.textContent = name;
+      const info = document.createElement('small');
+      info.textContent = hint;
+      return choiceButton([label, info], single.storyPlayers === n, () => {
+        single.storyPlayers = n;
+        syncMode();
+        onChange(single);
+      });
+    }));
+  }
+
   function syncMode() {
-    $('#free-setup').hidden = single.mode === 'story';
-    $('#story-setup').hidden = single.mode !== 'story';
+    const story = single.mode === 'story';
+    $('#free-setup').hidden = story;
+    $('#story-setup').hidden = !story;
+    $('#story-players').hidden = !story;
+    // 2인 협동이면 P2 캐릭터·무기 고르기 칸을 보인다
+    const p2 = $('#single-p2');
+    if (p2) p2.hidden = !(story && single.storyPlayers === 2);
   }
 
   return {
     open(state) {
       single = state;
       if (single.mode !== 'story') single.mode = 'free';
+      if (single.storyPlayers !== 2) single.storyPlayers = 1;
+      buildPlayers();
       buildMode();
       // 목록에서 빠진 무기(예: 전용 무기가 된 아킴보 석궁)가 저장돼 있으면 기본값으로
       if (!PRIMARY_IDS.includes(single.aiWeapon)) single.aiWeapon = defaultSingle().aiWeapon;

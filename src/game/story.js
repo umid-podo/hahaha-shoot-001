@@ -9,11 +9,13 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
  * 1스테이지 옥상: 1웨이브 요원 1명(돌격소총) → 2웨이브 헬리콥터에서 요원 2명 → 3웨이브 요원 3명
  *   → 중간보스: 전투기가 헬리콥터를 격추하고, 건쉽에서 스미스 요원(권총 + 보조무기 + 수류탄)이 내려온다.
  *   스미스 요원을 쓰러뜨리면 엔딩 컷씬(발차기로 건물 밖으로) 뒤 다음 스테이지로. 스테이지를 깰 때마다 체력 100% 회복.
- * 2스테이지 복도: 엘리베이터에서 요원이 나온다. 1웨이브 보통 요원 1명(무작위 무기) → 2웨이브 쉬움 돌격소총 + 보통 저격총
+ * 2스테이지 복도: 엘리베이터에서 요원이 나온다. 1웨이브 보통 요원 1명(무작위 무기) → 2웨이브 쉬움 돌격소총 + 보통 돌격소총
  *   → 3웨이브 쉬움 요원 4명(쌍권총·권총·권총·돌격소총) → 보스전: 천장을 부수고 R-10(레이저 캐논, 체력 600)이 나온다.
  *   R-10을 쓰러뜨리면 RPG 엔딩 컷씬 뒤 승리. 복도에는 전투기 대신 벽 포탑 2개가 플레이어를 쏜다(config.js TURRET).
  * 일반 요원의 무작위 주무기는 RPG·저격총·아킴보 석궁을 뺀 주무기 중 하나. 스미스 요원 말고는 보조무기·수류탄을 쓰지 않는다.
- * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스는 스토리 설정(밸런스 칸)에서 바꾼다.
+ * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스와 요원마다의 주무기(R-10 빼고)는 스토리 설정(밸런스 칸)에서 바꾼다.
+ * 2인 협동: P2도 지구방위팀으로 함께 싸운다(COOP_SLOT). 둘 다 쓰러지면 패배, 한 명이라도 서 있으면 계속한다.
+ *   쓰러진 동료는 스테이지를 깰 때 체력 가득으로 다시 일어난다. 요원·포탑은 가까운 쪽 주인공을 노린다.
  */
 export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'crossbow'].includes(id));
 export const BOSS_NAME = '스미스 요원';
@@ -38,7 +40,7 @@ export const WAVES = [
   { stage: 'corridor', title: '1웨이브', count: 1, weapon: 'random', from: 'elevator', end: 'corridor-call' },
   {
     stage: 'corridor', title: '2웨이브', from: 'elevator', end: 'eikk', killLine: '나 이제 승급인데!!!',
-    agents: [{ weapon: 'rifle', difficulty: 'easy' }, { weapon: 'sniper', difficulty: 'normal' }],
+    agents: [{ weapon: 'rifle', difficulty: 'easy' }, { weapon: 'rifle', difficulty: 'normal' }],
   },
   {
     stage: 'corridor', title: '3웨이브', from: 'elevator', end: 'rumble',
@@ -59,19 +61,25 @@ export function currentWave(story) {
   return ['fight', 'drop'].includes(story.phase) ? story.wave : Math.min(story.wave + 1, WAVES.length - 1);
 }
 
+/** 요원 주무기로 고를 수 있는 값: 'random'(STORY_WEAPONS 중 무작위) 또는 주무기 id */
+export const AGENT_WEAPON_CHOICES = ['random', ...PRIMARY_IDS];
+/** 웨이브 i 요원들의 기획 무기(요원마다 'random' 또는 주무기 id). R-10은 레이저 캐논 전용이라 없음([]). */
+export const defaultWeapons = (i) => (WAVES[i].boss === 'r10' ? []
+  : Array.from({ length: WAVES[i].count }, (_, k) => WAVES[i].agents?.[k]?.weapon ?? WAVES[i].weapon));
+
 /**
  * 웨이브별 요원 밸런스 기본값. damage·bulletSpeed·speed는 %, radius는 히트박스 반지름.
  * difficulty 'mixed'(기획대로)는 요원마다 WAVES의 난이도를 쓴다(복도 2웨이브: 쉬움·보통).
  * secondary(스미스 요원만): 보조무기 id 또는 'random'(경기마다 무작위).
+ * weapons: 요원마다의 주무기(AGENT_WEAPON_CHOICES). R-10은 빈 목록.
  */
 export function defaultStory() {
   const agent = (hp, difficulty = 'normal') => ({ hp, difficulty, damage: 100, bulletSpeed: 100, speed: 100, radius: 30 });
-  return {
-    waves: [
-      agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
-      agent(500), agent(300, 'mixed'), agent(200, 'easy'), { ...agent(600), radius: 48 },
-    ],
-  };
+  const waves = [
+    agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
+    agent(500), agent(300, 'mixed'), agent(200, 'easy'), { ...agent(600), radius: 48 },
+  ];
+  return { waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
 }
 
 /** 저장된 값을 기본값 위에 덮고, 범위·선택지 밖의 값은 기본값으로 되돌린다. */
@@ -88,6 +96,9 @@ export function normalizeStory(saved) {
     }
     if (DIFFICULTY[w.difficulty] || (mixable && w.difficulty === 'mixed')) def.difficulty = w.difficulty;
     if ('secondary' in def && (w.secondary === 'random' || SECONDARY_IDS.includes(w.secondary))) def.secondary = w.secondary;
+    if (Array.isArray(w.weapons)) {
+      def.weapons = def.weapons.map((d, k) => (AGENT_WEAPON_CHOICES.includes(w.weapons[k]) ? w.weapons[k] : d));
+    }
   });
   return story;
 }
@@ -126,14 +137,25 @@ const TURRET_MUZZLE = 44;
 const TURRET_SHELL_LIFE = 4;
 
 const ISB = SLOTS.find((s) => s.team === 'isb');
+/** 2인 협동의 두 번째 주인공 자리: P2(키보드·두 번째 컨트롤러·오른쪽 조작 패널)지만 지구방위팀이다. 기본은 피자럭스 돌격소총. */
+export const COOP_SLOT = { id: 'P2', team: 'earth', characterId: 'earth-pizza', weapon: 'rifle' };
+const COOP_GAP = 170; // 2인 협동에서 두 주인공이 서는 간격(가운데에서 양옆으로)
+
+/** 주인공들(1인이면 P1 하나, 2인 협동이면 P1·P2)의 시작 x */
+function heroXs(count) {
+  return count > 1 ? [ARENA_WIDTH / 2 - COOP_GAP, ARENA_WIDTH / 2 + COOP_GAP] : [ARENA_WIDTH / 2];
+}
 
 /**
  * 스토리 모드 경기. playerPick은 플레이어(P1) 선택, settings는 defaultStory() 모양.
- * 1웨이브 요원은 경기 시작부터 서 있다. resume({ wave, hp })을 주면 저장한 웨이브가 오는 장면부터 그 체력으로 이어 한다.
+ * 1웨이브 요원은 경기 시작부터 서 있다. resume({ wave, hp, hp2 })을 주면 저장한 웨이브가 오는 장면부터 그 체력으로 이어 한다
+ * (hp2 0이면 P2는 쓰러진 채로, 다음 스테이지에서 일어난다). partnerPick을 주면 2인 협동: P2가 지구방위팀으로 함께 싸운다.
  */
-export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null) {
-  const player = createPlayer(SLOTS[0], playerPick);
-  const match = createMatchWith([player], seed);
+export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null) {
+  const xs = heroXs(partnerPick ? 2 : 1);
+  const player = createPlayer(SLOTS[0], { ...playerPick, x: xs[0] });
+  const heroes = partnerPick ? [player, createPlayer(COOP_SLOT, { ...partnerPick, x: xs[1] })] : [player];
+  const match = createMatchWith(heroes, seed);
   const rng = createRng(seed ^ 0x5eed);
   const start = Math.min(WAVES.length - 1, Math.max(0, Math.floor(Number(resume?.wave)) || 0));
   match.story = {
@@ -141,9 +163,17 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
     brains: [], roster: [], nextId: 1,
     carrier: null, jet: null, missile: null, elevator: null, ceiling: null, turrets: null,
     banner: banner(waveLabel(0), waveInfo(0, settings)),
-    started: start > 0,
+    started: start > 0, coop: heroes.length > 1,
   };
-  if (resume?.hp > 0) player.hp = Math.min(player.maxHp, Math.round(resume.hp));
+  if (resume) {
+    // 저장한 체력. 0이면 쓰러진 채로 이어 한다(둘 중 한 명은 서 있다).
+    heroes.forEach((p, i) => {
+      const hp = Number(i === 0 ? resume.hp : resume.hp2);
+      if (!Number.isFinite(hp)) return;
+      p.hp = Math.min(p.maxHp, Math.max(0, Math.round(hp)));
+      if (p.hp === 0) p.alive = false;
+    });
+  }
   if (start === 0) {
     spawnWave(match, {}, 0); // 입력 칸은 경기를 시작할 때 createInputs(match.players)로 만든다
     return match;
@@ -178,7 +208,8 @@ function spawnWave(match, inputs, index) {
   for (let i = 0; i < wave.count; i++) {
     const spec = wave.agents?.[i] ?? {};
     const x = Math.min(MAX_X, Math.max(MIN_X, center + (i - (wave.count - 1) / 2) * DROP_SPREAD));
-    const kind = spec.weapon ?? wave.weapon;
+    // 스토리 설정에서 요원마다 고른 주무기(없으면 기획 무기). R-10은 레이저 캐논 고정.
+    const kind = cfg.weapons?.[i] ?? spec.weapon ?? wave.weapon;
     const weapon = kind === 'random' ? pick(story.rng, STORY_WEAPONS) : kind;
     const id = wave.boss ? 'BOSS' : `E${story.nextId++}`;
     const smith = wave.boss === 'smith', r10 = wave.boss === 'r10';
@@ -220,7 +251,15 @@ export function holdsResult(match) {
 }
 
 const enemies = (match) => match.players.filter((p) => p.team === 'isb');
-const heroOf = (match) => match.players.find((p) => p.team === 'earth');
+const heroes = (match) => match.players.filter((p) => p.team === 'earth');
+/** 장면에 나올 주인공: 살아 있는 주인공 중 prefer(예: 요원을 쓰러뜨린 쪽)가 있으면 그쪽, 없으면 먼저 오는 쪽 */
+function heroOf(match, preferId = null) {
+  const list = heroes(match);
+  const alive = list.filter((p) => p.alive);
+  return alive.find((p) => p.id === preferId) ?? alive[0] ?? list[0];
+}
+/** victim을 쓰러뜨린 주인공 id(포탑·전투기 등이면 null) */
+const killerOf = (match, victim) => match.stats?.[victim.id]?.killedBy?.ownerId ?? null;
 
 /** 복도 스테이지 준비: 엘리베이터·포탑, 새 엄폐물. 전투기는 나오지 않는다. */
 function setupCorridor(match) {
@@ -230,14 +269,14 @@ function setupCorridor(match) {
   story.turrets = TURRETS.map((t) => ({ ...t, aim: t.dir > 0 ? 0 : Math.PI, fireTimer: 0 }));
   story.turretTimer = TURRET.firstDelay;
   story.turretFiring = false;
-  match.covers = createCovers(match.players.filter((p) => p.team === 'earth'));
+  match.covers = createCovers(heroes(match));
   match.jet = null;
   match.jetTimer = Infinity;
 }
 
 /**
- * 스테이지 클리어(스미스 요원 엔딩 컷씬 뒤): 체력 100% 회복, 경기장을 복도로 바꾸고 카운트다운부터 다시.
- * 쓰러진 스미스 요원은 치우고(결과 화면용으로 roster에는 남는다), 복도 1웨이브 요원이 엘리베이터로 온다.
+ * 스테이지 클리어(스미스 요원 엔딩 컷씬 뒤): 체력 100% 회복(2인 협동에서 쓰러진 동료도 일어남), 경기장을 복도로 바꾸고
+ * 카운트다운부터 다시. 쓰러진 스미스 요원은 치우고(결과 화면용으로 roster에는 남는다), 복도 1웨이브 요원이 엘리베이터로 온다.
  */
 function enterCorridor(match, events) {
   const story = match.story;
@@ -245,17 +284,20 @@ function enterCorridor(match, events) {
   match.players = match.players.filter((p) => p.team !== 'isb');
   story.brains = [];
   match.projectiles = [];
-  const hero = heroOf(match);
-  Object.assign(hero, {
-    hp: hero.maxHp, hurt: 0, x: ARENA_WIDTH / 2, previousX: ARENA_WIDTH / 2, y: RAIL_Y.earth, dash: null,
-    cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, sinceShot: Infinity,
+  const list = heroes(match);
+  const xs = heroXs(list.length);
+  list.forEach((hero, i) => {
+    Object.assign(hero, {
+      hp: hero.maxHp, alive: true, hurt: 0, x: xs[i], previousX: xs[i], y: RAIL_Y.earth, dash: null,
+      cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, sinceShot: Infinity,
+    });
   });
   setupCorridor(match);
   Object.assign(story, { carrier: null, jet: null, missile: null, phase: 'clear', timer: 0 });
   story.banner = banner(`${STAGES.corridor.num}스테이지 · ${STAGES.corridor.name}`, '체력 100% 회복!');
   match.phase = 'countdown';
   match.countdown = COUNTDOWN;
-  events.push({ type: 'stage', stage: 'corridor' }, { type: 'heal', playerId: hero.id });
+  events.push({ type: 'stage', stage: 'corridor' }, ...list.map((hero) => ({ type: 'heal', playerId: hero.id })));
 }
 
 /** 헬리콥터·건쉽이 오른쪽 화면 밖에서 날아온다. 요원·보스가 오므로 경고음(배경음악이 작아짐)을 울린다. */
@@ -363,15 +405,27 @@ function moveEntering(match, dt, events) {
   }
 }
 
+/** 포탑 t에서 가장 가까운 살아 있는 주인공 */
+function turretTarget(match, t) {
+  let best = null, dist = Infinity;
+  for (const p of heroes(match)) {
+    const d = Math.hypot(p.x - t.x, p.y - t.y);
+    if (p.alive && d < dist) { best = p; dist = d; }
+  }
+  return best;
+}
+
 /**
  * 복도 벽 포탑: 웨이브 전투 중에만 돈다. TURRET.burst초 동안 interval마다 살아 있는 플레이어 쪽으로 포탄을 쏘고,
- * TURRET.rest초 쉬었다 다시 쏜다. 쉬는 동안에도 포신은 플레이어를 따라 돈다.
+ * TURRET.rest초 쉬었다 다시 쏜다. 쉬는 동안에도 포신은 플레이어를 따라 돈다. 2인 협동이면 포탑마다 가까운 주인공을 노린다.
  */
 function updateTurrets(match, dt, events) {
   const story = match.story;
-  const hero = match.players.find((p) => p.team === 'earth' && p.alive);
-  if (!hero) return;
-  for (const t of story.turrets) t.aim = Math.atan2(hero.y - t.y, hero.x - t.x);
+  if (!heroes(match).some((p) => p.alive)) return;
+  for (const t of story.turrets) {
+    const hero = turretTarget(match, t);
+    t.aim = Math.atan2(hero.y - t.y, hero.x - t.x);
+  }
   if (story.phase !== 'fight') return;
   story.turretTimer -= dt;
   if (story.turretFiring) {
@@ -384,14 +438,14 @@ function updateTurrets(match, dt, events) {
       t.fireTimer -= dt;
       if (t.fireTimer <= 1e-9) {
         t.fireTimer += TURRET.interval;
-        fireTurret(match, t, hero, events);
+        fireTurret(match, t, turretTarget(match, t), events);
       }
     }
   } else if (story.turretTimer <= 1e-9) {
     story.turretFiring = true;
     story.turretTimer += TURRET.burst;
     for (const t of story.turrets) t.fireTimer = TURRET.interval;
-    for (const t of story.turrets) fireTurret(match, t, hero, events);
+    for (const t of story.turrets) fireTurret(match, t, turretTarget(match, t), events);
   }
 }
 
@@ -509,11 +563,14 @@ export function updateStory(match, inputs, dt, events) {
  * 이어하기는 그 웨이브의 요원이 오는 장면부터 시작한다(쓰러뜨리던 요원은 처음부터 다시).
  */
 
-/** 지금 저장하면 이어할 { wave, hp, label }. 저장할 수 없으면 null(플레이어가 쓰러졌거나 마지막 엔딩 컷씬). */
+/**
+ * 지금 저장하면 이어할 { wave, hp, label } (2인 협동이면 P2 체력 hp2와 coop: true도).
+ * 저장할 수 없으면 null(주인공이 모두 쓰러졌거나 마지막 엔딩 컷씬).
+ */
 export function checkpoint(match) {
   const story = match.story;
-  const hero = story && heroOf(match);
-  if (!hero?.alive || match.phase === 'result') return null;
+  if (!story || !heroes(match).some((p) => p.alive) || match.phase === 'result') return null;
+  const [hero, partner] = heroes(match);
   let wave = currentWave(story);
   if (match.cutscene) {
     if (WAVES[story.wave].boss === 'r10') return null; // 이미 스토리를 깼다
@@ -522,20 +579,34 @@ export function checkpoint(match) {
     wave = story.wave + 1;
   }
   wave = Math.min(wave, WAVES.length - 1);
-  // 다음 스테이지로 넘어가는 길이면 체력은 100% 회복된 값
-  const hp = WAVES[wave].stage !== story.stage ? hero.maxHp : hero.hp;
-  return { wave, hp, label: waveLabel(wave) };
+  // 다음 스테이지로 넘어가는 길이면 체력은 100% 회복된 값(쓰러진 동료도 일어남)
+  const nextStage = WAVES[wave].stage !== story.stage;
+  const hpOf = (p) => (nextStage ? p.maxHp : p.alive ? p.hp : 0);
+  const point = { wave, hp: hpOf(hero), label: waveLabel(wave) };
+  if (partner) Object.assign(point, { hp2: hpOf(partner), coop: true });
+  return point;
 }
 
-/** 저장해 둔 값 검사: 웨이브 번호·체력·캐릭터 선택이 맞지 않으면 null. label은 지금 웨이브 이름으로 다시 만든다. */
+/**
+ * 저장해 둔 값 검사: 웨이브 번호·체력·캐릭터 선택이 맞지 않으면 null. label은 지금 웨이브 이름으로 다시 만든다.
+ * 2인 협동 저장(coop)은 P2 체력 hp2·선택 pick2도 있고, 두 체력 중 하나만 0보다 크면 된다(0은 쓰러진 채로).
+ */
 export function normalizeStorySave(save) {
   const wave = Number(save?.wave), hp = Number(save?.hp);
-  if (!Number.isInteger(wave) || wave < 0 || wave >= WAVES.length || !(hp > 0) || typeof save.pick !== 'object' || !save.pick) return null;
-  const { characterId, weapon, secondary } = save.pick;
-  return {
-    wave, hp: Math.round(hp), label: waveLabel(wave), pick: { characterId, weapon, secondary },
-    savedAt: Number(save.savedAt) || 0,
-  };
+  const isPick = (pick) => typeof pick === 'object' && !!pick;
+  if (!Number.isInteger(wave) || wave < 0 || wave >= WAVES.length || !isPick(save.pick)) return null;
+  const pickOf = ({ characterId, weapon, secondary }) => ({ characterId, weapon, secondary });
+  const savedAt = Number(save.savedAt) || 0;
+  if (save.coop) {
+    const hp2 = Number(save.hp2);
+    if (!isPick(save.pick2) || !(hp >= 0) || !(hp2 >= 0) || !(hp > 0 || hp2 > 0)) return null;
+    return {
+      wave, hp: Math.round(hp), hp2: Math.round(hp2), coop: true, label: waveLabel(wave),
+      pick: pickOf(save.pick), pick2: pickOf(save.pick2), savedAt,
+    };
+  }
+  if (!(hp > 0)) return null;
+  return { wave, hp: Math.round(hp), label: waveLabel(wave), pick: pickOf(save.pick), savedAt };
 }
 
 /* ───────── 엔딩 컷씬 ─────────
@@ -568,8 +639,8 @@ export function startCutscene(match) {
     startR10Cutscene(match);
     return;
   }
-  const hero = match.players.find((p) => p.team === 'earth' && p.alive);
   const boss = match.players.find((p) => p.boss);
+  const hero = heroOf(match, killerOf(match, boss)); // 2인 협동이면 보스를 쓰러뜨린 쪽이 컷씬의 주인공
   match.phase = 'cutscene';
   match.projectiles = [];
   match.jet = null;
@@ -715,8 +786,8 @@ const R10_MISS = [110, 230];    // 레이저가 주인공 옆으로 비껴 가�
 const CUT_ROCKET_SPEED = 1400;
 
 function startR10Cutscene(match) {
-  const hero = match.players.find((p) => p.team === 'earth' && p.alive);
   const boss = match.players.find((p) => p.boss);
+  const hero = heroOf(match, killerOf(match, boss));
   match.phase = 'cutscene';
   match.projectiles = [];
   match.story.banner = null;
@@ -869,7 +940,7 @@ export function startKillcam(match, victim, waveEnd) {
   const wave = WAVES[story.wave];
   const line = !waveEnd && wave.killLine ? wave.killLine
     : LAST_WORDS[Math.floor(story.rng() * LAST_WORDS.length) % LAST_WORDS.length];
-  const hero = heroOf(match);
+  const hero = heroOf(match, killerOf(match, victim)); // 2인 협동이면 쓰러뜨린 쪽 주인공을 비춘다
   const shots = killcamShots(waveEnd ? wave.end : null, line);
   match.phase = 'killcam';
   match.killcam = {

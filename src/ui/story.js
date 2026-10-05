@@ -1,6 +1,8 @@
 import { WEAPONS, SECONDARY_IDS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
-import { WAVES, STAGES, STORY_FIELDS, STORY_WEAPONS, BOSS_NAME, R10_NAME, defaultStory } from '../game/story.js';
+import {
+  WAVES, STAGES, STORY_FIELDS, STORY_WEAPONS, BOSS_NAME, R10_NAME, AGENT_WEAPON_CHOICES, defaultStory,
+} from '../game/story.js';
 import { choiceButton } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -18,16 +20,17 @@ const FROM = {
 };
 const DIFFICULTY_NAME = Object.fromEntries(DIFFICULTY_IDS.map((id) => [id, DIFFICULTY[id].name]));
 
-/** 웨이브 설명: 어디서 오는지와 무기 */
+/** 웨이브 설명: 어디서 오는지와 보조무기·수류탄(주무기는 아래 요원별 칸에서 고른다) */
 function waveNote(wave) {
   const from = FROM[wave.from];
   if (wave.boss === 'r10') return `${from} · 레이저 캐논(3초 쏘고 2초 재장전) · 보조무기·수류탄 없음`;
-  const name = (id) => (id === 'random' ? `${STORY_WEAPONS.map((w) => WEAPONS[w].name).join('·')} 중 무작위` : WEAPONS[id].name);
-  const weapon = wave.agents
-    ? wave.agents.map((a) => `${WEAPONS[a.weapon].name}${a.difficulty ? `(${DIFFICULTY_NAME[a.difficulty]})` : ''}`).join(', ')
-    : name(wave.weapon);
-  return wave.boss ? `${from} · ${weapon} + 보조무기 + 수류탄` : `${from} · ${weapon} · 보조무기·수류탄 없음`;
+  const levels = wave.agents?.some((a) => a.difficulty)
+    ? ` · 기획 난이도 ${wave.agents.map((a) => DIFFICULTY_NAME[a.difficulty ?? 'normal']).join('·')}` : '';
+  return wave.boss ? `${from} · 주무기 + 보조무기 + 수류탄` : `${from} · 주무기만(보조무기·수류탄 없음)${levels}`;
 }
+
+const RANDOM_NAME = `무작위(${STORY_WEAPONS.map((w) => WEAPONS[w].name).join('·')})`;
+const weaponName = (id) => (id === 'random' ? RANDOM_NAME : WEAPONS[id].name);
 
 /** '기획대로' 난이도 설명: 요원마다 정해진 난이도 */
 const mixedName = (wave) => `기획대로(${wave.agents.map((a) => DIFFICULTY_NAME[a.difficulty ?? 'normal']).join('·')})`;
@@ -59,6 +62,25 @@ export function createStorySetup(onChange) {
       changed();
     })));
     box.append(difficulty);
+
+    // 요원마다 주무기: 무작위 또는 주무기 6종 중 하나. 기본값과 다르면 노랗게.
+    cfg.weapons.forEach((weapon, k) => {
+      const who = wave.boss === 'smith' ? BOSS_NAME : `요원 ${k + 1}`;
+      const label = el('div', 'field-label', `${who} 주무기 `);
+      const note = el('small', 'weapon-default', `기본 ${weaponName(def.weapons[k])}`);
+      label.append(note);
+      const row = el('div', 'choices agent-weapon');
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', `${wave.title} ${who} 주무기`);
+      const mark = () => row.classList.toggle('changed', cfg.weapons[k] !== def.weapons[k]);
+      row.append(...AGENT_WEAPON_CHOICES.map((id) => choiceButton(id === 'random' ? '무작위' : WEAPONS[id].name, weapon === id, () => {
+        cfg.weapons[k] = id;
+        mark();
+        changed();
+      })));
+      mark();
+      box.append(label, row);
+    });
 
     if ('secondary' in cfg) {
       box.append(el('div', 'field-label', '보조무기'));
