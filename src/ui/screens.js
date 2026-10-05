@@ -6,7 +6,7 @@ import { PAD_LABEL } from '../input/gamepad.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
 import { createStorySetup } from './story.js';
-import { R10_NAME, waveLabel } from '../game/story.js';
+import { R10_NAME, COOP_SLOT, waveLabel } from '../game/story.js';
 import { weaponInfo, secretChoiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -181,7 +181,8 @@ export function createScreens(handlers) {
     setSaveStatus(text) { $('#save-status').textContent = text; },
     /** 스토리 저장이 있으면 메인 메뉴·싱글 플레이 화면에 '스토리 이어하기'와 저장 위치를 보인다. */
     setContinue(save) {
-      const text = save ? `저장: ${save.label} · 체력 ${save.hp}` : '';
+      const text = !save ? '' : save.coop ? `저장(2인 협동): ${save.label} · 체력 P1 ${save.hp} · P2 ${save.hp2}`
+        : `저장: ${save.label} · 체력 ${save.hp}`;
       for (const btn of document.querySelectorAll('.continue-btn')) btn.hidden = !save;
       for (const info of document.querySelectorAll('.continue-info')) {
         info.hidden = !save;
@@ -200,9 +201,14 @@ export function createScreens(handlers) {
       $('#narrow-warning').hidden = window.innerWidth / slots.length >= MIN_PANEL_WIDTH;
       show('ready');
     },
-    /** 싱글 플레이 설정: 플레이어(P1) 캐릭터·주무기와 AI 설정(자유 대전) 또는 웨이브별 요원 밸런스(스토리 모드) */
-    showSingle(slot, loadout, single, story) {
-      $('#single-player').replaceChildren(slotItem(slot, loadout, handlers.onPick, `플레이어 · ${TEAM_NAME[slot.team]}`));
+    /**
+     * 싱글 플레이 설정: 플레이어(P1) 캐릭터·주무기와 AI 설정(자유 대전) 또는 웨이브별 요원 밸런스(스토리 모드).
+     * coopLoadout은 스토리 모드 2인 협동 P2의 선택({ P2 }). 2인 협동을 고르면 P2 칸이 보인다.
+     */
+    showSingle(slot, loadout, single, story, coopLoadout) {
+      const partner = slotItem(COOP_SLOT, coopLoadout, handlers.onCoopPick, `P2 · 2인 협동 · ${TEAM_NAME[COOP_SLOT.team]}`);
+      partner.id = 'single-p2';
+      $('#single-player').replaceChildren(slotItem(slot, loadout, handlers.onPick, `플레이어 · ${TEAM_NAME[slot.team]}`), partner);
       singleSetup.open(single);
       storySetup.open(story);
       show('single');

@@ -47,6 +47,8 @@ export function defaultSingle() {
   return {
     // mode: 'free'(자유 대전, AI 1명) 또는 'story'(스토리 모드, 웨이브)
     mode: 'free',
+    // storyPlayers: 스토리 모드 인원. 1(혼자) 또는 2(2인 협동, P2도 지구방위팀)
+    storyPlayers: 1,
     aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100, aiRadius: 30,
     aiDamage: { primary: null, secondary: null, grenade: null },
   };
@@ -56,7 +58,9 @@ export function loadSingle() {
   const defaults = defaultSingle();
   try {
     const saved = JSON.parse(localStorage.getItem(SINGLE_KEY)) ?? {};
-    return { ...defaults, ...saved, aiDamage: { ...defaults.aiDamage, ...saved.aiDamage } };
+    const single = { ...defaults, ...saved, aiDamage: { ...defaults.aiDamage, ...saved.aiDamage } };
+    if (single.storyPlayers !== 2) single.storyPlayers = 1;
+    return single;
   } catch {
     return defaults;
   }

@@ -150,6 +150,17 @@ function wanderAxis(ai, match, me, target, dt) {
   return Math.abs(gap) < 10 ? 0 : Math.sign(gap);
 }
 
+/** 가장 가까운 살아 있는 상대(스토리 모드 2인 협동처럼 상대가 여럿이면 가까운 쪽을 노린다). 없으면 undefined. */
+export function nearestTarget(match, me) {
+  let best, dist = Infinity;
+  for (const p of match.players) {
+    if (!p.alive || p.entering || p.team === me.team) continue;
+    const d = Math.abs(p.x - me.x);
+    if (d < dist) { best = p; dist = d; }
+  }
+  return best;
+}
+
 /**
  * 매 틱 step() 전에 호출해 AI 자리의 입력 프레임을 채운다.
  * 조준은 언제나 상대 플레이어를 향하고, 날아오는 탄은 옮겨 다니며 피한다.
@@ -158,7 +169,7 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   const me = match.players.find((p) => p.id === ai.playerId);
   const frame = inputs[ai.playerId];
   if (!me || !frame) return;
-  const target = match.players.find((p) => p.alive && !p.entering && p.team !== me.team);
+  const target = nearestTarget(match, me);
   // 스토리 모드에서 헬리콥터에서 내려오는 중인 요원은 아직 움직이지 않는다
   if (!me.alive || me.entering || !target || match.phase !== 'playing') {
     frame.moveAxis = 0;

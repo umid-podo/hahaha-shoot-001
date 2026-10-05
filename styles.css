@@ -344,6 +344,7 @@ button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; 
 
 /* 싱글 플레이 모드 고르기(자유 대전 · 스토리 모드)와 스토리 모드 웨이브별 요원 밸런스 */
 .choices.single-mode { grid-template-columns: repeat(2, 1fr); margin-bottom: 10px; --team: var(--isb); }
+.choices.story-players { --team: var(--earth); }
 .story-waves { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
 .story-wave { display: grid; gap: 4px; margin: 0; padding: 6px 10px 8px; border: 2px solid var(--line); border-radius: 10px; }
 .story-wave legend { padding: 0 4px; font-weight: 700; }
