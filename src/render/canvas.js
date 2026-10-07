@@ -2001,7 +2001,7 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.beginPath(); ctx.arc(b.x, b.y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
           continue;
         }
-        const rocket = b.weapon === 'rpg' || b.weapon === 'missile';
+        const rocket = b.weapon === 'rpg' || b.weapon === 'missile' || b.weapon === 'dsmissile';
         const { img } = assets[rocket ? 'rocket' : 'bullet'];
         const sniper = b.weapon === 'sniper';
         const smg = b.weapon === 'smg';

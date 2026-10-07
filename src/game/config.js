@@ -81,18 +81,29 @@ export const WEAPONS = {
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
   // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)
   lightning: { id: 'lightning', name: '라이트닝 기관포', interval: 0.16, damage: 9, speed: 1300, burst: 1, arrows: 2, arrowGap: 30 },
-  // 과냉각(공중전 보조무기): 누르면 active초 동안 주무기 연사 간격이 rate배로 짧아진다. interval은 다시 쓸 때까지의 쿨타임
-  overcool: { id: 'overcool', name: '과냉각', interval: 15, damage: 0, burst: 1, ownCooldown: true, boost: { active: 5, rate: 0.3 } },
-  // 미사일(공중전 아이템): 아이템 버튼으로 쏘는 유도 미사일
+  // 과냉각(공중전 보조무기): 누르면 active초 동안 주무기 연사 간격이 rate배로 짧아지고 한 발 피해는 boost.damage(1)가 된다. interval은 다시 쓸 때까지의 쿨타임
+  overcool: { id: 'overcool', name: '과냉각', interval: 15, damage: 0, burst: 1, ownCooldown: true, boost: { active: 5, rate: 0.3, damage: 1 } },
+  // 미사일(공중전 아이템): 아이템 버튼으로 쏘는 미사일(유도 없음)
   missile: {
     id: 'missile', name: '미사일', interval: 6, damage: 60, speed: 950, burst: 1,
-    splash: { damage: 25, radius: 150 }, homing: { turnRate: 2.4 },
+    splash: { damage: 25, radius: 150 },
   },
   // ISB 건쉽 기관포
   gunship: { id: 'gunship', name: '건쉽 기관포', interval: 0.8, damage: 14, speed: 820, burst: 2, burstGap: 0.12 },
   // 데스스타(거대 비행선) 산탄포: 부채꼴로 여러 발
   flak: { id: 'flak', name: '데스스타 산탄포', interval: 1.3, damage: 14, speed: 640, burst: 1, pellets: 7, spread: 70 },
+  // 데스스타 3갈래 미사일: interval초마다 가장 가까운 라이트닝 쪽으로 volley.count발을 volley.spread도 간격 부채꼴로(유도 없음)
+  dsmissile: {
+    id: 'dsmissile', name: '데스스타 미사일', interval: 4, damage: 30, speed: 560, burst: 1,
+    splash: { damage: 15, radius: 120 }, volley: { count: 3, spread: 28 },
+  },
 };
+
+/**
+ * 스토리 모드 3스테이지 하늘(공중전) 공통 수치. planeSpeed는 라이트닝 이동 속도 배율(캐릭터 기본 속도 대비),
+ * enemyFlyIn은 건쉽이 화면 위에서 날아 들어오는 시간(초), dsFirstVolley는 데스스타 전투 시작 뒤 첫 미사일까지(초).
+ */
+export const SKY = { planeSpeed: 1.3, enemyFlyIn: 1.2, dsFirstVolley: 2.5 };
 /**
  * 밸런스 메뉴에서 조정하는 공통 규칙.
  * swapTime: 경기 중 무기 교체 후 다시 쏠 수 있을 때까지의 시간(초). 교체로 쿨타임을 건너뛰지 못하게 한다.

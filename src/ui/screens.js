@@ -288,7 +288,8 @@ export function createScreens(handlers) {
       compare.setAttribute('aria-label', `준 피해 비교: ${players.map((p, i) => `${p.id} ${dealt[i]}`).join(', ')}`);
 
       // 무기별 표: 쏜 무기만, 주무기 → 보조무기 → 아이템 순
-      const order = [...PRIMARY_IDS, 'laser', 'instakill', ...SECONDARY_IDS, 'grenade'];
+      const order = [...PRIMARY_IDS, 'laser', 'instakill', ...SECONDARY_IDS, 'grenade',
+        'lightning', 'missile', 'gunship', 'flak', 'dsmissile']; // 공중전 무기
       const rows = [];
       for (const p of players) {
         const used = order.filter((id) => stats[p.id].weapons[id]);
