@@ -158,6 +158,7 @@ export function createScreens(handlers) {
   pauseBtn.addEventListener('click', (e) => { if (e.detail === 0) handlers.onPause(); }); // 키보드로 누른 경우
   $('#resume-btn').addEventListener('click', handlers.onResume);
   $('#save-btn').addEventListener('click', handlers.onSave);
+  $('#skip-stage-btn').addEventListener('click', handlers.onSkipStage);
   for (const btn of document.querySelectorAll('.continue-btn')) btn.addEventListener('click', handlers.onContinue);
   $('#clear-save-btn').addEventListener('click', handlers.onClearSave);
   for (const btn of document.querySelectorAll('.restart-btn')) btn.addEventListener('click', handlers.onStart);
@@ -181,9 +182,11 @@ export function createScreens(handlers) {
       $('#setup-btn').disabled = false;
       $('#single-btn').disabled = false;
     },
-    /** 일시정지 화면. 스토리 모드면 '저장하기' 버튼을 보인다. */
-    showPause(story) {
+    /** 일시정지 화면. 스토리 모드면 '저장하기'를, 다음 스테이지가 있으면 skipLabel로 '건너뛰기' 버튼을 보인다. */
+    showPause(story, skipLabel = null) {
       $('#save-btn').hidden = !story;
+      $('#skip-stage-btn').hidden = !skipLabel;
+      if (skipLabel) $('#skip-stage-btn').textContent = skipLabel;
       $('#save-status').textContent = '';
       show('pause');
     },

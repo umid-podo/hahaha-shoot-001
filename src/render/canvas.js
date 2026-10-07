@@ -718,23 +718,155 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.restore();
   }
 
-  /** 하늘(공중전) 배경: 위로 갈수록 짙어지는 파란 하늘, 아래로 흘러가는 구름(위로 날아가는 느낌) */
+  /*
+   * 하늘(공중전) 배경: 비 내리는 밤, 도시 상공. 라이트닝이 앞으로(위로) 날아가니 땅(도시)·구름·비가 계속 아래로 흘러간다.
+   * 도시는 가로 한 줄(블록·건물 지붕·불 켜진 창문·가로등 길)을 미리 몇 장 그려 두고 줄마다 골라 이어 붙인다.
+   * 가까운 구름은 더 빨리 흐르고(원근), 빗줄기가 비스듬히 떨어지며, 가끔 번개가 쳐 화면이 번쩍인다.
+   */
+  const CITY_ROW_H = 260;
+  const CITY_SPEED = 170;     // 도시가 흘러가는 속도(초당)
+  const CLOUD_SPEED = 420;    // 가까운 비구름
+  const RAIN_SPEED = 1500;
+  let cityRows = null;
+
+  /** 시드 고정 난수(도시 줄 그림을 늘 같게) */
+  function cityRng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), a | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** 도시 한 줄(가로 1600 × 세로 260): 위쪽 가로 도로 + 세로 골목으로 나뉜 블록, 블록마다 건물 지붕과 창문 불빛 */
+  function makeCityRow(seed) {
+    const c = document.createElement('canvas');
+    c.width = ARENA_WIDTH;
+    c.height = CITY_ROW_H;
+    const g = c.getContext('2d');
+    const rnd = cityRng(seed);
+    g.fillStyle = '#0B0F1A';
+    g.fillRect(0, 0, c.width, c.height);
+    // 가로 큰길: 젖은 아스팔트 + 차선 + 가로등 불빛 웅덩이
+    g.fillStyle = '#161B27';
+    g.fillRect(0, 0, c.width, 44);
+    g.fillStyle = 'rgba(255,214,110,0.55)';
+    for (let x = 20; x < c.width; x += 80) g.fillRect(x, 20, 34, 3);
+    for (let x = 40; x < c.width; x += 160) {
+      const glow = g.createRadialGradient(x, 6, 0, x, 6, 46);
+      glow.addColorStop(0, 'rgba(255,200,110,0.35)');
+      glow.addColorStop(1, 'rgba(255,200,110,0)');
+      g.fillStyle = glow;
+      g.fillRect(x - 46, -40, 92, 92);
+    }
+    // 블록(세로 골목으로 나뉨)
+    let x = 0;
+    while (x < c.width) {
+      const w = 150 + Math.floor(rnd() * 120);
+      const bx = x + 14, bw = Math.min(w - 28, c.width - bx);
+      // 블록 바닥
+      g.fillStyle = '#121725';
+      g.fillRect(bx, 56, bw, CITY_ROW_H - 64);
+      // 건물 지붕 2~4개
+      let by = 62;
+      while (by < CITY_ROW_H - 30) {
+        const bh = 50 + Math.floor(rnd() * 80);
+        const h = Math.min(bh, CITY_ROW_H - 12 - by);
+        let cx = bx + 6;
+        while (cx < bx + bw - 30) {
+          const cw = Math.min(40 + Math.floor(rnd() * 70), bx + bw - 6 - cx);
+          const shade = 28 + Math.floor(rnd() * 26);
+          g.fillStyle = `rgb(${shade},${shade + 4},${shade + 18})`;
+          g.fillRect(cx, by, cw, h - 6);
+          g.strokeStyle = 'rgba(0,0,0,0.6)';
+          g.lineWidth = 2;
+          g.strokeRect(cx, by, cw, h - 6);
+          // 창문 불빛(지붕 가장자리에 비치는 빛)
+          for (let wy = by + 8; wy < by + h - 14; wy += 12) {
+            for (let wx = cx + 6; wx < cx + cw - 8; wx += 10) {
+              if (rnd() < 0.32) {
+                g.fillStyle = rnd() < 0.85 ? 'rgba(255,214,120,0.85)' : 'rgba(160,220,255,0.8)';
+                g.fillRect(wx, wy, 5, 6);
+              }
+            }
+          }
+          // 옥상 장치·네온
+          if (rnd() < 0.3) {
+            g.fillStyle = rnd() < 0.5 ? 'rgba(255,70,170,0.9)' : 'rgba(70,230,255,0.9)';
+            g.fillRect(cx + 4, by + 4, Math.min(26, cw - 8), 5);
+          }
+          if (rnd() < 0.25) {
+            g.fillStyle = '#FF3B30';
+            g.beginPath(); g.arc(cx + cw - 6, by + 6, 2.5, 0, Math.PI * 2); g.fill();
+          }
+          cx += cw + 6;
+        }
+        by += h;
+      }
+      x += w;
+    }
+    return c;
+  }
+
   function drawSkyBackground(time, reducedMotion) {
-    const g = ctx.createLinearGradient(0, 0, 0, ARENA_HEIGHT);
-    g.addColorStop(0, '#2E64B8');
-    g.addColorStop(0.55, '#5C9BE0');
-    g.addColorStop(1, '#A9D3F5');
-    ctx.fillStyle = g;
+    if (!cityRows) cityRows = Array.from({ length: 6 }, (_, i) => makeCityRow(1000 + i * 7919));
+    const t = reducedMotion ? 0 : time;
+    // 도시: 위에서부터 줄을 이어 붙이고 아래로 흘려보낸다(줄 번호마다 같은 그림)
+    const scroll = t * CITY_SPEED;
+    const first = Math.floor(scroll / CITY_ROW_H);
+    const offset = scroll - first * CITY_ROW_H;
+    for (let j = -1; j * CITY_ROW_H < ARENA_HEIGHT + CITY_ROW_H; j++) {
+      const id = j - first;
+      const row = cityRows[((id * 2654435761) >>> 0) % cityRows.length];
+      ctx.drawImage(row, 0, j * CITY_ROW_H + offset);
+    }
+    // 도로 위를 달리는 차 불빛(앞 흰빛·뒤 붉은빛)
+    for (let i = 0; i < 14; i++) {
+      const lane = i % 2;
+      const rowY = ((i % 5) - 1) * CITY_ROW_H + offset; // 그 줄 위쪽 큰길
+      const dir = lane ? 1 : -1;
+      const x = ((i * 233 + t * (90 + (i % 4) * 25) * dir) % ARENA_WIDTH + ARENA_WIDTH) % ARENA_WIDTH;
+      ctx.fillStyle = dir > 0 ? 'rgba(255,250,220,0.9)' : 'rgba(255,60,50,0.9)';
+      ctx.fillRect(x, rowY + 12 + lane * 14, 8, 3);
+    }
+    // 밤 하늘 높이에서 내려다보는 느낌: 짙은 남색으로 덮고(아래쪽은 조금 밝게)
+    const night = ctx.createLinearGradient(0, 0, 0, ARENA_HEIGHT);
+    night.addColorStop(0, 'rgba(6,10,26,0.62)');
+    night.addColorStop(1, 'rgba(12,20,44,0.38)');
+    ctx.fillStyle = night;
     ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
-    const scroll = reducedMotion ? 0 : time * 120;
-    for (let i = 0; i < 9; i++) {
-      const span = ARENA_HEIGHT + 400;
-      const y = ((i * 211 + scroll * (0.6 + (i % 3) * 0.25)) % span) - 200;
-      const x = (i * 397) % ARENA_WIDTH;
-      const s = 0.7 + (i % 4) * 0.25;
-      ctx.fillStyle = `rgba(255,255,255,${0.35 + (i % 3) * 0.15})`;
-      for (const [dx, dy, r] of [[0, 0, 70], [60, 10, 55], [-60, 14, 50], [20, -26, 48]]) {
-        ctx.beginPath(); ctx.ellipse(x + dx * s, y + dy * s, r * s * 1.4, r * s, 0, 0, Math.PI * 2); ctx.fill();
+    // 가까운 비구름: 도시보다 빨리 흐른다
+    for (let i = 0; i < 7; i++) {
+      const span = ARENA_HEIGHT + 500;
+      const y = ((i * 263 + t * CLOUD_SPEED * (0.8 + (i % 3) * 0.2)) % span) - 250;
+      const x = (i * 431 + 120) % ARENA_WIDTH;
+      const k = 0.8 + (i % 3) * 0.3;
+      ctx.fillStyle = `rgba(60,68,92,${0.28 + (i % 2) * 0.12})`;
+      for (const [dx, dy, r] of [[0, 0, 90], [80, 16, 70], [-80, 20, 64], [24, -30, 60]]) {
+        ctx.beginPath(); ctx.ellipse(x + dx * k, y + dy * k, r * k * 1.5, r * k, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // 비: 비스듬히 빠르게 떨어지는 빗줄기
+    ctx.strokeStyle = 'rgba(170,195,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 150; i++) {
+      const sx = (i * 113) % ARENA_WIDTH;
+      const y = ((i * 337 + t * RAIN_SPEED * (0.85 + (i % 5) * 0.06)) % (ARENA_HEIGHT + 80)) - 40;
+      const x = (sx - y * 0.18 + ARENA_WIDTH * 2) % ARENA_WIDTH;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 7, y + 34);
+    }
+    ctx.stroke();
+    // 번개: 몇 초마다 두 번 번쩍
+    if (!reducedMotion) {
+      const p = time % 7.3;
+      const flash = p < 0.08 ? 0.45 : p > 0.18 && p < 0.26 ? 0.3 : 0;
+      if (flash) {
+        ctx.fillStyle = `rgba(220,230,255,${flash})`;
+        ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
       }
     }
   }

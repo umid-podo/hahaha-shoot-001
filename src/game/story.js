@@ -29,6 +29,10 @@ export const STAGES = {
   corridor: { num: 2, name: '복도' },
   sky: { num: 3, name: '하늘' },
 };
+/** 스테이지 순서와 각 스테이지 첫 웨이브 번호, 다음 스테이지(없으면 null) — 스테이지 건너뛰기·시작 스테이지 고르기용 */
+export const STAGE_ORDER = Object.keys(STAGES);
+export const stageStart = (stage) => WAVES.findIndex((w) => w.stage === stage);
+export const nextStageOf = (stage) => STAGE_ORDER[STAGE_ORDER.indexOf(stage) + 1] ?? null;
 export const DEATHSTAR_NAME = '데스스타';
 export const GUNSHIP_NAME = '건쉽';
 
@@ -252,7 +256,10 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
   if (WAVES[start].stage === 'corridor') setupCorridor(match);
   if (WAVES[start].stage === 'sky') setupSky(match, { heal: false });
   Object.assign(match.story, { wave: start - 1, phase: 'clear', timer: CLEAR_TIME / 2 });
-  match.story.banner = banner('이어하기', `${waveLabel(start)}부터`);
+  // skip: 스테이지 건너뛰기·시작 스테이지 고르기로 그 스테이지 처음부터(체력 가득)
+  const stage = STAGES[WAVES[start].stage];
+  match.story.banner = resume.skip ? banner(`${stage.num}스테이지 · ${stage.name}`, '스테이지 건너뛰기')
+    : banner('이어하기', `${waveLabel(start)}부터`);
   return match;
 }
 

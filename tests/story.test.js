@@ -1220,3 +1220,21 @@ test('데스스타를 물리치면 엔딩 컷씬(연쇄 폭발·추락·승리�
   assert.equal(match.phase, 'result');
   assert.equal(match.winner, 'earth');
 });
+
+test('스테이지 건너뛰기·시작 스테이지: 다음 스테이지 처음부터 체력 가득, 하늘이 마지막', async () => {
+  const { STAGE_ORDER, stageStart, nextStageOf } = await import('../src/game/story.js');
+  assert.deepEqual(STAGE_ORDER, ['rooftop', 'corridor', 'sky']);
+  assert.deepEqual(STAGE_ORDER.map(stageStart), [0, 4, 8]);
+  assert.equal(nextStageOf('rooftop'), 'corridor');
+  assert.equal(nextStageOf('corridor'), 'sky');
+  assert.equal(nextStageOf('sky'), null);
+  const m = createStoryMatch({ characterId: 'earth-arrow', weapon: 'dual' }, undefined, 3, { wave: 8, hp: 99999, skip: true });
+  assert.equal(m.story.stage, 'sky');
+  assert.equal(m.players[0].hp, m.players[0].maxHp);
+  assert.ok(m.players[0].plane);
+  assert.equal(m.story.banner.text, '3스테이지 · 하늘');
+  assert.equal(m.story.banner.sub, '스테이지 건너뛰기');
+  const c = createStoryMatch({ characterId: 'earth-arrow', weapon: 'dual' }, undefined, 3, { wave: 4, hp: 99999, skip: true });
+  assert.equal(c.story.stage, 'corridor');
+  assert.ok(c.story.turrets);
+});
