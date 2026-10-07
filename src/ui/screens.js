@@ -67,6 +67,11 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     };
     chars.append(secretChoiceButton(c, secrets, pick.characterId, label, (ch) => {
       onPick(s.id, 'characterId', ch.id);
+      // 그림에서 무기를 든 캐릭터(코드네임 X 등)는 주무기도 그 무기로(그 뒤에 다시 바꿀 수 있다)
+      if (ch.pictured && loadout[s.id].weapon !== ch.pictured) {
+        onPick(s.id, 'weapon', ch.pictured);
+        buildWeapons();
+      }
       syncWeapons();
     }));
   }
@@ -86,10 +91,14 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
   };
   const weapons = document.createElement('div');
   weapons.className = 'weapon-picks';
-  weapons.append(
-    ...weaponRow('주무기', PRIMARY_IDS, 'weapon', pick.weapon),
-    ...weaponRow('보조무기', SECONDARY_IDS, 'secondary', pick.secondary ?? DEFAULT_SECONDARY),
-  );
+  function buildWeapons() {
+    const now = loadout[s.id];
+    weapons.replaceChildren(
+      ...weaponRow('주무기', PRIMARY_IDS, 'weapon', now.weapon),
+      ...weaponRow('보조무기', SECONDARY_IDS, 'secondary', now.secondary ?? DEFAULT_SECONDARY),
+    );
+  }
+  buildWeapons();
 
   // 전용 무기 캐릭터(R-10·숨겨진 캐릭터)를 고르면 무기 선택 대신 전용 무기 안내
   const droneNote = document.createElement('small');

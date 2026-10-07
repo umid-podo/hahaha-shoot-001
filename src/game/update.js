@@ -5,7 +5,7 @@ import {
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
 import {
-  updateStory, holdsResult, startsCutscene, startCutscene, updateCutscene, startKillcam, updateKillcam,
+  updateStory, holdsResult, startsCutscene, startCutscene, updateCutscene, updateKillcam,
 } from './story.js';
 import { needsGunKata, startGunKata, updateGunKata } from './gunkata.js';
 
@@ -575,15 +575,15 @@ export function step(match, inputs, dt = TICK) {
   const isbUp = match.players.some((p) => p.team === 'isb' && p.alive);
   // 스토리 모드는 남은 웨이브가 있으면 ISB팀이 전멸해도 끝나지 않는다(다음 웨이브는 story.js가 불러온다).
   if (earthUp && !isbUp && startsCutscene(match)) {
-    // 스토리 모드 보스를 쓰러뜨리면 결과 전에 엔딩 컷씬(스미스 요원은 먼저 건 카타)
-    if (needsGunKata(match)) startGunKata(match, events);
+    // 스토리 모드 보스를 쓰러뜨리면 결과 전에 엔딩 컷씬(그 전에 건 카타)
+    if (needsGunKata(match)) startGunKata(match, match.players.find((p) => p.boss), { kind: 'cutscene' }, events);
     else startCutscene(match);
     return events;
   }
-  // 스토리 모드에서 요원을 쓰러뜨리면 킬캠(웨이브 마지막 요원이면 웨이브 마무리 장면까지)
+  // 스토리 모드에서 요원을 쓰러뜨리면 건 카타 → 킬캠(웨이브 마지막 요원이면 웨이브 마무리 장면까지)
   const downedAgent = downed.find((p) => p.team === 'isb');
   if (match.story && earthUp && downedAgent) {
-    startKillcam(match, downedAgent, !isbUp);
+    startGunKata(match, downedAgent, { kind: 'killcam', waveEnd: !isbUp }, events);
     return events;
   }
   if ((!earthUp || !isbUp) && !(earthUp && holdsResult(match))) {

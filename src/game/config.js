@@ -102,12 +102,18 @@ export const SLOT_NAME = { primary: '주무기', secondary: '보조무기' };
  * unlockFrom 캐릭터 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 그 자리에 나타난다.
  * bonusDamage: 상대 플레이어에게 피해를 줄 때마다 더하는 추가 피해.
  * jetpack: 제트팩으로 떠서 움직이고, 움직일 때 제트팩에서 불꽃이 나온다(아크 트루퍼). jetpackNozzle은 그림 안 분사구 위치(0~1).
+ * pictured: 그림에서 들고 있는 주무기. 선택 화면에서 그 캐릭터를 고르면 주무기도 이 무기로 바뀐다(바꿀 수 있음).
  * maxHp는 최대 체력, radius는 몸 판정(히트 박스) 반지름, speed는 초당 이동 속도, scale은 그림 크기 배율.
  * maxHp·radius·speed는 밸런스 메뉴에서 캐릭터별로 조정한다.
  */
 export const CHARACTERS = [
   { id: 'earth-arrow', name: '온이름', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED },
   { id: 'earth-pizza', name: '피자럭스', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED },
+  // 지구방위팀 요원들(사용자가 준 캐릭터 소개 그림). 키 큰 전신 그림이라 조금 크게 그린다.
+  { id: 'codename-x', name: '코드네임 X', pictured: 'rifle', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2 },
+  { id: 'codename-v', name: '코드네임 V', pictured: 'dual', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2 },
+  { id: 'codename-r', name: '코드네임 R', pictured: 'sniper', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2 },
+  { id: 'sirius-k', name: '시리우스 K', pictured: 'pistol', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2 },
   { id: 'isb-agent-1', name: '요원 1', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED },
   { id: 'isb-agent-2', name: '요원 2', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED },
   {

@@ -1125,3 +1125,18 @@ test('즉사기 쿨타임은 밸런스로 조절, 피해를 줄이면 여러 번
     resetAll();
   }
 });
+
+test('지구방위팀 요원 코드네임 X·V·R·시리우스 K: 그림 속 무기(돌격소총·쌍권총·저격총·권총), 무기는 자유롭게 고름', () => {
+  const want = { 'codename-x': 'rifle', 'codename-v': 'dual', 'codename-r': 'sniper', 'sirius-k': 'pistol' };
+  for (const [id, weapon] of Object.entries(want)) {
+    const c = CHARACTERS.find((ch) => ch.id === id);
+    assert.ok(c && !c.hidden && !c.weapon, id);
+    assert.equal(c.pictured, weapon);
+    const { P1 } = playing({ P1: { characterId: id, weapon } });
+    assert.equal(P1.characterId, id);
+    assert.equal(P1.weapon, weapon);
+    assert.equal(P1.maxHp, MAX_HP);
+    const other = playing({ P1: { characterId: id, weapon: 'rpg' } }).P1;
+    assert.equal(other.weapon, 'rpg', '다른 무기도 고를 수 있음');
+  }
+});
