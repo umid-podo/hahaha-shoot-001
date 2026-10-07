@@ -1,5 +1,6 @@
 import { DEADZONE, KEY_AIM_SPEED } from '../game/config.js';
 import { aimFromDrag, moveAxisFromDrag } from './pointer.js';
+import { KATA_PAD } from './kata.js';
 
 /**
  * 게임 컨트롤러(브라우저 Gamepad API, 표준 배치 기준. Xbox·PlayStation·Switch Pro 등).
@@ -26,6 +27,8 @@ export function readPad(pad) {
     swap: pressed(pad, PAD_BUTTONS.swap),
     item: pressed(pad, PAD_BUTTONS.item),
     pause: pressed(pad, PAD_BUTTONS.pause),
+    // 건 카타 버튼: A·B·X·Y → 1·2·3·4 (누르지 않았으면 0)
+    kata: KATA_PAD[Object.keys(KATA_PAD).find((i) => pad.buttons[i]?.pressed)] ?? 0,
   };
 }
 
@@ -63,6 +66,7 @@ export function pollGamepads(players, inputs, onPause) {
     if (s.swap && !before.swap) frame.swap = true;
     if (s.item && !before.item) frame.item = true;
     if (s.fire !== !!before.fire) frame.aiming = s.fire;
+    if (s.kata && s.kata !== before.kata) frame.kata = s.kata; // 건 카타 1~4(A·B·X·Y)
   });
   previous = states;
 }

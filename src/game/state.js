@@ -123,9 +123,12 @@ function steelCovers(players) {
   return covers;
 }
 
-/** 플레이어 한 명의 입력 프레임. swap: 주무기↔보조무기 전환, select: 누른 무기 칸('primary'·'secondary')으로 바로 전환, item: 수류탄 던지기 */
+/**
+ * 플레이어 한 명의 입력 프레임. swap: 주무기↔보조무기 전환, select: 누른 무기 칸('primary'·'secondary')으로 바로 전환, item: 수류탄 던지기,
+ * kata: 스토리 모드 건 카타에서 누른 버튼(1~4, 안 눌렀으면 0)
+ */
 export function createInput(player) {
-  return { moveAxis: 0, touchAxis: 0, aim: initialAim(player.team), aiming: false, swap: false, select: null, item: false };
+  return { moveAxis: 0, touchAxis: 0, aim: initialAim(player.team), aiming: false, swap: false, select: null, item: false, kata: 0 };
 }
 
 export function createInputs(players) {
@@ -135,6 +138,6 @@ export function createInputs(players) {
 /** 일시정지·포커스 상실 시 호출. 조준 각도는 유지하고 진행 중인 입력(이동·사격)만 버린다. */
 export function cancelInputs(inputs) {
   for (const f of Object.values(inputs)) {
-    f.moveAxis = 0; f.touchAxis = 0; f.aiming = false; f.swap = false; f.select = null; f.item = false;
+    f.moveAxis = 0; f.touchAxis = 0; f.aiming = false; f.swap = false; f.select = null; f.item = false; f.kata = 0;
   }
 }

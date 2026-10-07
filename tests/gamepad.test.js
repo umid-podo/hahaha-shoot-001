@@ -35,3 +35,8 @@ test('오른쪽 스틱 조준: 상대 쪽 반원만, 데드존·자기 진영 �
   assert.equal(aimFromStick(0, 1, 'earth'), null);
   assert.equal(aimFromStick(0, -1, 'isb'), null);
 });
+
+test('건 카타: A·B·X·Y는 1·2·3·4', () => {
+  assert.deepEqual([0, 1, 2, 3].map((b) => readPad(pad(undefined, [b])).kata), [1, 2, 3, 4]);
+  assert.equal(readPad(pad()).kata, 0);
+});

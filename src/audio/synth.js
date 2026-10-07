@@ -201,6 +201,12 @@ export function playEvents(events) {
     if (e.type === 'stage') [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.16, 'triangle', i * 0.11));
     if (e.type === 'heal') slide(400, 1200, 0.5, 'sine', 0.8);
     if (e.type === 'result') [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', i * 0.13 + 0.3));
+    // 건 카타: 시작(챙!), 버튼이 빛날 때(삐), 대응 성공(높은 화음), 피격(낮은 버저), 10번 완료
+    if (e.type === 'gunkata') { slide(200, 1600, 0.35, 'sawtooth', 0.6); [1319, 1568].forEach((f, i) => tone(f, 0.12, 'square', 0.35 + i * 0.1)); }
+    if (e.type === 'kata-warn') tone(1760, 0.08, 'square');
+    if (e.type === 'kata-counter') [1047, 1568].forEach((f, i) => tone(f, 0.09, 'triangle', i * 0.06));
+    if (e.type === 'kata-hit') { tone(110, 0.25, 'sawtooth'); tone(98, 0.25, 'square', 0.05); }
+    if (e.type === 'kata-clear') [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.14, 'triangle', i * 0.09));
   }
 }
 

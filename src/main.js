@@ -4,6 +4,8 @@ import { step } from './game/update.js';
 import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
 import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT } from './game/story.js';
 import { createControls } from './input/pointer.js';
+import { createKataKeys, KATA_CODES } from './input/kata.js';
+import { glowingKey } from './game/gunkata.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
 import { pollGamepads, applyGamepads, clearGamepads } from './input/gamepad.js';
 import { pollPadMenu } from './input/padmenu.js';
@@ -43,8 +45,8 @@ let ai = null;
 let humans = [];
 
 // cutscene: 스토리 모드 엔딩 컷씬(입력은 받지 않지만 시간은 흐른다)
-// killcam: 스토리 모드에서 요원을 쓰러뜨릴 때의 짧은 처치 컷씬
-const active = () => match && ['playing', 'countdown', 'cutscene', 'killcam'].includes(match.phase);
+// killcam: 스토리 모드에서 요원을 쓰러뜨릴 때의 짧은 처치 컷씬, gunkata: 스미스 요원과의 건 카타(1·2·3·4 버튼만)
+const active = () => match && ['playing', 'countdown', 'cutscene', 'killcam', 'gunkata'].includes(match.phase);
 
 function cancelAllInput() {
   controls.cancelAll();
@@ -65,7 +67,7 @@ function singleLoadout() {
   };
 }
 
-/** 싱글 플레이에서 AI 자리 조작 패널 대신 보여 줄 안내(제목, 설명). 스토리 모드는 웨이브가 바뀌면 설명을 고친다. */
+/** 자유 대전(싱글 플레이)에서 AI 자리 조작 패널 대신 보여 줄 안내(제목, 설명). */
 function aiPanel(team, title, text) {
   const panel = document.createElement('div');
   panel.className = `panel ai-panel team-${team}`;
@@ -99,12 +101,15 @@ function startMatch() {
   clearKeys();
   clearGamepads();
   const groups = { earth: document.querySelector('#controls-earth'), isb: document.querySelector('#controls-isb') };
+  // 일시정지 버튼은 스토리 1인에서 패널 안으로 옮기므로, 패널을 새로 만들기 전에 제자리(두 패널 사이)로 돌려놓는다
+  controlsEl.insertBefore(pauseBtn, groups.isb);
+  // 스토리 모드 1인: 패널 하나가 화면 너비를 다 쓴다(이동키 왼쪽 끝, 발사키 오른쪽 끝, 무기 버튼은 발사키 옆)
+  const solo = !!match.story && !match.story.coop;
+  controlsEl.classList.toggle('solo', solo);
   // 스토리 모드 2인 협동의 P2는 지구방위팀이지만 조작 패널은 오른쪽(평소 P2 자리)에 둔다
-  controls = createControls(groups, humans, inputs, (p) => (p.team === 'earth' && p.id === 'P2' ? 'isb' : p.team));
-  if (match.story) {
-    // 2인 협동이면 오른쪽은 P2 패널이라 웨이브 안내 칸을 두지 않는다
-    if (!match.story.coop) groups.isb.replaceChildren(aiPanel('isb', '스토리 모드 · ISB팀', waveLabel(resumeFrom?.wave ?? 0)));
-  } else if (aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
+  controls = createControls(groups, humans, inputs, (p) => (p.team === 'earth' && p.id === 'P2' ? 'isb' : p.team), { wide: solo });
+  if (solo) groups.earth.querySelector('.panel-mid').append(pauseBtn);
+  if (!match.story && aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
   renderer.reset();
   restartMusic();
   screens.show('game');
@@ -118,9 +123,9 @@ function pause() {
 }
 
 function resume() {
-  // 컷씬·킬캠 중에 멈췄으면 카운트다운 없이 그 장면으로 돌아간다
-  if (match.cutscene || match.killcam) {
-    match.phase = match.cutscene ? 'cutscene' : 'killcam';
+  // 컷씬·킬캠·건 카타 중에 멈췄으면 카운트다운 없이 그 장면으로 돌아간다
+  if (match.cutscene || match.killcam || match.gunkata) {
+    match.phase = match.cutscene ? 'cutscene' : match.killcam ? 'killcam' : 'gunkata';
     screens.show('game');
     return;
   }
@@ -210,6 +215,19 @@ setMuted(settings.muted);
 screens.syncSettings(settings);
 
 blockBrowserGestures(document.querySelector('#game'));
+const controlsEl = document.querySelector('#controls');
+const pauseBtn = document.querySelector('#pause-btn');
+/** 건 카타 버튼(터치·키보드 숫자 1~4): 사람 플레이어 입력 칸에 넣으면 step()이 읽는다 */
+function pressKata(key) {
+  if (match?.phase !== 'gunkata' || !humans.length) return;
+  inputs[humans[0].id].kata = key;
+}
+const kataKeys = createKataKeys(document.querySelector('#kata-keys'), pressKata);
+window.addEventListener('keydown', (e) => {
+  if (!KATA_CODES[e.code] || match?.phase !== 'gunkata') return;
+  e.preventDefault();
+  if (!e.repeat) pressKata(KATA_CODES[e.code]);
+});
 // 키보드는 사람 플레이어 자리에만 입력한다(싱글 플레이의 AI 자리 키는 무시).
 const humanInputs = () => Object.fromEntries(humans.map((p) => [p.id, inputs[p.id]]));
 const togglePause = () => (match?.phase === 'paused' ? resume() : pause());
@@ -241,11 +259,11 @@ function frame(now) {
       for (const e of events) {
         if (e.type === 'wave') {
           screens.announce(`${waveLabel(e.wave)} 시작`);
-          const info = document.querySelector('#controls-isb .ai-panel-info');
-          if (info) info.textContent = waveLabel(e.wave);
         }
         if (e.type === 'wave-clear') screens.announce(`${waveLabel(e.wave)} 클리어`);
         if (e.type === 'stage') screens.announce('2스테이지 복도. 체력이 모두 회복되었습니다.');
+        if (e.type === 'gunkata') screens.announce('건 카타 모드! 빛나는 버튼 1, 2, 3, 4를 0.5초 안에 누르세요.');
+        if (e.type === 'kata-warn') screens.announce(`${e.key}번`);
         if (e.type !== 'down') continue;
         const p = match.players.find((pl) => pl.id === e.playerId);
         screens.announce(`${TEAM_NAME[p.team]} ${p.id} ${p.name} 쓰러짐`);
@@ -267,6 +285,9 @@ function frame(now) {
   } else {
     accumulator = 0;
   }
+  // 건 카타 동안에는 조작 패널 대신 1·2·3·4 버튼, 눌러야 할 버튼은 빛난다
+  controlsEl.classList.toggle('kata', !!match?.gunkata);
+  kataKeys.sync(match?.phase === 'gunkata' ? glowingKey(match.gunkata) : null);
   if (match) {
     renderer.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion);
     controls.sync(match.players, match.tick * TICK);
