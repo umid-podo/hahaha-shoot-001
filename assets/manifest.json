@@ -266,16 +266,16 @@
       "path": "characters/codename-x.png",
       "width": 1024,
       "height": 1024,
-      "bytes": 313708,
+      "bytes": 361657,
       "format": "png",
       "hasAlphaChannel": true,
-      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 무기를 덧그림. 스케이트보드를 지우고 그 손에 직접 그린 돌격소총을 쥐임",
+      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 총을 쏘는 모습으로 손질(총구 불꽃·탄피). 스케이트보드를 지우고 그 손에 직접 그린 돌격소총을 허리 높이로 쥐고 쏨",
       "kind": "static-character",
       "bodyAnchor": [
-        0.5,
+        0.268,
         0.56
       ],
-      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이",
+      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이, 가로는 다리 가운데(총이 한쪽으로 뻗음)",
       "frames": 1
     },
     {
@@ -284,16 +284,16 @@
       "path": "characters/codename-v.png",
       "width": 1024,
       "height": 1024,
-      "bytes": 349721,
+      "bytes": 375499,
       "format": "png",
       "hasAlphaChannel": true,
-      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 무기를 덧그림. 브이 하던 손가락을 지우고 두 주먹에 직접 그린 권총(위로 든 슬라이드)을 쥐임",
+      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 총을 쏘는 모습으로 손질(총구 불꽃·탄피). 브이 하던 손가락을 지우고 두 주먹에 직접 그린 권총을 쥐여 양옆으로 쏨",
       "kind": "static-character",
       "bodyAnchor": [
-        0.5,
+        0.48,
         0.56
       ],
-      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이",
+      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이, 가로는 다리 가운데(총이 한쪽으로 뻗음)",
       "frames": 1
     },
     {
@@ -302,16 +302,16 @@
       "path": "characters/codename-r.png",
       "width": 1024,
       "height": 1024,
-      "bytes": 282759,
+      "bytes": 276606,
       "format": "png",
       "hasAlphaChannel": true,
-      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 무기를 덧그림. 가슴 앞 손에 직접 그린 저격총을 비스듬히 쥐임",
+      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 총을 쏘는 모습으로 손질(총구 불꽃·탄피). 가슴 앞 손에 직접 그린 저격총을 수평으로 쥐고 쏨",
       "kind": "static-character",
       "bodyAnchor": [
-        0.5,
+        0.272,
         0.56
       ],
-      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이",
+      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이, 가로는 다리 가운데(총이 한쪽으로 뻗음)",
       "frames": 1
     },
     {
@@ -320,16 +320,16 @@
       "path": "characters/sirius-k.png",
       "width": 1024,
       "height": 1024,
-      "bytes": 414871,
+      "bytes": 422500,
       "format": "png",
       "hasAlphaChannel": true,
-      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 무기를 덧그림. 원래 권총을 든 그림. 그림 위에 겹친 렌즈 아이콘을 지우고 주변 색으로 메움, 오른쪽을 보게 좌우 반전",
+      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 총을 쏘는 모습으로 손질(총구 불꽃·탄피). 원래 위로 들던 권총을 지우고 장갑 낀 손으로 앞을 겨눠 쏘는 권총을 그려 넣음. 그림 위에 겹친 렌즈 아이콘을 지우고 주변 색으로 메움, 오른쪽을 보게 좌우 반전",
       "kind": "static-character",
       "bodyAnchor": [
-        0.5,
+        0.387,
         0.56
       ],
-      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이",
+      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이, 가로는 다리 가운데(총이 한쪽으로 뻗음)",
       "frames": 1
     },
     {
