@@ -1,5 +1,6 @@
 import {
   ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS, CHARACTERS,
+  MAX_SPEED as MAX_SPEED_BASE,
 } from './config.js';
 import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers } from './state.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
@@ -26,7 +27,10 @@ export const R10_NAME = 'R-10';
 export const STAGES = {
   rooftop: { num: 1, name: '옥상' },
   corridor: { num: 2, name: '복도' },
+  sky: { num: 3, name: '하늘' },
 };
+export const DEATHSTAR_NAME = '데스스타';
+export const GUNSHIP_NAME = '건쉽';
 
 /**
  * 웨이브 구성. from: 'start'(경기 시작부터 서 있음)·'heli'(헬리콥터)·'gunship'(건쉽)·'elevator'(엘리베이터)·'ceiling'(천장을 부수고).
@@ -49,6 +53,11 @@ export const WAVES = [
     agents: ['dual', 'pistol', 'pistol', 'rifle'].map((weapon) => ({ weapon })),
   },
   { stage: 'corridor', title: '보스전', count: 1, from: 'ceiling', boss: 'r10' },
+  // 3스테이지 하늘(공중전): ISB 요원 대신 건쉽이 날아온다(무기 고정). 보스는 거대 비행선 데스스타.
+  { stage: 'sky', title: '1웨이브', count: 2, weapon: 'gunship', from: 'sky', fixed: true },
+  { stage: 'sky', title: '2웨이브', count: 3, weapon: 'gunship', from: 'sky', fixed: true },
+  { stage: 'sky', title: '3웨이브', count: 4, weapon: 'gunship', from: 'sky', fixed: true },
+  { stage: 'sky', title: '보스전', count: 1, weapon: 'flak', from: 'sky', boss: 'deathstar', fixed: true },
 ].map((w) => ({ ...w, count: w.agents?.length ?? w.count }));
 
 /** '복도 2웨이브' */
@@ -66,7 +75,7 @@ export function currentWave(story) {
 /** 요원 주무기로 고를 수 있는 값: 'random'(STORY_WEAPONS 중 무작위) 또는 주무기 id */
 export const AGENT_WEAPON_CHOICES = ['random', ...PRIMARY_IDS];
 /** 웨이브 i 요원들의 기획 무기(요원마다 'random' 또는 주무기 id). R-10은 레이저 캐논 전용이라 없음([]). */
-export const defaultWeapons = (i) => (WAVES[i].boss === 'r10' ? []
+export const defaultWeapons = (i) => (WAVES[i].boss === 'r10' || WAVES[i].fixed ? []
   : Array.from({ length: WAVES[i].count }, (_, k) => WAVES[i].agents?.[k]?.weapon ?? WAVES[i].weapon));
 
 /**
@@ -80,6 +89,9 @@ export function defaultStory() {
   const waves = [
     agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
     agent(500), agent(300, 'mixed'), agent(200, 'easy'), { ...agent(600), radius: 48 },
+    // 하늘: 건쉽(히트박스 46), 데스스타(히트박스 130)
+    { ...agent(250, 'easy'), radius: 46 }, { ...agent(300), radius: 46 }, { ...agent(350), radius: 46 },
+    { ...agent(3000), radius: 130 },
   ];
   return { waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
 }
@@ -136,6 +148,8 @@ export const CEILING_X = ARENA_WIDTH / 2 + 260; // R-10이 천장을 부수고 �
 export const CRACK_TIME = 1.2;  // 천장이 흔들리다 부서지기까지
 const LAND_TIME = 0.7;          // R-10이 떨어져 내려앉는 시간
 const TURRET_MUZZLE = 44;
+const FLY_TIME = 1.2;           // 하늘: 건쉽이 화면 위에서 날아 들어오는 시간
+const SKY_ARRIVE = 1.0;         // 하늘: 경고 뒤 적이 날아오기 시작할 때까지
 const TURRET_SHELL_LIFE = 4;
 
 const ISB = SLOTS.find((s) => s.team === 'isb');
@@ -236,6 +250,7 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
   }
   // 이어하기: 바로 앞 웨이브를 깬 직후처럼 시작해, 저장한 웨이브의 요원이 오는 장면부터
   if (WAVES[start].stage === 'corridor') setupCorridor(match);
+  if (WAVES[start].stage === 'sky') setupSky(match, { heal: false });
   Object.assign(match.story, { wave: start - 1, phase: 'clear', timer: CLEAR_TIME / 2 });
   match.story.banner = banner('이어하기', `${waveLabel(start)}부터`);
   return match;
@@ -248,10 +263,16 @@ export const extraAgents = (index, allies) => (WAVES[index].boss ? 0 : allyCount
 export function waveInfo(index, settings, allies = 0) {
   const wave = WAVES[index];
   const hp = normalizeStory(settings).waves[index].hp;
-  const extra = extraAgents(index, allies);
-  const who = wave.boss === 'smith' ? BOSS_NAME : wave.boss === 'r10' ? R10_NAME
-    : `요원 ${wave.count}명${extra ? ` + 쉬움 ${extra}명` : ''}`;
-  return `${who} · 체력 ${hp}`;
+  return `${waveWho(wave, extraAgents(index, allies))} · 체력 ${hp}`;
+}
+
+/** 웨이브에 나오는 적 이름: '요원 2명', '건쉽 3대', '스미스 요원'… extra는 AI 동료 때문에 더 나오는 쉬움 적 수 */
+export function waveWho(wave, extra = 0) {
+  const names = { smith: BOSS_NAME, r10: R10_NAME, deathstar: DEATHSTAR_NAME };
+  if (wave.boss) return names[wave.boss];
+  const sky = wave.stage === 'sky';
+  const unit = sky ? `${GUNSHIP_NAME} ${wave.count}대` : `요원 ${wave.count}명`;
+  return extra ? `${unit} + 쉬움 ${extra}${sky ? '대' : '명'}` : unit;
 }
 
 function banner(text, sub = '') {
@@ -265,7 +286,9 @@ function spawnWave(match, inputs, index) {
   const story = match.story;
   const wave = WAVES[index];
   const cfg = story.settings.waves[index];
-  const center = wave.from === 'ceiling' ? CEILING_X : wave.from === 'elevator' ? ELEVATOR.x : story.carrier?.x ?? ARENA_WIDTH / 2;
+  const center = wave.from === 'ceiling' ? CEILING_X : wave.from === 'elevator' ? ELEVATOR.x
+    : wave.from === 'sky' ? ARENA_WIDTH / 2 : story.carrier?.x ?? ARENA_WIDTH / 2;
+  const sky = wave.from === 'sky', deathstar = wave.boss === 'deathstar';
   // AI 동료 수만큼 쉬움 돌격소총 요원이 웨이브 끝에 덧붙는다(보스전 제외)
   const total = wave.count + extraAgents(index, story.allies);
   const spread = total > 4 ? Math.min(DROP_SPREAD, (MAX_X - MIN_X) / (total - 1)) : DROP_SPREAD;
@@ -280,9 +303,9 @@ function spawnWave(match, inputs, index) {
     const smith = wave.boss === 'smith', r10 = wave.boss === 'r10';
     const p = createPlayer({ ...ISB, id }, {
       ai: true, x, weapon,
-      // 스미스 요원은 권총을 든 요원 1 그림을 크게, R-10은 드론 그림을 크게 그린다
-      characterId: smith ? 'isb-agent-1' : r10 ? 'r10' : pick(story.rng, AI_CHARACTERS),
-      name: smith ? BOSS_NAME : r10 ? R10_NAME : undefined,
+      // 스미스 요원은 권총을 든 요원 1 그림을 크게, R-10은 드론 그림을 크게 그린다. 하늘에서는 요원 대신 건쉽·데스스타.
+      characterId: deathstar ? 'deathstar' : sky ? 'gunship' : smith ? 'isb-agent-1' : r10 ? 'r10' : pick(story.rng, AI_CHARACTERS),
+      name: deathstar ? DEATHSTAR_NAME : sky ? GUNSHIP_NAME : smith ? BOSS_NAME : r10 ? R10_NAME : undefined,
       // 스미스 요원만 보조무기·수류탄을 쓴다(R-10은 레이저 캐논 전용)
       primaryOnly: !smith, boss: !!wave.boss, scale: smith ? 1.2 : r10 ? 1.6 : undefined,
       secondary: smith ? (cfg.secondary === 'random' ? pick(story.rng, SECONDARY_IDS) : cfg.secondary) : undefined,
@@ -300,6 +323,11 @@ function spawnWave(match, inputs, index) {
     } else if (wave.from === 'ceiling') {
       // 천장에서 떨어진다: 처음엔 카메라 가까이(크게) 있다가 바닥(레일)에 내려앉는다
       p.entering = { kind: 'fall', t: 0, duration: LAND_TIME };
+    } else if (sky) {
+      // 화면 위 밖에서 차례로 날아 들어온다(데스스타는 천천히)
+      const from = deathstar ? -260 : -160;
+      p.entering = { kind: 'fly', t: -i * DROP_GAP, duration: deathstar ? 2.6 : FLY_TIME, fromY: from };
+      p.y = from;
     }
     match.players.push(p);
     inputs[id] = createInput(p);
@@ -342,6 +370,33 @@ function setupCorridor(match) {
   match.jetTimer = Infinity;
 }
 
+/** 공중전에서 사람 주인공이 타는 라이트닝의 이동 속도 배율 */
+const PLANE_SPEED = 1.3;
+
+/**
+ * 3스테이지 하늘(공중전) 준비: 엄폐물·포탑·엘리베이터는 없고, 지구방위팀 전원(사람·AI 동료)이 전용기 라이트닝을 탄다.
+ * 주무기는 라이트닝 기관포, 보조무기는 과냉각, 아이템은 미사일로 바뀌고 체력은 가득 찬다(AI 동료는 주무기만).
+ */
+function setupSky(match, { heal = true } = {}) {
+  const story = match.story;
+  story.stage = 'sky';
+  Object.assign(story, { elevator: null, turrets: null, ceiling: null, carrier: null, jet: null, missile: null });
+  match.covers = [];
+  match.jet = null;
+  match.jetTimer = Infinity;
+  const list = heroes(match);
+  const xs = heroXs(list.length);
+  list.forEach((p, i) => Object.assign(p, {
+    plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', item: 'missile', slot: 'primary',
+    primaryOnly: !!p.ai, drone: false, jetpack: null, scale: 1,
+    speed: MAX_SPEED_BASE * PLANE_SPEED, hurt: 0, dash: null,
+    // 이어하기(heal: false)는 저장한 체력·쓰러짐을 그대로 둔다
+    ...(heal ? { hp: p.maxHp, alive: true } : {}),
+    x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
+    cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity, battery: 0,
+  }));
+}
+
 /**
  * 스테이지 클리어(계단 컷씬 중 화면이 어두워졌을 때): 체력 100% 회복(2인 협동에서 쓰러진 동료도 일어남), 경기장을 복도로 바꾼다.
  * 쓰러진 스미스 요원은 치우고(결과 화면용으로 roster에는 남는다), 컷씬이 끝나면 카운트다운 뒤 복도 1웨이브 요원이 엘리베이터로 온다.
@@ -382,6 +437,10 @@ function callNext(story, next, events) {
     events.push({ type: 'alarm', boss: true }, { type: 'rumble' });
     story.ceiling = { x: CEILING_X, y: RAIL_Y.isb, t: 0 };
     story.banner = banner('경고!', '천장이 무너진다!');
+  } else if (from === 'sky') {
+    events.push({ type: 'alarm', boss: !!boss });
+    story.timer = 0;
+    if (boss) story.banner = banner('경고!', `거대 비행선 ${DEATHSTAR_NAME} 접근!`);
   } else {
     callCarrier(story, 'heli', events);
     if (boss) story.banner = banner('경고!', '헬리콥터 접근 중');
@@ -458,6 +517,8 @@ function moveEntering(match, dt, events) {
       p.x = e.fromX + (e.toX - e.fromX) * side;
     } else if (e.kind === 'rope') {
       p.y = e.fromY + (railY - e.fromY) * k;
+    } else if (e.kind === 'fly') {
+      p.y = e.fromY + (railY - e.fromY) * (1 - (1 - k) ** 2); // 날아와 속도를 줄이며 자리 잡는다
     }
     if (k >= 1) {
       p.y = railY;
@@ -577,6 +638,9 @@ export function updateStory(match, inputs, dt, events) {
       const { from } = WAVES[next];
       if (from === 'elevator') {
         if (story.elevator.open < 1) break;
+      } else if (from === 'sky') {
+        story.timer += dt;
+        if (story.timer < SKY_ARRIVE) break;
       } else if (from === 'ceiling') {
         if (story.ceiling.t < CRACK_TIME) break;
         // 천장이 무너진다: 폭발과 파편 속에서 R-10이 떨어진다
@@ -638,7 +702,7 @@ export function checkpoint(match) {
   const [hero, partner] = humanHeroes(match);
   let wave = currentWave(story);
   if (match.cutscene) {
-    if (WAVES[story.wave].boss === 'r10') return null; // 이미 스토리를 깼다
+    if (WAVES[story.wave].boss === 'deathstar') return null; // 이미 스토리를 깼다
     wave = story.wave + 1;
   } else if (match.killcam?.waveEnd || (story.phase === 'fight' && enemies(match).every((p) => !p.alive))) {
     wave = story.wave + 1;
@@ -709,6 +773,10 @@ export function startCutscene(match) {
     startR10Cutscene(match);
     return;
   }
+  if (WAVES[match.story.wave].boss === 'deathstar') {
+    startDeathstarCutscene(match);
+    return;
+  }
   const boss = match.players.find((p) => p.boss);
   const hero = heroOf(match, killerOf(match, boss)); // 2인 협동이면 보스를 쓰러뜨린 쪽이 컷씬의 주인공
   match.phase = 'cutscene';
@@ -767,6 +835,14 @@ function dodgeOffset(c, base, dt) {
 export function updateCutscene(match, dt, events) {
   if (match.cutscene.kind === 'stairs') {
     updateStairs(match, dt, events);
+    return;
+  }
+  if (match.cutscene.kind === 'lightning') {
+    updateLightning(match, dt, events);
+    return;
+  }
+  if (match.cutscene.kind === 'deathstar') {
+    updateDeathstarCutscene(match, dt, events);
     return;
   }
   if (match.cutscene.kind === 'r10') {
@@ -1036,7 +1112,130 @@ function updateR10Cutscene(match, dt, events) {
     c.caption = t < c.boomAt + 1 ? '콰콰쾅!!' : `${R10_NAME}을 물리쳤다! 스토리 클리어!`;
   }
 
-  if (t >= R10_CUTSCENE_TIME) {
+  if (t >= R10_CUTSCENE_TIME) startLightning(match);
+}
+
+/* ───────── 라이트닝 컷씬(복도 → 하늘) ─────────
+ * R-10 엔딩 컷씬 뒤: 화면이 어두워졌다가 옥상으로 올라온 주인공이 무전으로 본부에 전용기 라이트닝을 보내 달라고 한다.
+ * 라이트닝이 날아와 주인공 위에 멈추고, 주인공이 올라타 날아오르면 화면이 하얘지며 3스테이지 하늘(공중전)로 바뀐다.
+ * 시간표(초): 0~1 어두워짐, 1 옥상, 1~1.6 밝아짐, 1.6~3.8 무전, 3.8~6.2 라이트닝 도착, 6.2~7.2 탑승,
+ *   7.2~8.6 이륙(커지며 위로), 8.6 하늘로 바뀜, 8.6~9.4 밝아짐, 10 끝(카운트다운).
+ */
+export const LIGHTNING_TIME = 10;
+const LT_ROOF = 1, LT_LIGHT = 1.6, LT_CALL = 3.8, LT_ARRIVE = 6.2, LT_BOARD = 7.2, LT_SWITCH = 8.6, LT_CLEAR = 9.4;
+
+function startLightning(match) {
+  const story = match.story;
+  match.players = match.players.filter((p) => p.team !== 'isb');
+  story.brains = [];
+  match.projectiles = [];
+  story.banner = null;
+  const hero = heroOf(match);
+  match.cutscene = {
+    kind: 'lightning', t: 0, scene: 'corridor', fade: 0, switched: false, flash: 0, called: false, landed: false,
+    hero: { id: hero.id, x: ARENA_WIDTH / 2, y: RAIL_Y.earth, alpha: 1 },
+    plane: { x: ARENA_WIDTH + 320, y: RAIL_Y.earth - 260, scale: 1.7, angle: -Math.PI * 0.75, visible: false },
+    caption: '주인공: 끝이 아니야… 옥상으로 올라가자!',
+  };
+}
+
+function updateLightning(match, dt, events) {
+  const c = match.cutscene;
+  const t = (c.t += dt);
+  const ease = (k) => { const q = Math.max(0, Math.min(1, k)); return q * q * (3 - 2 * q); };
+  if (!c.switched) {
+    c.fade = t < LT_ROOF ? t / LT_ROOF : t < LT_LIGHT ? 1 - (t - LT_ROOF) / (LT_LIGHT - LT_ROOF) : 0;
+    if (t >= LT_ROOF) c.scene = 'roof';
+    if (t >= LT_LIGHT && !c.called) {
+      c.called = true;
+      events.push({ type: 'radio', wave: match.story.wave });
+    }
+    if (t >= LT_LIGHT) c.caption = t < LT_CALL ? '주인공(무전): 본부! 여기는 옥상. 내 전용기 라이트닝을 보내 줘!' : t < LT_ARRIVE ? '본부(무전): 라이트닝 출격! 행운을 빈다.' : t < LT_BOARD ? '주인공: 좋아, 공중전 개시!' : '';
+    const p = c.plane;
+    if (t >= LT_CALL) {
+      // 오른쪽 아래에서 날아와 주인공 위에 멈춘다
+      p.visible = true;
+      const k = ease((t - LT_CALL) / (LT_ARRIVE - LT_CALL));
+      p.x = ARENA_WIDTH + 320 + (c.hero.x - ARENA_WIDTH - 320) * k;
+      p.y = RAIL_Y.earth - 260 + 160 * k;
+      p.angle = -Math.PI * 0.75 + Math.PI * 0.25 * k;
+      if (k >= 1 && !c.landed) { c.landed = true; events.push({ type: 'land', x: p.x, y: p.y }); }
+    }
+    if (t >= LT_ARRIVE) c.hero.alpha = Math.max(0, 1 - (t - LT_ARRIVE) / (LT_BOARD - LT_ARRIVE)); // 올라탐
+    if (t >= LT_BOARD) {
+      // 이륙: 위로 날아오르며 커진다(하늘 높이), 끝에는 하얗게
+      const k = ease((t - LT_BOARD) / (LT_SWITCH - LT_BOARD));
+      p.y = RAIL_Y.earth - 100 - 500 * k;
+      p.scale = 1.7 + 1.6 * k;
+      c.flash = Math.max(0, (t - (LT_SWITCH - 0.5)) / 0.5);
+      c.caption = '라이트닝 이륙!';
+    }
+    if (t >= LT_SWITCH) {
+      c.switched = true;
+      setupSky(match);
+      events.push({ type: 'stage', stage: 'sky' }, ...humanHeroes(match).map((h) => ({ type: 'heal', playerId: h.id })));
+    }
+    return;
+  }
+  // 하늘: 하얀 화면이 걷히며 공중전 시작
+  c.flash = Math.max(0, 1 - (t - LT_SWITCH) / (LT_CLEAR - LT_SWITCH));
+  c.caption = `${STAGES.sky.num}스테이지 · ${STAGES.sky.name} — 공중전!`;
+  if (t >= LIGHTNING_TIME) {
+    match.cutscene = null;
+    match.story.banner = banner(`${STAGES.sky.num}스테이지 · ${STAGES.sky.name}`, '보조무기 과냉각 · 아이템 미사일');
+    match.phase = 'countdown';
+    match.countdown = COUNTDOWN;
+  }
+}
+
+/* ───────── 데스스타 엔딩 컷씬 ─────────
+ * 데스스타를 쓰러뜨리면: 선체 여기저기서 연달아 폭발 → 비행선이 기울며 작아지고(떨어짐) 사라진다 →
+ * 라이트닝이 승리의 옆돌기(롤)를 하며 날아오르고 "임무 완료" → 결과(지구방위팀 승리, 스토리 클리어).
+ */
+export const DEATHSTAR_CUTSCENE_TIME = 8.4;
+const DS_BOOMS = 3.2, DS_FALL = 5.2, DS_ROLL = 7;
+
+function startDeathstarCutscene(match) {
+  const boss = match.players.find((p) => p.boss);
+  const hero = heroOf(match, killerOf(match, boss));
+  match.phase = 'cutscene';
+  match.projectiles = [];
+  match.story.banner = null;
+  match.cutscene = {
+    kind: 'deathstar', t: 0, heroId: hero.id, bossId: boss.id, booms: 0,
+    ds: { x: boss.x, y: boss.y, scale: 1, alpha: 1, angle: 0 },
+    hero: { x: hero.x, y: hero.y, roll: 0 },
+    caption: `${DEATHSTAR_NAME}: 경고… 경고… 선체 손상 심각…`,
+  };
+}
+
+function updateDeathstarCutscene(match, dt, events) {
+  const c = match.cutscene;
+  const t = (c.t += dt);
+  const rng = match.story.rng;
+  // 연달아 폭발
+  while (t < DS_FALL && c.booms < Math.floor(t / 0.28)) {
+    c.booms++;
+    events.push({ type: 'explode', x: c.ds.x + (rng() - 0.5) * 460 * c.ds.scale, y: c.ds.y + 40 + (rng() - 0.5) * 140 * c.ds.scale, radius: 90 + rng() * 90 });
+  }
+  if (t >= DS_BOOMS) {
+    // 기울며 작아지고(떨어짐) 흐려진다
+    const k = Math.min(1, (t - DS_BOOMS) / (DS_FALL - DS_BOOMS));
+    c.ds.angle = 0.35 * k;
+    c.ds.scale = 1 - 0.7 * k;
+    c.ds.alpha = 1 - k;
+    if (k >= 1 && !c.gone) { c.gone = true; events.push({ type: 'cover-break', x: c.ds.x, y: c.ds.y }); }
+    c.caption = t < DS_FALL ? '콰콰콰쾅!! 데스스타가 추락한다!' : c.caption;
+  }
+  if (t >= DS_FALL) {
+    // 승리의 롤: 한 바퀴 옆으로 돌며 위로
+    const k = Math.min(1, (t - DS_FALL) / (DS_ROLL - DS_FALL));
+    c.hero.roll = k * Math.PI * 2;
+    c.hero.y = RAIL_Y.earth - 260 * k;
+    c.hero.x += (ARENA_WIDTH / 2 - c.hero.x) * Math.min(1, dt * 3);
+    c.caption = t < DS_ROLL ? `주인공: 본부, ${DEATHSTAR_NAME} 격추. 임무 완료!` : `${DEATHSTAR_NAME}을 물리쳤다! 스토리 클리어!`;
+  }
+  if (t >= DEATHSTAR_CUTSCENE_TIME) {
     match.cutscene.done = true;
     match.phase = 'result';
     match.winner = 'earth';

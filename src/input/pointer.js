@@ -169,14 +169,16 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
         }
         // 단검·샷건: 쿨타임 동안 보조무기 버튼에 남은 초
         const left = WEAPONS[p.secondary]?.ownCooldown ? p.cooldowns[p.secondary] ?? 0 : 0;
-        const secondaryText = p.primaryOnly ? '없음' : left > 0 ? `${Math.ceil(left)}초` : WEAPONS[p.secondary].name;
+        // 과냉각(공중전): 켜져 있는 동안은 '과냉각 ON'
+        const secondaryText = p.primaryOnly ? '없음' : p.boost > 0 ? `${WEAPONS[p.secondary].name} ON`
+          : left > 0 ? `${Math.ceil(left)}초` : WEAPONS[p.secondary].name;
         if (b.secondaryText !== secondaryText) {
           b.secondaryText = secondaryText;
           b.secondary.lastChild.textContent = secondaryText;
           b.secondary.classList.toggle('cooling', left > 0);
         }
         const ready = p.alive && p.grenadeCooldown <= 0;
-        const text = p.primaryOnly ? '없음' : ready ? '수류탄' : `${Math.ceil(p.grenadeCooldown)}초`;
+        const text = p.primaryOnly ? '없음' : ready ? WEAPONS[p.item ?? 'grenade'].name : `${Math.ceil(p.grenadeCooldown)}초`;
         if (b.itemText !== text) {
           b.itemText = text;
           b.item.lastChild.textContent = text;

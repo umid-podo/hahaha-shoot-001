@@ -6,7 +6,7 @@ import { PAD_LABEL } from '../input/gamepad.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
 import { createStorySetup } from './story.js';
-import { R10_NAME, COOP_SLOT, waveLabel } from '../game/story.js';
+import { DEATHSTAR_NAME, COOP_SLOT, waveLabel } from '../game/story.js';
 import { weaponInfo, secretChoiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -231,7 +231,7 @@ export function createScreens(handlers) {
       $('#result-time').textContent = `경기 시간 ${formatTime(time)}` + (story ? ` · 스토리 모드 ${waveLabel(story.wave)}` : '');
       const winnerPlayer = players.find((p) => p.team === winner);
       $('#result-title').textContent = winner === 'draw' ? '무승부'
-        : story ? (winner === 'earth' ? `스토리 클리어! ${R10_NAME}을 쓰러뜨렸다!` : `${waveLabel(story.wave)}에서 패배…`)
+        : story ? (winner === 'earth' ? `스토리 클리어! ${DEATHSTAR_NAME}을 격추했다!` : `${waveLabel(story.wave)}에서 패배…`)
         : winnerPlayer.ai ? `${winnerPlayer.name} 승리…`
         : `${winnerPlayer.id} ${winnerPlayer.name} (${TEAM_NAME[winner]}) 승리!`;
 

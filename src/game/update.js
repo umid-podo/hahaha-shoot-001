@@ -17,7 +17,7 @@ const EPS = 1e-9;
 
 /** 무기 칸 이름: 수류탄은 'grenade', 고른 주무기는 'primary', 그 밖(기관단총)은 'secondary'. */
 function slotOf(player, weaponId) {
-  if (weaponId === 'grenade') return 'grenade';
+  if (weaponId === 'grenade' || weaponId === 'missile') return 'grenade'; // 아이템 칸
   return weaponId === player.primary ? 'primary' : 'secondary';
 }
 
@@ -244,6 +244,8 @@ function explode(match, b, x, y, directVictim, directCover, events) {
 
 /** 무기 칸(주무기·보조무기)으로 전환. 이미 든 칸이면 아무 일 없다. 점사는 끊기고 RULES.swapTime 동안은 쏘지 못한다. */
 function selectSlot(p, slot, events) {
+  // 과냉각처럼 쓰는 순간 효과가 나는 보조무기는 들지 않고 바로 켠다
+  if (slot === 'secondary' && WEAPONS[p.secondary]?.boost) { activateBoost(p, events); return; }
   if (p.slot === slot || !SLOT_ORDER.includes(slot)) return;
   p.slot = slot;
   p.weapon = slot === 'primary' ? p.primary : p.secondary;
@@ -257,15 +259,30 @@ function swapWeapon(p, events) {
   selectSlot(p, SLOT_ORDER[(SLOT_ORDER.indexOf(p.slot) + 1) % SLOT_ORDER.length], events);
 }
 
-/** 아이템(수류탄): 든 무기와 상관없이 지금 조준 방향으로 바로 던진다. 쿨타임 중이면 무시. */
+/** 과냉각: active초 동안 주무기 연사 간격이 rate배. 쓴 뒤에는 그 무기 쿨타임(interval)이 돈다. */
+function activateBoost(p, events) {
+  const w = WEAPONS[p.secondary];
+  if ((p.cooldowns[w.id] ?? 0) > 0 || p.boost > 0) return;
+  p.boost = w.boost.active;
+  p.cooldowns[w.id] = w.interval;
+  events.push({ type: 'overcool', playerId: p.id });
+}
+
+/** 지금 연사 간격 배율(과냉각 중이면 작아진다) */
+const fireRate = (p) => (p.boost > 0 ? WEAPONS[p.secondary]?.boost?.rate ?? 1 : 1);
+
+/**
+ * 아이템: 든 무기와 상관없이 지금 조준 방향으로 바로 쓴다. 평소에는 수류탄을 던지고,
+ * 스토리 공중전에서는 유도 미사일을 쏜다(p.item). 쿨타임 중이면 무시.
+ */
 function throwGrenade(match, p, events) {
   if (p.grenadeCooldown > 0) return;
-  const grenade = WEAPONS.grenade;
-  p.grenadeCooldown = grenade.interval;
-  spawnProjectile(match, p, p.aim, grenade.id);
-  const ws = weaponStats(match, p.id, grenade.id);
+  const item = WEAPONS[p.item ?? 'grenade'];
+  p.grenadeCooldown = item.interval;
+  spawnProjectile(match, p, p.aim, item.id);
+  const ws = weaponStats(match, p.id, item.id);
   if (ws) ws.shots++;
-  events.push({ type: 'fire', playerId: p.id, weapon: grenade.id });
+  events.push({ type: 'fire', playerId: p.id, weapon: item.id });
 }
 
 function fire(match, p, events) {
@@ -413,6 +430,7 @@ function blocked(p, weapon, match) {
 function updateResources(p, firing, dt) {
   p.sinceShot += dt;
   p.grenadeCooldown = Math.max(0, p.grenadeCooldown - dt);
+  p.boost = Math.max(0, (p.boost ?? 0) - dt);
   for (const id of Object.keys(p.cooldowns)) p.cooldowns[id] = Math.max(0, p.cooldowns[id] - dt);
   const battery = WEAPONS[p.primary].battery;
   if (battery && p.sinceShot >= battery.recharge) p.battery = battery.shots;
@@ -503,7 +521,7 @@ export function step(match, inputs, dt = TICK) {
       fire(match, p, events);
       // 단검·샷건은 그 무기 쿨타임만 돌고, 다른 무기는 바로 쓸 수 있다.
       if (weapon.ownCooldown) p.cooldowns[weapon.id] = weapon.interval;
-      else p.cooldown = weapon.interval;
+      else p.cooldown = weapon.interval * fireRate(p);
       p.burstLeft = weapon.burst - 1;
       p.burstTimer = weapon.burstGap ?? 0;
     }
@@ -581,9 +599,12 @@ export function step(match, inputs, dt = TICK) {
     else startCutscene(match);
     return events;
   }
-  // 스토리 모드에서 요원을 쓰러뜨리면 건 카타 → 킬캠(웨이브 마지막 요원이면 웨이브 마무리 장면까지)
+  // 스토리 모드에서 요원을 쓰러뜨리면 건 카타 → 킬캠(웨이브 마지막 요원이면 웨이브 마무리 장면까지).
+  // 하늘(공중전)의 건쉽은 건 카타 없이 그 자리에서 터진다.
   const downedAgent = downed.find((p) => p.team === 'isb');
-  if (match.story && earthUp && downedAgent) {
+  if (match.story?.stage === 'sky') {
+    for (const p of downed.filter((q) => q.team === 'isb' && !q.boss)) events.push({ type: 'explode', x: p.x, y: p.y, radius: 140 });
+  } else if (match.story && earthUp && downedAgent) {
     startGunKata(match, downedAgent, { kind: 'killcam', waveEnd: !isbUp }, events);
     return events;
   }

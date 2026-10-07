@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- 스토리 모드 3스테이지 적 건쉽(위에서 본 모습). 결과 화면 카드용. -->
+  <g stroke="#30353E" stroke-width="5" stroke-linejoin="round">
+    <rect x="94" y="96" width="14" height="92" rx="6" fill="#323C2E"/>
+    <rect x="76" y="176" width="50" height="14" rx="5" fill="#323C2E"/>
+    <rect x="30" y="90" width="140" height="22" rx="6" fill="#323C2E"/>
+    <rect x="26" y="78" width="26" height="40" rx="9" fill="#2A2E35"/>
+    <rect x="148" y="78" width="26" height="40" rx="9" fill="#2A2E35"/>
+    <ellipse cx="100" cy="92" rx="34" ry="60" fill="#4B5A44"/>
+    <ellipse cx="100" cy="52" rx="22" ry="22" fill="#9FD3F2"/>
+    <rect x="96" y="8" width="8" height="28" rx="3" fill="#2A2E35"/>
+  </g>
+  <text x="100" y="104" font-family="system-ui, sans-serif" font-weight="700" font-size="18" text-anchor="middle" fill="#D56A26">ISB</text>
+  <g fill="#30353E" opacity="0.85">
+    <rect x="10" y="88" width="180" height="8" rx="4" transform="rotate(25 100 92)"/>
+    <rect x="10" y="88" width="180" height="8" rx="4" transform="rotate(115 100 92)"/>
+  </g>
+  <circle cx="100" cy="92" r="9" fill="#C9CDD2" stroke="#30353E" stroke-width="4"/>
+</svg>

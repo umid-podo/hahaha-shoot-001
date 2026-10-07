@@ -91,6 +91,11 @@ const SHOT = {
   shotgun: { filter: 700, q: 0.5, decay: 0.3, thump: 70, volume: 1.4 }, // 묵직한 쾅
   crossbow: { filter: 2600, q: 1.2, decay: 0.07, thump: 0, volume: 0.45 }, // 시위 튕기는 탁
   jet: { filter: 700, q: 0.5, decay: 0.35, thump: 110, volume: 1.1 },
+  // 공중전: 라이트닝 기관포(빠르고 가벼움), 미사일(쉬익), 건쉽 기관포, 데스스타 산탄포
+  lightning: { filter: 2200, decay: 0.07, thump: 150, volume: 0.6 },
+  missile: { filter: 600, q: 0.5, decay: 0.5, thump: 90, volume: 1.1 },
+  gunship: { filter: 1100, decay: 0.12, thump: 140, volume: 0.8 },
+  flak: { filter: 450, q: 0.4, decay: 0.4, thump: 100, volume: 1.3 },
 };
 
 /** 레이저: 높은 음에서 빠르게 떨어지는 톱니파 '피융' */
@@ -204,6 +209,8 @@ export function playEvents(events) {
     // 건 카타: 시작(챙!), 버튼이 빛날 때(삐), 대응 성공(높은 화음), 피격(낮은 버저), 10번 완료
     if (e.type === 'gunkata') { slide(200, 1600, 0.35, 'sawtooth', 0.6); [1319, 1568].forEach((f, i) => tone(f, 0.12, 'square', 0.35 + i * 0.1)); }
     if (e.type === 'kata-warn') tone(1760, 0.08, 'square');
+    // 과냉각: 차갑게 내려가는 소리 + 높은 삐
+    if (e.type === 'overcool') { slide(1800, 600, 0.35, 'triangle', 0.7); tone(2200, 0.1, 'sine', 0.3); }
     if (e.type === 'kata-counter') [1047, 1568].forEach((f, i) => tone(f, 0.09, 'triangle', i * 0.06));
     if (e.type === 'kata-hit') { tone(110, 0.25, 'sawtooth'); tone(98, 0.25, 'square', 0.05); }
     if (e.type === 'kata-clear') [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.14, 'triangle', i * 0.09));

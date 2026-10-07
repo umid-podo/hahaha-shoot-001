@@ -1,7 +1,7 @@
 import { WEAPONS, SECONDARY_IDS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import {
-  WAVES, STAGES, STORY_FIELDS, STORY_WEAPONS, BOSS_NAME, R10_NAME, AGENT_WEAPON_CHOICES, defaultStory,
+  WAVES, STAGES, STORY_FIELDS, STORY_WEAPONS, BOSS_NAME, AGENT_WEAPON_CHOICES, defaultStory, waveWho,
 } from '../game/story.js';
 import { choiceButton } from './widgets.js';
 
@@ -16,7 +16,7 @@ function el(tag, className, text) {
 
 const FROM = {
   start: '처음부터 옥상에', heli: '헬리콥터에서 내려옴', gunship: '전투기가 헬리콥터를 격추한 뒤 건쉽에서 내려옴',
-  elevator: '엘리베이터에서 나옴', ceiling: '천장을 부수고 나타남',
+  elevator: '엘리베이터에서 나옴', ceiling: '천장을 부수고 나타남', sky: '하늘 위에서 날아옴',
 };
 const DIFFICULTY_NAME = Object.fromEntries(DIFFICULTY_IDS.map((id) => [id, DIFFICULTY[id].name]));
 
@@ -24,6 +24,8 @@ const DIFFICULTY_NAME = Object.fromEntries(DIFFICULTY_IDS.map((id) => [id, DIFFI
 function waveNote(wave) {
   const from = FROM[wave.from];
   if (wave.boss === 'r10') return `${from} · 레이저 캐논(피해 20 레이저 탄 3점사, 약 3초 쏘고 2초 재장전) · 보조무기·수류탄 없음`;
+  if (wave.boss === 'deathstar') return `${from} · 거대 비행선 · ${WEAPONS.flak.name}(부채꼴 ${WEAPONS.flak.pellets}발)`;
+  if (wave.stage === 'sky') return `${from} · ${WEAPONS.gunship.name}(${WEAPONS.gunship.burst}점사)`;
   const levels = wave.agents?.some((a) => a.difficulty)
     ? ` · 기획 난이도 ${wave.agents.map((a) => DIFFICULTY_NAME[a.difficulty ?? 'normal']).join('·')}` : '';
   return wave.boss ? `${from} · 주무기 + 보조무기 + 수류탄` : `${from} · 주무기만(보조무기·수류탄 없음)${levels}`;
@@ -49,7 +51,7 @@ export function createStorySetup(onChange) {
     const cfg = story.waves[i];
     const def = defaultStory().waves[i];
     const box = el('fieldset', `story-wave${wave.boss ? ' boss' : ''}`);
-    const who = wave.boss === 'smith' ? BOSS_NAME : wave.boss === 'r10' ? R10_NAME : `요원 ${wave.count}명`;
+    const who = waveWho(wave);
     box.append(el('legend', '', `${wave.title} · ${who}`), el('small', '', waveNote(wave)));
 
     box.append(el('div', 'field-label', '난이도'));
