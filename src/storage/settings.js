@@ -49,6 +49,8 @@ export function defaultSingle() {
     mode: 'free',
     // storyPlayers: 스토리 모드 인원. 1(혼자) 또는 2(2인 협동, P2도 지구방위팀)
     storyPlayers: 1,
+    // storyAllies: 스토리 모드에 데려갈 AI 동료 수(0~3). 1명마다 일반 웨이브에 쉬움 돌격소총 요원 1명 추가
+    storyAllies: 0,
     aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100, aiRadius: 30,
     aiDamage: { primary: null, secondary: null, grenade: null },
   };
@@ -60,6 +62,7 @@ export function loadSingle() {
     const saved = JSON.parse(localStorage.getItem(SINGLE_KEY)) ?? {};
     const single = { ...defaults, ...saved, aiDamage: { ...defaults.aiDamage, ...saved.aiDamage } };
     if (single.storyPlayers !== 2) single.storyPlayers = 1;
+    if (![0, 1, 2, 3].includes(single.storyAllies)) single.storyAllies = 0;
     return single;
   } catch {
     return defaults;

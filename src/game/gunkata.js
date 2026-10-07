@@ -67,7 +67,7 @@ function introLine(foe) {
  */
 export function startGunKata(match, foe, after, events = [], seed = match.tick) {
   const killer = match.stats?.[foe.id]?.killedBy?.ownerId;
-  const alive = match.players.filter((p) => p.team === 'earth' && p.alive);
+  const alive = match.players.filter((p) => p.team === 'earth' && p.alive && !p.ai); // 버튼을 누르는 사람 주인공만
   const hero = alive.find((p) => p.id === killer) ?? alive[0];
   const size = foe.boss ? 'boss' : 'agent';
   match.phase = 'gunkata';
@@ -197,7 +197,7 @@ function heroDown(match, k, hero, foe, events) {
     stats.downAt = match.tick * TICK;
   }
   events.push({ type: 'down', playerId: hero.id, x: hero.x, y: hero.y });
-  const partner = match.players.find((p) => p.team === 'earth' && p.alive);
+  const partner = match.players.find((p) => p.team === 'earth' && p.alive && !p.ai);
   if (partner) {
     k.heroId = partner.id;
     k.takeover = partner.id;

@@ -1,6 +1,7 @@
 import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
+import { MAX_ALLIES } from '../game/story.js';
 import { weaponLabel, choiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -105,7 +106,7 @@ export function createSingleSetup(onChange) {
     });
   }
   $('#ai-reset-btn').addEventListener('click', () => {
-    Object.assign(single, defaultSingle(), { mode: single.mode, storyPlayers: single.storyPlayers });
+    Object.assign(single, defaultSingle(), { mode: single.mode, storyPlayers: single.storyPlayers, storyAllies: single.storyAllies });
     buildChoices();
     syncSecondary();
     changed();
@@ -150,8 +151,23 @@ export function createSingleSetup(onChange) {
     }));
   }
 
+  /** 스토리 모드 AI 동료 수: 없음·1·2·3명. 1명마다 적에 쉬움 돌격소총 요원이 1명씩 더 나온다. */
+  function buildAllies() {
+    $('#story-allies').replaceChildren(...Array.from({ length: MAX_ALLIES + 1 }, (_, n) => {
+      const label = document.createElement('span');
+      label.textContent = n ? `AI 동료 ${n}명` : 'AI 동료 없음';
+      const info = document.createElement('small');
+      info.textContent = n ? `적 웨이브마다 쉬움 돌격소총 요원 +${n}` : '혼자(또는 2인 협동만)';
+      return choiceButton([label, info], single.storyAllies === n, () => {
+        single.storyAllies = n;
+        onChange(single);
+      });
+    }));
+  }
+
   function syncMode() {
     const story = single.mode === 'story';
+    $('#story-allies').hidden = !story;
     $('#free-setup').hidden = story;
     $('#story-setup').hidden = !story;
     $('#story-players').hidden = !story;
@@ -165,7 +181,9 @@ export function createSingleSetup(onChange) {
       single = state;
       if (single.mode !== 'story') single.mode = 'free';
       if (single.storyPlayers !== 2) single.storyPlayers = 1;
+      if (!(single.storyAllies >= 0 && single.storyAllies <= MAX_ALLIES)) single.storyAllies = 0;
       buildPlayers();
+      buildAllies();
       buildMode();
       // 목록에서 빠진 무기(예: 전용 무기가 된 아킴보 석궁)가 저장돼 있으면 기본값으로
       if (!PRIMARY_IDS.includes(single.aiWeapon)) single.aiWeapon = defaultSingle().aiWeapon;
