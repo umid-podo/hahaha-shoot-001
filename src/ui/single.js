@@ -1,8 +1,8 @@
-import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP } from '../game/config.js';
+import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP, CHARACTERS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
-import { MAX_ALLIES } from '../game/story.js';
-import { weaponLabel, choiceButton, weaponButtons } from './widgets.js';
+import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks } from '../game/story.js';
+import { weaponLabel, weaponInfo, choiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -106,7 +106,9 @@ export function createSingleSetup(onChange) {
     });
   }
   $('#ai-reset-btn').addEventListener('click', () => {
-    Object.assign(single, defaultSingle(), { mode: single.mode, storyPlayers: single.storyPlayers, storyAllies: single.storyAllies });
+    Object.assign(single, defaultSingle(), {
+      mode: single.mode, storyPlayers: single.storyPlayers, storyAllies: single.storyAllies, storyAllyPicks: single.storyAllyPicks,
+    });
     buildChoices();
     syncSecondary();
     changed();
@@ -160,14 +162,65 @@ export function createSingleSetup(onChange) {
       info.textContent = n ? `적 웨이브마다 쉬움 돌격소총 요원 +${n}` : '혼자(또는 2인 협동만)';
       return choiceButton([label, info], single.storyAllies === n, () => {
         single.storyAllies = n;
+        buildAllyPicks();
         onChange(single);
       });
+    }));
+  }
+
+  /** 동료마다 캐릭터·주무기 고르기(동료는 주무기만 쓴다). 캐릭터를 고르면 주무기는 그 캐릭터의 그림 속 무기로. */
+  function buildAllyPicks() {
+    const box = $('#ally-picks');
+    const picks = single.storyAllyPicks;
+    box.replaceChildren(...picks.slice(0, single.storyAllies).map((pick, i) => {
+      const field = document.createElement('fieldset');
+      field.className = 'ally-pick team-earth';
+      const legend = document.createElement('legend');
+      legend.textContent = `동료 ${i + 1} (${ALLY_IDS[i]}) · AI · 주무기만 사용`;
+      const chars = document.createElement('div');
+      chars.className = 'choices characters';
+      chars.setAttribute('role', 'group');
+      chars.setAttribute('aria-label', `동료 ${i + 1} 캐릭터`);
+      const weapons = document.createElement('div');
+      weapons.className = 'choices weapons';
+      weapons.setAttribute('role', 'group');
+      weapons.setAttribute('aria-label', `동료 ${i + 1} 주무기`);
+      const note = document.createElement('small');
+      note.className = 'drone-note';
+      const syncWeapons = () => {
+        const c = CHARACTERS.find((ch) => ch.id === pick.characterId);
+        weapons.hidden = !!c?.weapon;
+        note.hidden = !c?.weapon;
+        if (c?.weapon) note.textContent = `${c.name} 전용: ${WEAPONS[c.weapon].name} (${weaponInfo(WEAPONS[c.weapon])})`;
+        weapons.replaceChildren(...weaponButtons(WEAPONS, PRIMARY_IDS, pick.weapon, (id) => {
+          pick.weapon = id;
+          onChange(single);
+        }));
+      };
+      chars.append(...CHARACTERS.filter((c) => !c.hidden).map((c) => {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.src = c.image ?? `assets/characters/${c.id}.png`;
+        const name = document.createElement('span');
+        name.textContent = c.name;
+        return choiceButton([img, name], pick.characterId === c.id, () => {
+          pick.characterId = c.id;
+          pick.weapon = allyWeaponOf(c.id);
+          syncWeapons();
+          onChange(single);
+        });
+      }));
+      syncWeapons();
+      const label = (text) => { const el = document.createElement('div'); el.className = 'field-label'; el.textContent = text; return el; };
+      field.append(legend, chars, label('주무기'), weapons, note);
+      return field;
     }));
   }
 
   function syncMode() {
     const story = single.mode === 'story';
     $('#story-allies').hidden = !story;
+    $('#ally-picks').hidden = !story;
     $('#free-setup').hidden = story;
     $('#story-setup').hidden = !story;
     $('#story-players').hidden = !story;
@@ -182,8 +235,10 @@ export function createSingleSetup(onChange) {
       if (single.mode !== 'story') single.mode = 'free';
       if (single.storyPlayers !== 2) single.storyPlayers = 1;
       if (!(single.storyAllies >= 0 && single.storyAllies <= MAX_ALLIES)) single.storyAllies = 0;
+      single.storyAllyPicks = normalizeAllyPicks(single.storyAllyPicks);
       buildPlayers();
       buildAllies();
+      buildAllyPicks();
       buildMode();
       // 목록에서 빠진 무기(예: 전용 무기가 된 아킴보 석궁)가 저장돼 있으면 기본값으로
       if (!PRIMARY_IDS.includes(single.aiWeapon)) single.aiWeapon = defaultSingle().aiWeapon;
