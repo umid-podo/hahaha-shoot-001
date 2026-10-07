@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- 스토리 모드 3스테이지 보스 데스스타(ISB 거대 비행선, 위에서 본 모습). 결과 화면 카드용. -->
+  <defs>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7A8290"/><stop offset="0.5" stop-color="#4E5562"/><stop offset="1" stop-color="#2F343D"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#30353E" stroke-width="4" stroke-linejoin="round">
+    <rect x="2" y="90" width="44" height="22" rx="6" fill="#3B4250"/>
+    <rect x="154" y="90" width="44" height="22" rx="6" fill="#3B4250"/>
+    <ellipse cx="100" cy="100" rx="88" ry="36" fill="url(#hull)"/>
+    <rect x="76" y="84" width="48" height="26" rx="7" fill="#2A2E35"/>
+    <rect x="82" y="100" width="36" height="14" rx="4" fill="#D56A26"/>
+    <circle cx="44" cy="124" r="6" fill="#2A2E35"/><circle cx="72" cy="132" r="6" fill="#2A2E35"/>
+    <circle cx="128" cy="132" r="6" fill="#2A2E35"/><circle cx="156" cy="124" r="6" fill="#2A2E35"/>
+  </g>
+  <g fill="#FF4B3A"><rect x="82" y="89" width="7" height="4"/><rect x="96" y="89" width="7" height="4"/><rect x="110" y="89" width="7" height="4"/></g>
+  <text x="100" y="111" font-family="system-ui, sans-serif" font-weight="700" font-size="11" text-anchor="middle" fill="#fff">ISB</text>
+</svg>

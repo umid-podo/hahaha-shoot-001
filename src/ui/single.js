@@ -1,7 +1,7 @@
 import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP, CHARACTERS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
-import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks } from '../game/story.js';
+import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart } from '../game/story.js';
 import { weaponLabel, weaponInfo, choiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -108,6 +108,7 @@ export function createSingleSetup(onChange) {
   $('#ai-reset-btn').addEventListener('click', () => {
     Object.assign(single, defaultSingle(), {
       mode: single.mode, storyPlayers: single.storyPlayers, storyAllies: single.storyAllies, storyAllyPicks: single.storyAllyPicks,
+      storyStart: single.storyStart,
     });
     buildChoices();
     syncSecondary();
@@ -118,7 +119,7 @@ export function createSingleSetup(onChange) {
   function buildMode() {
     const modes = [
       ['free', '자유 대전', 'AI 1명과 1:1. 무기·체력·난이도를 직접 정함'],
-      ['story', '스토리 모드', '옥상(스미스 요원) → 복도(R-10)'],
+      ['story', '스토리 모드', '옥상(스미스 요원) → 복도(R-10) → 하늘(데스스타)'],
     ];
     $('#single-mode').replaceChildren(...modes.map(([id, name, hint]) => {
       const label = document.createElement('span');
@@ -217,8 +218,23 @@ export function createSingleSetup(onChange) {
     }));
   }
 
+  /** 시작 스테이지: 1 옥상(처음부터)·2 복도·3 하늘. 앞 스테이지를 건너뛰고 그 스테이지 처음부터 체력 가득으로 시작 */
+  function buildStart() {
+    $('#story-start').replaceChildren(...STAGE_ORDER.map((id) => {
+      const label = document.createElement('span');
+      label.textContent = `${STAGES[id].num}스테이지 ${STAGES[id].name}부터`;
+      const info = document.createElement('small');
+      info.textContent = id === 'rooftop' ? '처음부터' : `앞 스테이지 건너뛰기 · ${waveLabel(stageStart(id))}`;
+      return choiceButton([label, info], single.storyStart === id, () => {
+        single.storyStart = id;
+        onChange(single);
+      });
+    }));
+  }
+
   function syncMode() {
     const story = single.mode === 'story';
+    $('#story-start').hidden = !story;
     $('#story-allies').hidden = !story;
     $('#ally-picks').hidden = !story;
     $('#free-setup').hidden = story;
@@ -239,6 +255,8 @@ export function createSingleSetup(onChange) {
       buildPlayers();
       buildAllies();
       buildAllyPicks();
+      if (!STAGE_ORDER.includes(single.storyStart)) single.storyStart = 'rooftop';
+      buildStart();
       buildMode();
       // 목록에서 빠진 무기(예: 전용 무기가 된 아킴보 석궁)가 저장돼 있으면 기본값으로
       if (!PRIMARY_IDS.includes(single.aiWeapon)) single.aiWeapon = defaultSingle().aiWeapon;

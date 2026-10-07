@@ -78,6 +78,20 @@ export const WEAPONS = {
     id: 'grenade', name: '수류탄', interval: 20, damage: 0, speed: 700, burst: 1, thrown: true,
     splash: { damage: 50, radius: 240 },
   },
+  // ── 스토리 모드 3스테이지(하늘) 공중전 ──
+  // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)
+  lightning: { id: 'lightning', name: '라이트닝 기관포', interval: 0.16, damage: 9, speed: 1300, burst: 1, arrows: 2, arrowGap: 30 },
+  // 과냉각(공중전 보조무기): 누르면 active초 동안 주무기 연사 간격이 rate배로 짧아진다. interval은 다시 쓸 때까지의 쿨타임
+  overcool: { id: 'overcool', name: '과냉각', interval: 15, damage: 0, burst: 1, ownCooldown: true, boost: { active: 5, rate: 0.3 } },
+  // 미사일(공중전 아이템): 아이템 버튼으로 쏘는 유도 미사일
+  missile: {
+    id: 'missile', name: '미사일', interval: 6, damage: 60, speed: 950, burst: 1,
+    splash: { damage: 25, radius: 150 }, homing: { turnRate: 2.4 },
+  },
+  // ISB 건쉽 기관포
+  gunship: { id: 'gunship', name: '건쉽 기관포', interval: 0.8, damage: 14, speed: 820, burst: 2, burstGap: 0.12 },
+  // 데스스타(거대 비행선) 산탄포: 부채꼴로 여러 발
+  flak: { id: 'flak', name: '데스스타 산탄포', interval: 1.3, damage: 14, speed: 640, burst: 1, pellets: 7, spread: 70 },
 };
 /**
  * 밸런스 메뉴에서 조정하는 공통 규칙.
@@ -126,6 +140,15 @@ export const CHARACTERS = [
     // 그림: 장갑 몸통에 온이름 머리. 머리·화살표 때문에 그림판이 넓어 1.25배로 그려 몸 크기를 맞춘다.
     jetpack: true, jetpackNozzle: [0.348, 0.68], scale: 1.25,
     maxHp: MAX_HP, radius: BODY_RADIUS, speed: 420,
+  },
+  // 스토리 모드 3스테이지(하늘)의 적: 선택 화면에는 나오지 않는다(hidden). aircraft는 위에서 본 비행체로 그린다.
+  {
+    id: 'gunship', name: '건쉽', hidden: true, aircraft: true, weapon: 'gunship', maxHp: 300, radius: 46, speed: 240,
+    image: 'assets/characters/gunship.svg',
+  },
+  {
+    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 3000, radius: 130, speed: 70,
+    image: 'assets/characters/deathstar.svg',
   },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 3번 누르면 나타난다. 모습은 온이름 + 몸에 빨간 '제작자'. 즉사기 전용.
   {

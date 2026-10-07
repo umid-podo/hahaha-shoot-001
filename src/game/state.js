@@ -71,6 +71,8 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
     speed: (character.speed ?? MAX_SPEED) * (pick.speedScale > 0 ? pick.speedScale : 1),
     primary: weapon, secondary, slot: 'primary', weapon,
     battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
+    // item: 아이템 버튼 무기(평소 수류탄, 스토리 공중전은 미사일). boost: 과냉각이 남은 시간(그동안 주무기 연사가 빨라짐)
+    item: 'grenade', boost: 0,
     x, previousX: x, y: RAIL_Y[slot.team],
     aim: initialAim(slot.team),
     hp: maxHp, maxHp, alive: true, hurt: 0,

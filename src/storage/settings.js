@@ -53,6 +53,8 @@ export function defaultSingle() {
     storyAllies: 0,
     // storyAllyPicks: 동료 칸마다 직접 고른 { characterId, weapon }(MAX_ALLIES칸)
     storyAllyPicks: normalizeAllyPicks(),
+    // storyStart: 스토리 모드를 시작할 스테이지('rooftop' 옥상·'corridor' 복도·'sky' 하늘). 건너뛴 스테이지는 체력 가득으로 시작
+    storyStart: 'rooftop',
     aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100, aiRadius: 30,
     aiDamage: { primary: null, secondary: null, grenade: null },
   };
@@ -66,6 +68,7 @@ export function loadSingle() {
     if (single.storyPlayers !== 2) single.storyPlayers = 1;
     if (![0, 1, 2, 3].includes(single.storyAllies)) single.storyAllies = 0;
     single.storyAllyPicks = normalizeAllyPicks(single.storyAllyPicks);
+    if (!['rooftop', 'corridor', 'sky'].includes(single.storyStart)) single.storyStart = 'rooftop';
     return single;
   } catch {
     return defaults;

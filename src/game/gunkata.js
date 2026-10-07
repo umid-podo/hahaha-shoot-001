@@ -47,7 +47,8 @@ export const movesOf = (kata) => (kata?.drone ? DRONE_MOVES : KATA_MOVES);
  */
 export function needsGunKata(match) {
   const boss = match.story && match.players.find((p) => p.boss && !p.alive);
-  return !!boss && !match.story.kataDone?.includes(match.story.wave);
+  // 하늘(공중전)의 데스스타는 건 카타 없이 바로 엔딩 컷씬
+  return !!boss && match.story.stage !== 'sky' && !match.story.kataDone?.includes(match.story.wave);
 }
 
 /** 화면에 쓸 적 이름(일반 요원 이름 뒤의 ' (AI)'는 뺀다) */

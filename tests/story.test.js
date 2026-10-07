@@ -7,7 +7,7 @@ import { step, spawnProjectile } from '../src/game/update.js';
 import { updateAI, nearestTarget } from '../src/game/ai.js';
 import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
-  LAST_WORDS, MAX_ALLIES, allyPicks, extraAgents, normalizeAllyPicks, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
+  LAST_WORDS, DEATHSTAR_NAME, LIGHTNING_TIME, DEATHSTAR_CUTSCENE_TIME, MAX_ALLIES, allyPicks, extraAgents, normalizeAllyPicks, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { glowingKey, GOAL, DAMAGE, WARN_TIME, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
@@ -180,14 +180,32 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
   runOut(match, inputs, ['killcam']);
   assert.equal(match.phase, 'playing');
 
-  // R-10을 쓰러뜨리면 RPG 엔딩 컷씬 뒤 승리
+  // R-10을 쓰러뜨리면 RPG 엔딩 컷씬 → 라이트닝 컷씬 → 3스테이지 하늘(공중전)
   killAll(match, inputs);
   assert.equal(match.phase, 'cutscene');
   assert.equal(match.cutscene.kind, 'r10');
   runOut(match, inputs, ['cutscene']);
+  assert.equal(match.phase, 'countdown');
+  assert.equal(match.story.stage, 'sky');
+  assert.ok(match.players[0].plane);
+  runOut(match, inputs, ['countdown']);
+
+  // 하늘: 건쉽 2·3·4대 → 보스전 데스스타 → 엔딩 컷씬 뒤 승리
+  for (const n of [2, 3, 4]) {
+    untilFight(match, inputs);
+    assert.equal(enemies(match).length, n);
+    assert.ok(enemies(match).every((p) => p.characterId === 'gunship'));
+    killAll(match, inputs);
+  }
+  untilFight(match, inputs);
+  const [ds] = enemies(match);
+  assert.equal(ds.name, DEATHSTAR_NAME);
+  killAll(match, inputs);
+  assert.equal(match.cutscene.kind, 'deathstar');
+  runOut(match, inputs, ['cutscene']);
   assert.equal(match.phase, 'result');
   assert.equal(match.winner, 'earth');
-  assert.equal(match.story.roster.length, 7 + 1 + 2 + 4 + 1, '결과 화면용: 나온 요원 전원');
+  assert.equal(match.story.roster.length, 7 + 1 + 2 + 4 + 1 + 2 + 3 + 4 + 1, '결과 화면용: 나온 적 전원');
 });
 
 test('무작위 무기는 RPG·저격총·아킴보 석궁을 뺀 무기 중 하나', () => {
@@ -237,8 +255,8 @@ test('내려오는 중인 요원은 맞지 않고 움직이지 않으며, AI도 
 
 test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이동 속도·히트박스, 보스 보조무기', () => {
   const settings = defaultStory();
-  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600]);
-  assert.deepEqual(settings.waves.map((w) => w.difficulty), ['normal', 'normal', 'normal', 'normal', 'normal', 'mixed', 'easy', 'normal']);
+  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 3000]);
+  assert.deepEqual(settings.waves.map((w) => w.difficulty), ['normal', 'normal', 'normal', 'normal', 'normal', 'mixed', 'easy', 'normal', 'easy', 'normal', 'normal', 'normal']);
   settings.waves[0] = { ...settings.waves[0], hp: 1234, difficulty: 'hard', damage: 200, bulletSpeed: 150, speed: 50, radius: 45 };
   settings.waves[3].secondary = 'shotgun';
   const { match, inputs } = story(settings);
@@ -260,8 +278,8 @@ test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이�
   assert.equal(fixed.waves[0].damage, 100);
   assert.equal(fixed.waves[3].secondary, 'random');
   assert.equal(fixed.waves[5].difficulty, 'hard');
-  assert.equal(fixed.waves.length, 8, '예전(옥상만) 저장값도 복도 기본값으로 채움');
-  assert.equal(WAVES.length, 8);
+  assert.equal(fixed.waves.length, 12, '예전(옥상만) 저장값도 복도·하늘 기본값으로 채움');
+  assert.equal(WAVES.length, 12);
 });
 
 test('요원·보스가 올 때마다 경고음(alarm): 전투 시작, 헬리콥터, 보스 건쉽', () => {
@@ -536,9 +554,11 @@ test('R-10 엔딩 컷씬: 레이저를 마구 쏘지만 모두 빗나가고, RPG
     assert.equal(events.filter((e) => e.type === 'fire' && e.weapon === 'rpg').length, 1, 'RPG 발사');
     assert.ok(events.filter((e) => e.type === 'explode').length >= 3, 'R-10 폭발');
     assert.equal(c.r10.alpha, 0);
-    assert.equal(P1.hp, hp, '주인공은 다치지 않음');
-    assert.equal(match.phase, 'result');
-    assert.equal(match.winner, 'earth');
+    assert.equal(P1.hp, P1.maxHp, '주인공은 다치지 않고, 하늘로 가며 체력 회복');
+    assert.ok(hp <= P1.maxHp);
+    assert.equal(match.phase, 'countdown', '결과 대신 라이트닝 컷씬 뒤 3스테이지');
+    assert.equal(match.story.stage, 'sky');
+    assert.equal(events.filter((e) => e.type === 'result').length, 0);
     assert.ok(c.t >= R10_CUTSCENE_TIME);
   }
 });
@@ -564,7 +584,7 @@ test('저장하기: 지금 웨이브(웨이브 사이면 다음 웨이브)와 �
   runOut(match, inputs, ['killcam']);
   assert.equal(checkpoint(match).label, '복도 보스전');
   killAll(match, inputs);
-  assert.equal(checkpoint(match), null, '스토리를 깬 뒤에는 저장 안 함');
+  assert.deepEqual(checkpoint(match), { wave: 8, hp: P1.maxHp, label: '하늘 1웨이브' }, 'R-10 컷씬 중이면 하늘 1웨이브');
   P1.alive = false;
   assert.equal(checkpoint(match), null);
 });
@@ -721,7 +741,7 @@ test('요원별 주무기: 모든 요원(R-10 빼고)의 주무기를 정할 수
   const settings = defaultStory();
   assert.deepEqual(settings.waves.map((w) => w.weapons), [
     ['rifle'], ['random', 'random'], ['random', 'random', 'random'], ['pistol'],
-    ['random'], ['rifle', 'rifle'], ['dual', 'pistol', 'pistol', 'rifle'], [],
+    ['random'], ['rifle', 'rifle'], ['dual', 'pistol', 'pistol', 'rifle'], [], [], [], [], [],
   ]);
   assert.deepEqual(AGENT_WEAPON_CHOICES, ['random', 'rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow']);
 
@@ -999,7 +1019,7 @@ test('AI 동료 수만큼 일반 웨이브마다 쉬움 돌격소총 요원이 �
   untilFight(match, inputs);
   assert.equal(enemies(match).length, 1);
   assert.equal(enemies(match)[0].name, BOSS_NAME);
-  assert.deepEqual(WAVES.map((_, i) => extraAgents(i, 2)), [2, 2, 2, 0, 2, 2, 2, 0]);
+  assert.deepEqual(WAVES.map((_, i) => extraAgents(i, 2)), [2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0]);
 });
 
 test('AI 동료: 적을 조준해 싸우고, 사람이 모두 쓰러지면 동료가 남아도 패배, 건 카타는 사람이 함', () => {
@@ -1087,4 +1107,134 @@ test('AI 동료 직접 고르기: 고른 캐릭터·주무기로 나오고, 동�
   assert.equal(fixed.length, MAX_ALLIES);
   assert.notEqual(fixed[0].characterId, 'creator', '숨겨진 캐릭터는 안 됨');
   assert.deepEqual(fixed[1], { characterId: 'codename-r', weapon: 'sniper' });
+});
+
+/* ───────── 3스테이지 하늘(공중전) ───────── */
+function sky(wave = 8, allies = 0) {
+  const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'dual' }, undefined, 5, { wave, hp: 400 }, null, allies);
+  match.phase = 'playing';
+  const inputs = createInputs(match.players);
+  untilFight(match, inputs);
+  return { match, inputs };
+}
+
+test('라이트닝 컷씬: R-10을 물리치면 옥상에서 본부에 라이트닝을 부르고, 타고 날아올라 하늘로', () => {
+  const { match, inputs } = story();
+  toCorridor(match, inputs);
+  for (let w = 0; w < 3; w++) { killAll(match, inputs); untilFight(match, inputs); }
+  runOut(match, inputs, ['killcam']);
+  killAll(match, inputs);
+  while (match.cutscene?.kind === 'r10') step(match, inputs);
+  const c = match.cutscene;
+  assert.equal(c.kind, 'lightning');
+  assert.equal(enemies(match).length, 0);
+  const captions = new Set();
+  const events = [];
+  let sawRoof = false, sawPlane = false;
+  while (match.phase === 'cutscene') {
+    events.push(...step(match, inputs));
+    captions.add(c.caption);
+    if (c.scene === 'roof') sawRoof = true;
+    if (c.plane.visible) sawPlane = true;
+  }
+  assert.ok(sawRoof, '옥상으로 올라감');
+  assert.ok(sawPlane, '라이트닝이 날아옴');
+  assert.ok([...captions].some((t) => t.includes('본부') && t.includes('라이트닝')), '본부에 라이트닝 요청');
+  assert.ok(events.some((e) => e.type === 'stage' && e.stage === 'sky'));
+  assert.ok(c.t >= LIGHTNING_TIME);
+  const [P1] = match.players;
+  assert.deepEqual([P1.plane, P1.primary, P1.secondary, P1.item], [true, 'lightning', 'overcool', 'missile']);
+  assert.equal(match.covers.length, 0, '하늘에는 엄폐물 없음');
+  assert.equal(match.story.turrets, null);
+});
+
+test('공중전: 적은 건쉽, 아이템은 유도 미사일, 보조무기 과냉각은 5초 동안 연사력을 크게 올림', () => {
+  const { match, inputs } = sky();
+  const [P1] = match.players;
+  assert.equal(P1.hp, 400, '이어하기는 저장한 체력 그대로');
+  const gunships = enemies(match);
+  assert.equal(gunships.length, 2);
+  for (const g of gunships) {
+    assert.equal(g.characterId, 'gunship');
+    assert.equal(g.primary, 'gunship');
+    assert.ok(g.primaryOnly);
+  }
+  // 미사일: 아이템 버튼으로 쏘는 유도탄
+  for (const g of gunships) g.hp = 99999;
+  inputs.P1.item = true;
+  const ev = step(match, inputs);
+  assert.ok(ev.some((e) => e.type === 'fire' && e.weapon === 'missile'));
+  const missile = match.projectiles.find((b) => b.weapon === 'missile');
+  assert.ok(missile.homing && missile.splash);
+  assert.equal(P1.grenadeCooldown, WEAPONS.missile.interval);
+
+  // 과냉각: 보조무기 버튼으로 켜고, 무기는 바꾸지 않는다
+  match.projectiles = [];
+  const shots = (sec) => {
+    let n = 0;
+    for (let t = 0; t < sec; t += TICK) n += step(match, inputs).filter((e) => e.type === 'fire' && e.playerId === 'P1').length;
+    return n;
+  };
+  inputs.P1.aim = -Math.PI / 2;
+  inputs.P1.aiming = true;
+  const normal = shots(2);
+  inputs.P1.select = 'secondary';
+  const on = step(match, inputs);
+  assert.ok(on.some((e) => e.type === 'overcool'));
+  assert.equal(P1.slot, 'primary', '과냉각은 들지 않고 바로 켜짐');
+  assert.ok(P1.boost > 0);
+  const boosted = shots(2);
+  assert.ok(boosted >= normal * 2.5, `과냉각 ${boosted}발 vs 평소 ${normal}발`);
+  inputs.P1.select = 'secondary';
+  shots(4);
+  assert.equal(P1.boost, 0, '5초 뒤 꺼짐');
+  assert.ok(P1.cooldowns.overcool > 0, '쿨타임');
+});
+
+test('공중전: AI 동료도 라이트닝을 타고(주무기만), 동료 수만큼 건쉽이 더 나오며 데스스타는 혼자', () => {
+  const { match, inputs } = sky(8, 2);
+  const team = allies(match);
+  assert.ok(team.every((p) => p.plane && p.primary === 'lightning' && p.primaryOnly));
+  assert.equal(enemies(match).length, 2 + 2);
+  const boss = sky(11, 2).match;
+  assert.deepEqual(enemies(boss).map((p) => p.name), [DEATHSTAR_NAME]);
+  assert.equal(enemies(boss)[0].primary, 'flak');
+  assert.equal(enemies(boss)[0].radius, 130);
+  assert.ok(inputs);
+});
+
+test('데스스타를 물리치면 엔딩 컷씬(연쇄 폭발·추락·승리의 롤) 뒤 스토리 클리어, 저장은 안 됨', () => {
+  const { match, inputs } = sky(11);
+  const [ds] = enemies(match);
+  ds.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'cutscene', '건 카타 없이 바로 엔딩 컷씬');
+  const c = match.cutscene;
+  assert.equal(c.kind, 'deathstar');
+  assert.equal(checkpoint(match), null);
+  const events = runOut(match, inputs, ['cutscene']);
+  assert.ok(events.filter((e) => e.type === 'explode').length >= 8, '연쇄 폭발');
+  assert.ok(c.ds.alpha <= 0.01, '추락해 사라짐');
+  assert.ok(c.hero.roll >= Math.PI * 2 - 1e-6, '승리의 롤');
+  assert.ok(c.t >= DEATHSTAR_CUTSCENE_TIME);
+  assert.equal(match.phase, 'result');
+  assert.equal(match.winner, 'earth');
+});
+
+test('스테이지 건너뛰기·시작 스테이지: 다음 스테이지 처음부터 체력 가득, 하늘이 마지막', async () => {
+  const { STAGE_ORDER, stageStart, nextStageOf } = await import('../src/game/story.js');
+  assert.deepEqual(STAGE_ORDER, ['rooftop', 'corridor', 'sky']);
+  assert.deepEqual(STAGE_ORDER.map(stageStart), [0, 4, 8]);
+  assert.equal(nextStageOf('rooftop'), 'corridor');
+  assert.equal(nextStageOf('corridor'), 'sky');
+  assert.equal(nextStageOf('sky'), null);
+  const m = createStoryMatch({ characterId: 'earth-arrow', weapon: 'dual' }, undefined, 3, { wave: 8, hp: 99999, skip: true });
+  assert.equal(m.story.stage, 'sky');
+  assert.equal(m.players[0].hp, m.players[0].maxHp);
+  assert.ok(m.players[0].plane);
+  assert.equal(m.story.banner.text, '3스테이지 · 하늘');
+  assert.equal(m.story.banner.sub, '스테이지 건너뛰기');
+  const c = createStoryMatch({ characterId: 'earth-arrow', weapon: 'dual' }, undefined, 3, { wave: 4, hp: 99999, skip: true });
+  assert.equal(c.story.stage, 'corridor');
+  assert.ok(c.story.turrets);
 });

@@ -6,7 +6,7 @@ import { PAD_LABEL } from '../input/gamepad.js';
 import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
 import { createStorySetup } from './story.js';
-import { R10_NAME, COOP_SLOT, waveLabel } from '../game/story.js';
+import { DEATHSTAR_NAME, COOP_SLOT, waveLabel } from '../game/story.js';
 import { weaponInfo, secretChoiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -158,6 +158,7 @@ export function createScreens(handlers) {
   pauseBtn.addEventListener('click', (e) => { if (e.detail === 0) handlers.onPause(); }); // 키보드로 누른 경우
   $('#resume-btn').addEventListener('click', handlers.onResume);
   $('#save-btn').addEventListener('click', handlers.onSave);
+  $('#skip-stage-btn').addEventListener('click', handlers.onSkipStage);
   for (const btn of document.querySelectorAll('.continue-btn')) btn.addEventListener('click', handlers.onContinue);
   $('#clear-save-btn').addEventListener('click', handlers.onClearSave);
   for (const btn of document.querySelectorAll('.restart-btn')) btn.addEventListener('click', handlers.onStart);
@@ -181,9 +182,11 @@ export function createScreens(handlers) {
       $('#setup-btn').disabled = false;
       $('#single-btn').disabled = false;
     },
-    /** 일시정지 화면. 스토리 모드면 '저장하기' 버튼을 보인다. */
-    showPause(story) {
+    /** 일시정지 화면. 스토리 모드면 '저장하기'를, 다음 스테이지가 있으면 skipLabel로 '건너뛰기' 버튼을 보인다. */
+    showPause(story, skipLabel = null) {
       $('#save-btn').hidden = !story;
+      $('#skip-stage-btn').hidden = !skipLabel;
+      if (skipLabel) $('#skip-stage-btn').textContent = skipLabel;
       $('#save-status').textContent = '';
       show('pause');
     },
@@ -231,7 +234,7 @@ export function createScreens(handlers) {
       $('#result-time').textContent = `경기 시간 ${formatTime(time)}` + (story ? ` · 스토리 모드 ${waveLabel(story.wave)}` : '');
       const winnerPlayer = players.find((p) => p.team === winner);
       $('#result-title').textContent = winner === 'draw' ? '무승부'
-        : story ? (winner === 'earth' ? `스토리 클리어! ${R10_NAME}을 쓰러뜨렸다!` : `${waveLabel(story.wave)}에서 패배…`)
+        : story ? (winner === 'earth' ? `스토리 클리어! ${DEATHSTAR_NAME}을 격추했다!` : `${waveLabel(story.wave)}에서 패배…`)
         : winnerPlayer.ai ? `${winnerPlayer.name} 승리…`
         : `${winnerPlayer.id} ${winnerPlayer.name} (${TEAM_NAME[winner]}) 승리!`;
 

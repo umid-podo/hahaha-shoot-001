@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS, COVER, TICK,
+  MAX_HP, WEAPONS, COVER, TICK, CHARACTERS,
 } from '../game/config.js';
 import {
   WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel,
@@ -10,6 +10,8 @@ import {
 } from '../game/gunkata.js';
 
 const INK = '#30353E';
+// 데스스타 그림 위치·크기(판정 중심 기준)
+const DS_DRAW_DY = 40, DS_DRAW_SCALE = 0.85;
 const MAX_DPR = 2;
 const RECOIL_TIME = 0.08;
 const SPARK_TIME = 0.15;
@@ -92,20 +94,24 @@ export function createRenderer(canvas, wrap, assets) {
   resize();
 
   function drawPlayer(p, input, time, reducedMotion) {
+    // 하늘(공중전)의 비행체(라이트닝·건쉽·데스스타)는 그림 파일 대신 직접 그린다
+    const aircraft = p.plane || CHARACTERS.find((c) => c.id === p.characterId)?.aircraft;
+    if (aircraft && !p.alive && !p.plane) return; // 격추된 건쉽은 이미 터져 사라졌다
     // 무기별 그림(manifest id '<캐릭터>@<무기>')이 있으면 그것을, 없으면 기본 그림을 쓴다.
-    const { img, anchor } = assets[`${p.characterId}@${p.weapon}`] ?? assets[p.characterId];
+    const { img, anchor } = aircraft ? { img: null, anchor: [0.5, 0.5] } : assets[`${p.characterId}@${p.weapon}`] ?? assets[p.characterId];
     const size = SPRITE_SIZE * p.scale; // 드론처럼 크게 그리는 캐릭터도 판정 원은 같다
     const color = TEAM_COLOR[p.team];
     const hurt = p.hurt > 0;
 
     if (!p.alive) {
-      // 쓰러진 캐릭터: 옆으로 눕히고 흐리게, KO 표시
+      // 쓰러진 캐릭터: 옆으로 눕히고 흐리게, KO 표시(격추된 라이트닝은 회색으로 기울어 연기)
       ctx.save();
       ctx.translate(p.x, p.y + 10);
       ctx.rotate(Math.PI / 2);
       ctx.globalAlpha = 0.45;
       ctx.filter = 'grayscale(1)';
-      ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
+      if (aircraft) { ctx.rotate(-Math.PI / 2 + 0.6); drawLightning(0, 0, 0, 0.9, time, true); }
+      else ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
       ctx.restore();
       ctx.font = 'bold 30px system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -173,12 +179,24 @@ export function createRenderer(canvas, wrap, assets) {
     const squash = !reducedMotion && recoil[p.id] > 0 ? 0.92 : 1;
     const shake = !reducedMotion && hurt ? Math.sin(time * 90) * 3 : 0;
     const facing = Math.cos(p.aim) < 0 ? -1 : 1; // 원본은 오른쪽을 본다. 반전 시 앵커도 함께 반전된다.
-    ctx.save();
-    ctx.translate(p.x + shake, p.y + bounce);
-    ctx.scale(facing * squash, squash);
-    ctx.globalAlpha = hurt ? 0.7 : 1;
-    ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
-    ctx.restore();
+    if (aircraft) {
+      // 비행체는 조준 방향으로 기수를 돌린다(옆으로 움직이면 살짝 기운다)
+      ctx.save();
+      ctx.globalAlpha = hurt ? 0.7 : 1;
+      const tilt = reducedMotion ? 0 : input.moveAxis * 0.18;
+      if (p.plane) drawLightning(p.x + shake, p.y, p.aim + Math.PI / 2 + tilt, 0.95, time, reducedMotion, p.boost > 0);
+      // 데스스타는 화면 위 끝에 잘리지 않게 판정 중심보다 조금 아래, 0.85배로 그린다
+      else if (p.characterId === 'deathstar') drawDeathstar(p.x + shake, p.y + DS_DRAW_DY, DS_DRAW_SCALE, time, reducedMotion);
+      else drawCarrier({ kind: 'gunship', x: p.x + shake, y: p.y, angle: p.aim + Math.PI + tilt, state: 'hover', scale: 0.5, enemy: true }, time, reducedMotion);
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.translate(p.x + shake, p.y + bounce);
+      ctx.scale(facing * squash, squash);
+      ctx.globalAlpha = hurt ? 0.7 : 1;
+      ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
+      ctx.restore();
+    }
     // 제트팩 불꽃은 그림 위에 그려 치마에 가리지 않게 한다
     if (p.jetpack) drawJetFlame(p, anchor, size, facing, bounce, moving, time, reducedMotion);
 
@@ -250,7 +268,7 @@ export function createRenderer(canvas, wrap, assets) {
     // 수류탄(아이템) 쿨타임: 던진 뒤 다시 쓸 수 있을 때까지 회색 막대
     if (!p.primaryOnly && p.grenadeCooldown > 0) {
       bar(p.x - HP_BAR.w / 2, gaugeY + row * (GAUGE_H + 2), HP_BAR.w,
-        1 - p.grenadeCooldown / WEAPONS.grenade.interval, '#9A9EA5');
+        1 - p.grenadeCooldown / WEAPONS[p.item ?? 'grenade'].interval, '#9A9EA5');
     }
   }
 
@@ -556,10 +574,307 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.restore();
   }
 
+  /**
+   * 위에서 본 라이트닝(쌍동 전투기, 주인공 전용기). 기수는 angle 방향(0이면 위쪽).
+   * 가운데 짧은 동체(조종석)와 엔진이 달린 꼬리 붐 두 개, 긴 주날개, 두 붐을 잇는 꼬리 날개. 은색 몸체에 파란 무늬.
+   * boost(과냉각 중)이면 엔진 뒤로 파란 불꽃.
+   */
+  function drawLightning(x, y, angle, scale, time, reducedMotion, boost = false) {
+    const silver = '#C9CED6', blue = '#2F6FD6', dark = '#6B7380';
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.5 / scale;
+    ctx.lineJoin = 'round';
+    // 그림자
+    ctx.fillStyle = 'rgba(20,30,60,0.18)';
+    ctx.beginPath(); ctx.ellipse(18, 26, 92, 30, 0, 0, Math.PI * 2); ctx.fill();
+    // 엔진 불꽃(과냉각이면 파랗게 길게)
+    for (const bx of [-30, 30]) {
+      const len = boost ? 34 + (reducedMotion ? 0 : Math.random() * 10) : 12;
+      ctx.fillStyle = boost ? 'rgba(90,170,255,0.85)' : 'rgba(255,170,60,0.75)';
+      ctx.beginPath(); ctx.moveTo(bx - 5, 52); ctx.lineTo(bx, 52 + len); ctx.lineTo(bx + 5, 52); ctx.fill();
+    }
+    // 꼬리 날개(두 붐을 잇는 수평 꼬리) + 수직 꼬리 두 장
+    ctx.fillStyle = silver;
+    ctx.beginPath(); ctx.roundRect(-40, 40, 80, 10, 4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = blue;
+    for (const bx of [-30, 30]) { ctx.beginPath(); ctx.roundRect(bx - 4, 36, 8, 18, 3); ctx.fill(); ctx.stroke(); }
+    // 주날개: 끝은 둥글고 파란 날개 끝
+    ctx.fillStyle = silver;
+    ctx.beginPath();
+    ctx.moveTo(-86, -6); ctx.lineTo(86, -6); ctx.quadraticCurveTo(96, 0, 86, 8); ctx.lineTo(-86, 8); ctx.quadraticCurveTo(-96, 0, -86, -6);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = blue;
+    for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sx * 88, 1, 6, 7, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.strokeStyle = 'rgba(48,53,62,0.35)';
+    ctx.lineWidth = 1.2 / scale;
+    for (const lx of [-64, -48, 48, 64]) { ctx.beginPath(); ctx.moveTo(lx, -5); ctx.lineTo(lx, 7); ctx.stroke(); }
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.5 / scale;
+    // 꼬리 붐(엔진 나셀) 두 개: 앞쪽 엔진은 파란 덮개
+    for (const bx of [-30, 30]) {
+      ctx.fillStyle = silver;
+      ctx.beginPath(); ctx.roundRect(bx - 7, -34, 14, 86, 6); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = blue;
+      ctx.beginPath(); ctx.ellipse(bx, -30, 8, 13, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // 프로펠러: 빠르게 도는 원판 + 날 두 장
+      ctx.fillStyle = 'rgba(200,210,225,0.35)';
+      ctx.beginPath(); ctx.ellipse(bx, -44, 20, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.save();
+      ctx.translate(bx, -44);
+      ctx.scale(Math.cos(reducedMotion ? 0.7 : time * 40 + bx), 1);
+      ctx.fillStyle = '#4A3A20';
+      ctx.fillRect(-20, -2, 40, 4);
+      ctx.restore();
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.arc(bx, -44, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // 가운데 동체(조종석) — 파란 기수
+    ctx.fillStyle = silver;
+    ctx.beginPath(); ctx.ellipse(0, -10, 11, 34, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = blue;
+    ctx.beginPath(); ctx.ellipse(0, -36, 7, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#9FD3F2';
+    ctx.beginPath(); ctx.ellipse(0, -10, 6, 11, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * 위에서 본 거대 비행선 데스스타(ISB 공중 요새). 길쭉한 강철 선체, 가운데 함교, 양옆 엔진과 프로펠러,
+   * 아래(지구방위팀 쪽)를 향한 포탑 여러 개, 붉은 경고등. angle·alpha·scale은 엔딩 컷씬의 추락용.
+   */
+  function drawDeathstar(x, y, scale, time, reducedMotion, alpha = 1, angle = 0) {
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    // 그림자
+    ctx.fillStyle = 'rgba(20,30,60,0.2)';
+    ctx.beginPath(); ctx.ellipse(40, 60, 330, 92, 0, 0, Math.PI * 2); ctx.fill();
+    // 양옆 엔진 날개와 프로펠러
+    for (const sx of [-1, 1]) {
+      ctx.fillStyle = '#3B4250';
+      ctx.beginPath(); ctx.roundRect(sx > 0 ? 180 : -300, -26, 120, 52, 14); ctx.fill(); ctx.stroke();
+      for (const ex of [sx * 230, sx * 280]) {
+        ctx.fillStyle = 'rgba(180,190,205,0.4)';
+        ctx.beginPath(); ctx.arc(ex, -40, 26, 0, Math.PI * 2); ctx.fill();
+        ctx.save();
+        ctx.translate(ex, -40);
+        ctx.rotate(reducedMotion ? 0.4 : time * 18 * sx);
+        ctx.fillStyle = '#2A2E35';
+        ctx.fillRect(-26, -3, 52, 6);
+        ctx.fillRect(-3, -26, 6, 52);
+        ctx.restore();
+      }
+    }
+    // 선체
+    const hull = ctx.createLinearGradient(0, -110, 0, 110);
+    hull.addColorStop(0, '#7A8290');
+    hull.addColorStop(0.5, '#4E5562');
+    hull.addColorStop(1, '#2F343D');
+    ctx.fillStyle = hull;
+    ctx.beginPath(); ctx.ellipse(0, 0, 300, 105, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 늑골(가로 줄)과 판
+    ctx.strokeStyle = 'rgba(20,24,30,0.45)';
+    ctx.lineWidth = 3;
+    for (let i = -4; i <= 4; i++) {
+      const rx = i * 60;
+      const ry = 105 * Math.sqrt(Math.max(0, 1 - (rx / 300) ** 2));
+      ctx.beginPath(); ctx.moveTo(rx, -ry); ctx.lineTo(rx, ry); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.ellipse(0, 0, 300, 52, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 4;
+    // 함교(가운데 위)와 ISB 표식
+    ctx.fillStyle = '#2A2E35';
+    ctx.beginPath(); ctx.roundRect(-70, -50, 140, 70, 18); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#FF4B3A';
+    for (let i = 0; i < 5; i++) { ctx.fillRect(-56 + i * 26, -36, 14, 8); }
+    ctx.fillStyle = '#D56A26';
+    ctx.beginPath(); ctx.roundRect(-48, -2, 96, 34, 8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 26px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ISB', 0, 16);
+    // 아래를 향한 포탑들
+    for (const tx of [-220, -140, 140, 220, -60, 60]) {
+      const ty = 105 * Math.sqrt(Math.max(0, 1 - (tx / 300) ** 2)) - 18;
+      ctx.fillStyle = '#2A2E35';
+      ctx.beginPath(); ctx.arc(tx, ty, 16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillRect(tx - 4, ty, 8, 30);
+    }
+    // 깜빡이는 경고등
+    const blink = reducedMotion ? 1 : (Math.sin(time * 6) > 0 ? 1 : 0.3);
+    ctx.fillStyle = `rgba(255,60,50,${blink})`;
+    for (const lx of [-290, 290]) { ctx.beginPath(); ctx.arc(lx, 0, 8, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
+
+  /*
+   * 하늘(공중전) 배경: 비 내리는 밤, 도시 상공. 라이트닝이 앞으로(위로) 날아가니 땅(도시)·구름·비가 계속 아래로 흘러간다.
+   * 도시는 가로 한 줄(블록·건물 지붕·불 켜진 창문·가로등 길)을 미리 몇 장 그려 두고 줄마다 골라 이어 붙인다.
+   * 가까운 구름은 더 빨리 흐르고(원근), 빗줄기가 비스듬히 떨어지며, 가끔 번개가 쳐 화면이 번쩍인다.
+   */
+  const CITY_ROW_H = 260;
+  const CITY_SPEED = 170;     // 도시가 흘러가는 속도(초당)
+  const CLOUD_SPEED = 420;    // 가까운 비구름
+  const RAIN_SPEED = 1500;
+  let cityRows = null;
+
+  /** 시드 고정 난수(도시 줄 그림을 늘 같게) */
+  function cityRng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), a | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** 도시 한 줄(가로 1600 × 세로 260): 위쪽 가로 도로 + 세로 골목으로 나뉜 블록, 블록마다 건물 지붕과 창문 불빛 */
+  function makeCityRow(seed) {
+    const c = document.createElement('canvas');
+    c.width = ARENA_WIDTH;
+    c.height = CITY_ROW_H;
+    const g = c.getContext('2d');
+    const rnd = cityRng(seed);
+    g.fillStyle = '#0B0F1A';
+    g.fillRect(0, 0, c.width, c.height);
+    // 가로 큰길: 젖은 아스팔트 + 차선 + 가로등 불빛 웅덩이
+    g.fillStyle = '#161B27';
+    g.fillRect(0, 0, c.width, 44);
+    g.fillStyle = 'rgba(255,214,110,0.55)';
+    for (let x = 20; x < c.width; x += 80) g.fillRect(x, 20, 34, 3);
+    for (let x = 40; x < c.width; x += 160) {
+      const glow = g.createRadialGradient(x, 6, 0, x, 6, 46);
+      glow.addColorStop(0, 'rgba(255,200,110,0.35)');
+      glow.addColorStop(1, 'rgba(255,200,110,0)');
+      g.fillStyle = glow;
+      g.fillRect(x - 46, -40, 92, 92);
+    }
+    // 블록(세로 골목으로 나뉨)
+    let x = 0;
+    while (x < c.width) {
+      const w = 150 + Math.floor(rnd() * 120);
+      const bx = x + 14, bw = Math.min(w - 28, c.width - bx);
+      // 블록 바닥
+      g.fillStyle = '#121725';
+      g.fillRect(bx, 56, bw, CITY_ROW_H - 64);
+      // 건물 지붕 2~4개
+      let by = 62;
+      while (by < CITY_ROW_H - 30) {
+        const bh = 50 + Math.floor(rnd() * 80);
+        const h = Math.min(bh, CITY_ROW_H - 12 - by);
+        let cx = bx + 6;
+        while (cx < bx + bw - 30) {
+          const cw = Math.min(40 + Math.floor(rnd() * 70), bx + bw - 6 - cx);
+          const shade = 28 + Math.floor(rnd() * 26);
+          g.fillStyle = `rgb(${shade},${shade + 4},${shade + 18})`;
+          g.fillRect(cx, by, cw, h - 6);
+          g.strokeStyle = 'rgba(0,0,0,0.6)';
+          g.lineWidth = 2;
+          g.strokeRect(cx, by, cw, h - 6);
+          // 창문 불빛(지붕 가장자리에 비치는 빛)
+          for (let wy = by + 8; wy < by + h - 14; wy += 12) {
+            for (let wx = cx + 6; wx < cx + cw - 8; wx += 10) {
+              if (rnd() < 0.32) {
+                g.fillStyle = rnd() < 0.85 ? 'rgba(255,214,120,0.85)' : 'rgba(160,220,255,0.8)';
+                g.fillRect(wx, wy, 5, 6);
+              }
+            }
+          }
+          // 옥상 장치·네온
+          if (rnd() < 0.3) {
+            g.fillStyle = rnd() < 0.5 ? 'rgba(255,70,170,0.9)' : 'rgba(70,230,255,0.9)';
+            g.fillRect(cx + 4, by + 4, Math.min(26, cw - 8), 5);
+          }
+          if (rnd() < 0.25) {
+            g.fillStyle = '#FF3B30';
+            g.beginPath(); g.arc(cx + cw - 6, by + 6, 2.5, 0, Math.PI * 2); g.fill();
+          }
+          cx += cw + 6;
+        }
+        by += h;
+      }
+      x += w;
+    }
+    return c;
+  }
+
+  function drawSkyBackground(time, reducedMotion) {
+    if (!cityRows) cityRows = Array.from({ length: 6 }, (_, i) => makeCityRow(1000 + i * 7919));
+    const t = reducedMotion ? 0 : time;
+    // 도시: 위에서부터 줄을 이어 붙이고 아래로 흘려보낸다(줄 번호마다 같은 그림)
+    const scroll = t * CITY_SPEED;
+    const first = Math.floor(scroll / CITY_ROW_H);
+    const offset = scroll - first * CITY_ROW_H;
+    for (let j = -1; j * CITY_ROW_H < ARENA_HEIGHT + CITY_ROW_H; j++) {
+      const id = j - first;
+      const row = cityRows[((id * 2654435761) >>> 0) % cityRows.length];
+      ctx.drawImage(row, 0, j * CITY_ROW_H + offset);
+    }
+    // 도로 위를 달리는 차 불빛(앞 흰빛·뒤 붉은빛)
+    for (let i = 0; i < 14; i++) {
+      const lane = i % 2;
+      const rowY = ((i % 5) - 1) * CITY_ROW_H + offset; // 그 줄 위쪽 큰길
+      const dir = lane ? 1 : -1;
+      const x = ((i * 233 + t * (90 + (i % 4) * 25) * dir) % ARENA_WIDTH + ARENA_WIDTH) % ARENA_WIDTH;
+      ctx.fillStyle = dir > 0 ? 'rgba(255,250,220,0.9)' : 'rgba(255,60,50,0.9)';
+      ctx.fillRect(x, rowY + 12 + lane * 14, 8, 3);
+    }
+    // 밤 하늘 높이에서 내려다보는 느낌: 짙은 남색으로 덮고(아래쪽은 조금 밝게)
+    const night = ctx.createLinearGradient(0, 0, 0, ARENA_HEIGHT);
+    night.addColorStop(0, 'rgba(6,10,26,0.62)');
+    night.addColorStop(1, 'rgba(12,20,44,0.38)');
+    ctx.fillStyle = night;
+    ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    // 가까운 비구름: 도시보다 빨리 흐른다
+    for (let i = 0; i < 7; i++) {
+      const span = ARENA_HEIGHT + 500;
+      const y = ((i * 263 + t * CLOUD_SPEED * (0.8 + (i % 3) * 0.2)) % span) - 250;
+      const x = (i * 431 + 120) % ARENA_WIDTH;
+      const k = 0.8 + (i % 3) * 0.3;
+      ctx.fillStyle = `rgba(60,68,92,${0.28 + (i % 2) * 0.12})`;
+      for (const [dx, dy, r] of [[0, 0, 90], [80, 16, 70], [-80, 20, 64], [24, -30, 60]]) {
+        ctx.beginPath(); ctx.ellipse(x + dx * k, y + dy * k, r * k * 1.5, r * k, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // 비: 비스듬히 빠르게 떨어지는 빗줄기
+    ctx.strokeStyle = 'rgba(170,195,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 150; i++) {
+      const sx = (i * 113) % ARENA_WIDTH;
+      const y = ((i * 337 + t * RAIN_SPEED * (0.85 + (i % 5) * 0.06)) % (ARENA_HEIGHT + 80)) - 40;
+      const x = (sx - y * 0.18 + ARENA_WIDTH * 2) % ARENA_WIDTH;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 7, y + 34);
+    }
+    ctx.stroke();
+    // 번개: 몇 초마다 두 번 번쩍
+    if (!reducedMotion) {
+      const p = time % 7.3;
+      const flash = p < 0.08 ? 0.45 : p > 0.18 && p < 0.26 ? 0.3 : 0;
+      if (flash) {
+        ctx.fillStyle = `rgba(220,230,255,${flash})`;
+        ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+      }
+    }
+  }
+
   /** 위에서 본 헬리콥터·건쉽. 기수는 dir 쪽(-1이면 왼쪽). 그림자 → 동체 → 회전 날개 순. */
   function drawCarrier(c, time, reducedMotion) {
     const gunship = c.kind === 'gunship';
-    const k = gunship ? 1.35 : 1;
+    const k = (gunship ? 1.35 : 1) * (c.scale ?? 1); // scale: 공중전 적 건쉽은 작게
     const body = gunship ? '#4B5A44' : '#5E7FA3';
     const dark = gunship ? '#323C2E' : '#3E5876';
     const down = c.state === 'down';
@@ -885,6 +1200,18 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.textBaseline = 'middle';
     ctx.fillText(roof ? '계단 ▼' : '계단', sx, sy + 1);
     ctx.restore();
+  }
+
+  /** 라이트닝 컷씬(옥상): 무전하는 주인공과 날아와 머무는 라이트닝(이륙하며 커짐) */
+  function drawLightningCutscene(match, cut, inputs, time, reducedMotion) {
+    const hero = match.players.find((p) => p.id === cut.hero.id);
+    if (hero && cut.scene === 'roof' && cut.hero.alpha > 0.01) {
+      ctx.save();
+      ctx.globalAlpha = cut.hero.alpha;
+      drawPlayer({ ...hero, plane: false, x: cut.hero.x, y: cut.hero.y, aim: -Math.PI / 2, hurt: 0, alive: true }, { moveAxis: 0, aiming: false }, time, reducedMotion);
+      ctx.restore();
+    }
+    if (cut.plane.visible) drawLightning(cut.plane.x, cut.plane.y, cut.plane.angle + Math.PI / 2, cut.plane.scale, time, reducedMotion);
   }
 
   /** 컷씬: 위아래 검은 띠(영화처럼)와 아래 띠의 자막 */
@@ -1516,10 +1843,12 @@ export function createRenderer(canvas, wrap, assets) {
       // 천장이 울리는 장면(쿠쿵!): 화면이 흔들린다
       if (killcam?.shot.mode === 'rumble' && !reducedMotion) ctx.translate(Math.sin(time * 70) * 12, Math.cos(time * 53) * 9);
       const story = match.story;
-      // 스토리 모드 2스테이지는 복도 배경
-      ctx.drawImage((story?.stage === 'corridor' ? assets.corridor : assets.arena).img, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
-      if (story?.elevator) drawElevator(story.elevator);
-      if (story?.turrets) for (const t of story.turrets) drawTurret(t, story, time, reducedMotion);
+      // 스토리 모드 2스테이지는 복도, 3스테이지는 하늘 배경. 라이트닝 컷씬에서 옥상으로 올라가면 옥상 배경.
+      const roofScene = match.cutscene?.kind === 'lightning' && match.cutscene.scene === 'roof' && story.stage !== 'sky';
+      if (story?.stage === 'sky') drawSkyBackground(time, reducedMotion);
+      else ctx.drawImage((story?.stage === 'corridor' && !roofScene ? assets.corridor : assets.arena).img, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+      if (story?.elevator && !roofScene) drawElevator(story.elevator);
+      if (story?.turrets && !roofScene) for (const t of story.turrets) drawTurret(t, story, time, reducedMotion);
       if (story?.ceiling) drawCeiling(story.ceiling, time, reducedMotion);
       if (match.cutscene?.kind === 'stairs') drawStairsDoor(match.cutscene, story.stage);
 
@@ -1541,6 +1870,10 @@ export function createRenderer(canvas, wrap, assets) {
       for (const p of match.players) {
         if (!paused && recoil[p.id] > 0) recoil[p.id] -= dt;
         if (p.entering) continue; // 줄 타고 내려오는 요원은 헬리콥터 위에 그린다
+        // 라이트닝 컷씬: 하늘로 바뀌기 전에는 주인공·라이트닝을 컷씬이 따로 그린다(동료는 안 보임)
+        if (cut?.kind === 'lightning' && !cut.switched && p.team === 'earth') continue;
+        // 데스스타 엔딩: 데스스타와 컷씬 주인공의 라이트닝은 따로 그린다
+        if (cut?.kind === 'deathstar' && (p.id === cut.bossId || p.id === cut.heroId)) continue;
         if (cut?.kind === 'stairs' && p.team === 'earth') {
           // 계단 컷씬의 주인공: 계단실 문으로 걸어가 내려가며 작아지고 흐려진다(복도에서는 문에서 걸어 나온다)
           const h = cut.heroes.find((c) => c.id === p.id);
@@ -1660,7 +1993,15 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.restore();
           continue;
         }
-        const rocket = b.weapon === 'rpg';
+        if (b.weapon === 'flak') {
+          // 데스스타 산탄: 주황 포탄
+          ctx.fillStyle = '#FF8A3D';
+          ctx.strokeStyle = INK;
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(b.x, b.y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          continue;
+        }
+        const rocket = b.weapon === 'rpg' || b.weapon === 'missile';
         const { img } = assets[rocket ? 'rocket' : 'bullet'];
         const sniper = b.weapon === 'sniper';
         const smg = b.weapon === 'smg';
@@ -1675,6 +2016,17 @@ export function createRenderer(canvas, wrap, assets) {
       if (match.jet) drawJet(match.jet);
       if (cut?.kind === 'r10') drawR10Cutscene(match, cut, time, reducedMotion);
       else if (cut?.kind === 'smith') drawCutsceneActors(match, cut, time, reducedMotion);
+      else if (cut?.kind === 'lightning' && !cut.switched) drawLightningCutscene(match, cut, inputs, time, reducedMotion);
+      else if (cut?.kind === 'deathstar') {
+        const c = cut;
+        drawDeathstar(c.ds.x, c.ds.y + DS_DRAW_DY, DS_DRAW_SCALE * c.ds.scale, time, reducedMotion, c.ds.alpha, c.ds.angle);
+        // 승리의 롤: 옆으로 한 바퀴(가로 폭이 cos로 줄었다 늘어남)
+        ctx.save();
+        ctx.translate(c.hero.x, c.hero.y);
+        ctx.scale(Math.cos(c.hero.roll) || 0.05, 1);
+        drawLightning(0, 0, 0, 1.05, time, reducedMotion);
+        ctx.restore();
+      }
       if (match.story) {
         drawStoryCraft(match.story, time, reducedMotion);
         for (const p of match.players) if (p.entering) drawEntering(p, inputs[p.id], time, reducedMotion);
@@ -1762,8 +2114,13 @@ export function createRenderer(canvas, wrap, assets) {
         drawKillcamOverlay(killcam, time, reducedMotion);
       } else if (cut) {
         // 계단 컷씬: 스테이지가 바뀌는 동안 화면이 어두워졌다 밝아진다
-        if (cut.kind === 'stairs' && cut.fade > 0) {
+        if ((cut.kind === 'stairs' || cut.kind === 'lightning') && cut.fade > 0) {
           ctx.fillStyle = `rgba(0,0,0,${cut.fade})`;
+          ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+        }
+        // 라이트닝 이륙: 하얗게 번쩍이며 하늘로
+        if (cut.kind === 'lightning' && cut.flash > 0) {
+          ctx.fillStyle = `rgba(255,255,255,${cut.flash})`;
           ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
         }
         drawLetterbox(cut);

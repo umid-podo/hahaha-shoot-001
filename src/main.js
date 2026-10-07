@@ -2,7 +2,7 @@ import { TICK, COUNTDOWN, TEAM_NAME } from './game/config.js';
 import { SLOTS, createMatch, createInputs, cancelInputs, defaultLoadout } from './game/state.js';
 import { step } from './game/update.js';
 import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
-import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT } from './game/story.js';
+import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT, STAGES, stageStart, nextStageOf } from './game/story.js';
 import { createControls } from './input/pointer.js';
 import { createKataKeys, KATA_CODES } from './input/kata.js';
 import { glowingKey } from './game/gunkata.js';
@@ -94,7 +94,10 @@ const brains = () => (match?.story ? [...match.story.brains, ...match.story.ally
 function startMatch() {
   unlock();
   if (!storyMode()) resumeFrom = null;
-  match = storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom, storyPartner(), storyAllies())
+  // 스토리 설정에서 고른 시작 스테이지(이어하기·건너뛰기가 아니면): 그 스테이지 처음부터 체력 가득
+  const startAt = !resumeFrom && single.storyStart !== 'rooftop' && STAGES[single.storyStart]
+    ? { wave: stageStart(single.storyStart), hp: FULL_HP, hp2: FULL_HP, skip: true } : null;
+  match = storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies())
     : createMatch(mode === 'single' ? singleLoadout() : loadout);
   inputs = createInputs(match.players);
   humans = match.players.filter((p) => !p.ai);
@@ -121,7 +124,28 @@ function pause() {
   if (!active()) return;
   cancelAllInput();
   match.phase = 'paused';
-  screens.showPause(!!match.story);
+  const next = match.story && nextStageOf(match.story.stage);
+  screens.showPause(!!match.story, next ? `${STAGES[next].num}스테이지 ${STAGES[next].name}로 건너뛰기` : null);
+}
+
+/** 체력을 가득 채워 시작하라는 값(최대 체력으로 잘린다) */
+const FULL_HP = 99999;
+
+/**
+ * 일시정지 화면 '스테이지 건너뛰기': 지금 스테이지를 건너뛰고 다음 스테이지 처음부터(체력 가득) 시작한다.
+ * 같은 캐릭터·무기·2인 협동·AI 동료로 시작하고, 다시 시작하면 그 스테이지 처음부터다.
+ */
+function skipStage() {
+  const next = match?.story && nextStageOf(match.story.stage);
+  if (!next) return;
+  const coop = match.story.coop;
+  resumeFrom = {
+    wave: stageStart(next), hp: FULL_HP, skip: true,
+    pick: resumeFrom?.pick ?? loadout.P1,
+    ...(coop ? { coop: true, hp2: FULL_HP, pick2: resumeFrom?.pick2 ?? coopLoadout.P2 } : {}),
+    ...(match.story.allies ? { allies: match.story.allies, allyPicks: match.story.allyPicks.map((p) => ({ ...p })) } : {}),
+  };
+  startMatch();
 }
 
 function resume() {
@@ -200,6 +224,7 @@ const screens = createScreens({
   },
   onStart: startMatch,
   onSave: saveStoryProgress,
+  onSkipStage: skipStage,
   onContinue: continueStory,
   onClearSave() { clearStorySave(); resumeFrom = null; screens.setContinue(null); },
   onMenu() { match = null; screens.show('menu'); },
@@ -265,7 +290,10 @@ function frame(now) {
           screens.announce(`${waveLabel(e.wave)} 시작`);
         }
         if (e.type === 'wave-clear') screens.announce(`${waveLabel(e.wave)} 클리어`);
-        if (e.type === 'stage') screens.announce('2스테이지 복도. 체력이 모두 회복되었습니다.');
+        if (e.type === 'stage') {
+          screens.announce(e.stage === 'sky' ? '3스테이지 하늘. 라이트닝을 타고 공중전! 체력이 모두 회복되었습니다.'
+            : '2스테이지 복도. 체력이 모두 회복되었습니다.');
+        }
         if (e.type === 'gunkata') screens.announce('건 카타 모드! 빛나는 버튼 1, 2, 3, 4를 0.5초 안에 누르세요.');
         if (e.type === 'kata-warn') screens.announce(`${e.key}번`);
         if (e.type !== 'down') continue;
