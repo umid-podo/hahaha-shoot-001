@@ -561,11 +561,12 @@ export function updateStory(match, inputs, dt, events) {
 
 /**
  * 지금 저장하면 이어할 { wave, hp, label } (2인 협동이면 P2 체력 hp2와 coop: true도).
- * 저장할 수 없으면 null(주인공이 모두 쓰러졌거나 마지막 엔딩 컷씬).
+ * 저장할 수 없으면 null(주인공이 모두 쓰러졌거나 건 카타 중이거나 마지막 엔딩 컷씬).
  */
 export function checkpoint(match) {
   const story = match.story;
   if (!story || !heroes(match).some((p) => p.alive) || match.phase === 'result') return null;
+  if (match.gunkata) return null; // 건 카타 중에는 저장하지 않는다(끝나면 엔딩 컷씬 중에 저장 가능)
   const [hero, partner] = heroes(match);
   let wave = currentWave(story);
   if (match.cutscene) {

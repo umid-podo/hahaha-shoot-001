@@ -74,8 +74,9 @@ function actionButton(className, onPress) {
  * 이동키와 발사키 사이를 최대한 벌린다. 가운데 빈 곳에는 고른 주무기·보조무기 바로 선택과 수류탄(아이템) 던지기 버튼.
  * cancelAll()은 모든 스틱을 놓아 사격을 멈추고, sync(players)는 매 프레임 버튼 상태(든 무기·수류탄 쿨타임)를 맞춘다.
  * sideOf(p)는 패널을 놓을 쪽('earth' 왼쪽·'isb' 오른쪽). 기본은 팀 쪽이고, 스토리 모드 2인 협동의 P2는 지구방위팀이어도 오른쪽.
+ * wide(스토리 모드 1인): 패널 하나가 화면 너비를 다 쓰고, 이동키는 왼쪽 끝·발사키는 오른쪽 끝, 무기·아이템 버튼은 발사키 바로 옆.
  */
-export function createControls(groups, players, inputs, sideOf = (p) => p.team) {
+export function createControls(groups, players, inputs, sideOf = (p) => p.team, { wide = false } = {}) {
   const cancels = [];
   const buttons = {};
   for (const side of ['earth', 'isb']) {
@@ -84,7 +85,7 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team) 
       const { team } = p;
       const frame = inputs[p.id];
       const panel = document.createElement('div');
-      panel.className = `panel team-${team}`;
+      panel.className = `panel team-${team}${wide ? ' wide' : ''}`;
       const header = document.createElement('div');
       header.className = 'panel-head';
       header.textContent = `${p.id} · ${p.name}`;
@@ -116,8 +117,14 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team) 
 
       const middle = document.createElement('div');
       middle.className = 'panel-mid';
-      middle.append(header, actions);
-      panel.append(move, middle, aim);
+      if (wide) {
+        // 넓은 패널: 이동키 | 이름(가운데 빈 곳) | 무기·아이템 버튼 | 발사키
+        middle.append(header);
+        panel.append(move, middle, actions, aim);
+      } else {
+        middle.append(header, actions);
+        panel.append(move, middle, aim);
+      }
       groups[side].append(panel);
 
       cancels.push(bindStick(move, {

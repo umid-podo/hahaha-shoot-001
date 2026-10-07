@@ -9,6 +9,7 @@ import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
   LAST_WORDS, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
+import { glowingKey, GOAL, DAMAGE, WARN_TIME, KATA_KEYS } from '../src/game/gunkata.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
 
 function story(settings, seed = 7) {
@@ -28,11 +29,22 @@ function untilFight(match, inputs, max = 20) {
   }
   return events;
 }
-/** 경기장의 요원을 모두 쓰러뜨리고, 처치 컷씬(킬캠)이 나오면 끝날 때까지 돌린다. */
+/** 건 카타: 빛나는 버튼을 바로 눌러 10번 대응하고 엔딩 컷씬까지 돌린다. */
+function playKata(match, inputs) {
+  const events = [];
+  for (let i = 0; i < 20000 && match.phase === 'gunkata'; i++) {
+    const key = glowingKey(match.gunkata);
+    if (key) inputs[match.gunkata.heroId].kata = key;
+    events.push(...step(match, inputs));
+  }
+  return events;
+}
+/** 경기장의 요원을 모두 쓰러뜨리고, 처치 컷씬(킬캠)·건 카타가 나오면 끝날 때까지 돌린다. */
 function killAll(match, inputs) {
   for (const p of enemies(match)) p.hp = 0;
   const events = step(match, inputs);
   while (match.phase === 'killcam') events.push(...step(match, inputs));
+  if (match.phase === 'gunkata') events.push(...playKata(match, inputs));
   return events;
 }
 /** 컷씬·카운트다운이 끝날 때까지 돌린다. */
@@ -359,8 +371,10 @@ test('웨이브 마무리 장면: 1웨이브 무전 지원 요청, 3웨이브 �
   assert.ok(modes[2].includes('smith'));
   for (const p of enemies(match)) p.hp = 0;
   step(match, inputs);
-  assert.equal(match.phase, 'cutscene');
+  assert.equal(match.phase, 'gunkata', '스미스 요원은 킬캠 대신 건 카타');
   assert.equal(match.killcam ?? null, null);
+  playKata(match, inputs);
+  assert.equal(match.phase, 'cutscene', '건 카타 뒤 엔딩 컷씬');
 });
 
 /** 선분(x1,y1)-(x2,y2)과 점(px,py) 사이 가장 가까운 거리 */
@@ -759,4 +773,116 @@ test('계단 컷씬: 스미스 요원 컷씬 뒤 주인공이 옥상 계단실�
   assert.deepEqual([P1.hp, P2.hp, P2.alive], [P1.maxHp, P2.maxHp, true], '체력 100% 회복, 동료도 일어남');
   assert.deepEqual([P1.x, P2.x], [c.heroes[0].x, c.heroes[1].x], '컷씬이 끝난 자리에서 시작');
   assert.equal(events.filter((e) => e.type === 'result').length, 0);
+});
+
+/* ───────── 건 카타 ───────── */
+/** 스미스 요원을 쓰러뜨려 건 카타에 들어간 경기 */
+function toKata(seed = 7, partner = false) {
+  const { match, inputs } = partner ? coop(null, seed) : story(undefined, seed);
+  for (let w = 0; w < 3; w++) { killAll(match, inputs); untilFight(match, inputs); }
+  for (const p of enemies(match)) p.hp = 0;
+  const events = step(match, inputs);
+  return { match, inputs, events };
+}
+/** 다음 공격 경고(버튼이 빛남)가 나올 때까지 */
+function untilWarn(match, inputs) {
+  const events = [];
+  for (let i = 0; i < 2000 && match.phase === 'gunkata' && !glowingKey(match.gunkata); i++) events.push(...step(match, inputs));
+  return events;
+}
+
+test('건 카타: 스미스 요원을 쓰러뜨리면 건 카타, 공격 0.5초 전 버튼이 빛나고 맞는 버튼이면 대응, 10번이면 엔딩 컷씬', () => {
+  const { match, inputs, events } = toKata();
+  assert.equal(match.phase, 'gunkata');
+  const k = match.gunkata;
+  assert.equal(k.heroId, 'P1');
+  assert.equal(enemies(match)[0].alive, false);
+  assert.equal(match.projectiles.length, 0);
+  assert.equal(checkpoint(match), null, '건 카타 중에는 저장 안 함');
+  const hero = match.players[0];
+  const hp = hero.hp;
+
+  const seen = new Set();
+  for (let n = 1; n <= GOAL; n++) {
+    const warn = untilWarn(match, inputs);
+    const key = glowingKey(k);
+    assert.ok(KATA_KEYS.includes(key));
+    assert.ok(warn.some((e) => e.type === 'kata-warn' && e.key === key));
+    seen.add(key);
+    // 빛나는 동안(0.5초 안) 기다렸다 눌러도 된다
+    for (let t = 0; t < WARN_TIME - 0.1; t += TICK) step(match, inputs);
+    assert.equal(glowingKey(k), key, '0.5초 동안 빛남');
+    inputs.P1.kata = key;
+    const ev = step(match, inputs);
+    assert.ok(ev.some((e) => e.type === 'kata-counter' && e.key === key));
+    assert.equal(k.done, n);
+    assert.equal(glowingKey(k), null);
+  }
+  assert.equal(hero.hp, hp, '모두 대응하면 피해 없음');
+  assert.ok(seen.size >= 2, '공격은 무작위');
+  const rest = [];
+  while (match.phase === 'gunkata') rest.push(...step(match, inputs));
+  assert.ok(rest.some((e) => e.type === 'kata-clear'));
+  assert.equal(match.phase, 'cutscene', '10번 대응하면 엔딩 컷씬');
+  assert.equal(match.cutscene.kind, 'smith');
+  assert.equal(match.gunkata, null);
+  assert.ok(events.some((e) => e.type === 'gunkata'));
+});
+
+test('건 카타: 0.5초 안에 못 누르거나 다른 버튼을 누르면 체력 100이 깎이고 대응 횟수는 그대로, 체력이 다하면 패배', () => {
+  const { match, inputs } = toKata();
+  const k = match.gunkata;
+  const hero = match.players[0];
+  hero.hp = 350;
+
+  untilWarn(match, inputs);
+  let ev = [];
+  for (let t = 0; t < WARN_TIME + TICK && k.attack.state === 'warn'; t += TICK) ev.push(...step(match, inputs));
+  assert.ok(ev.some((e) => e.type === 'kata-hit' && e.damage === DAMAGE), '0.5초 지나면 맞음');
+  assert.equal(hero.hp, 350 - DAMAGE);
+  assert.equal(k.done, 0);
+
+  untilWarn(match, inputs);
+  inputs.P1.kata = (glowingKey(k) % 4) + 1; // 다른 버튼
+  step(match, inputs);
+  assert.equal(k.attack.state, 'hit', '틀린 버튼도 맞음');
+  assert.equal(hero.hp, 350 - 2 * DAMAGE);
+
+  // 빛나지 않을 때 누른 버튼은 무시
+  untilWarn(match, inputs);
+  inputs.P1.kata = glowingKey(k);
+  step(match, inputs);
+  assert.equal(k.done, 1);
+  while (k.attack) step(match, inputs);
+  inputs.P1.kata = 1;
+  step(match, inputs);
+  assert.equal(hero.hp, 350 - 2 * DAMAGE);
+
+  // 두 번 더 맞으면 체력 0 → 패배
+  for (let i = 0; i < 2; i++) {
+    untilWarn(match, inputs);
+    while (match.phase === 'gunkata' && glowingKey(k)) step(match, inputs);
+  }
+  assert.equal(hero.hp, 0);
+  assert.equal(hero.alive, false);
+  assert.equal(match.phase, 'result');
+  assert.equal(match.winner, 'isb');
+  assert.equal(match.stats.P1.taken >= 4 * DAMAGE, true);
+});
+
+test('건 카타 2인 협동: 쓰러뜨린 주인공이 하고, 그 주인공이 쓰러지면 동료가 이어받음', () => {
+  const { match, inputs } = toKata(7, true);
+  const k = match.gunkata;
+  const [P1, P2] = match.players;
+  P1.hp = DAMAGE;
+  untilWarn(match, inputs);
+  while (glowingKey(k)) step(match, inputs);
+  assert.equal(P1.alive, false);
+  assert.equal(match.phase, 'gunkata');
+  assert.equal(k.heroId, 'P2', '동료가 이어받음');
+  untilWarn(match, inputs);
+  inputs.P2.kata = glowingKey(k);
+  step(match, inputs);
+  assert.equal(k.done, 1);
+  assert.ok(P2.alive);
 });

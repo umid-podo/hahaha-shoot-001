@@ -5,6 +5,7 @@ import {
 import {
   WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel,
 } from '../game/story.js';
+import { KATA_MOVES, DAMAGE as KATA_DAMAGE, GOAL as KATA_GOAL, WARN_TIME as KATA_WARN, RESOLVE_TIME as KATA_RESOLVE, INTRO_TIME as KATA_INTRO } from '../game/gunkata.js';
 
 const INK = '#30353E';
 const MAX_DPR = 2;
@@ -1096,6 +1097,305 @@ export function createRenderer(canvas, wrap, assets) {
     }
   }
 
+  /* ───────── 건 카타(옆에서 본 시점) ─────────
+   * 밤 하늘·도시 불빛을 뒤로 한 옥상 끝에서 주인공(왼쪽)과 스미스 요원(오른쪽)이 마주 본다.
+   * 스미스 요원의 공격 자세(점프·슬라이딩·정면 조준·단검)와 주인공의 반격(숙이기·공중제비·쳐내기·단검 막기)을
+   * 공격 상태(warn 빛나는 중, counter 반격, hit 피격)와 진행도로 그린다.
+   */
+  const KATA_FLOOR = 800, KATA_HX = 470, KATA_SX = 1130, KATA_SIZE = SPRITE_SIZE * 2.8, KATA_FOOT = 0.95;
+  const kEase = (k) => { const c = Math.max(0, Math.min(1, k)); return c * c * (3 - 2 * c); };
+  const kClamp = (k) => Math.max(0, Math.min(1, k));
+  // 도시 불빛: 건물 높이·창문을 한 번만 정해 둔다
+  const KATA_CITY = Array.from({ length: 18 }, (_, i) => {
+    const h = 160 + ((i * 97) % 7) * 45 + ((i * 31) % 3) * 30;
+    return { x: i * 92 - 20, w: 84 + ((i * 13) % 3) * 10, h, lit: (i * 7919) % 97 };
+  });
+
+  function drawKataBackground(time, reducedMotion) {
+    const sky = ctx.createLinearGradient(0, 0, 0, KATA_FLOOR);
+    sky.addColorStop(0, '#0B1030');
+    sky.addColorStop(0.6, '#2A1E4A');
+    sky.addColorStop(1, '#5B2E4F');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    ctx.fillStyle = '#F6EFC8';
+    ctx.beginPath(); ctx.arc(1320, 170, 70, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(246,239,200,0.12)';
+    ctx.beginPath(); ctx.arc(1320, 170, 120, 0, Math.PI * 2); ctx.fill();
+    // 먼 도시
+    for (const b of KATA_CITY) {
+      const top = KATA_FLOOR - 120 - b.h;
+      ctx.fillStyle = '#161A33';
+      ctx.fillRect(b.x, top, b.w, b.h + 120);
+      for (let wy = top + 18; wy < KATA_FLOOR - 130; wy += 34) {
+        for (let wx = b.x + 12; wx < b.x + b.w - 14; wx += 24) {
+          const on = ((wx * 3 + wy * 7 + b.lit) % 5) < 2;
+          if (!on) continue;
+          const flicker = reducedMotion ? 1 : 0.75 + 0.25 * Math.sin(time * 2 + wx + wy);
+          ctx.fillStyle = `rgba(255,214,110,${0.55 * flicker})`;
+          ctx.fillRect(wx, wy, 10, 14);
+        }
+      }
+    }
+    // 옥상 난간(뒤)과 바닥
+    ctx.strokeStyle = '#5E6672';
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(0, KATA_FLOOR - 120); ctx.lineTo(ARENA_WIDTH, KATA_FLOOR - 120); ctx.stroke();
+    ctx.lineWidth = 4;
+    for (let x = 20; x < ARENA_WIDTH; x += 80) { ctx.beginPath(); ctx.moveTo(x, KATA_FLOOR - 120); ctx.lineTo(x, KATA_FLOOR - 20); ctx.stroke(); }
+    const floor = ctx.createLinearGradient(0, KATA_FLOOR, 0, ARENA_HEIGHT);
+    floor.addColorStop(0, '#8C8579');
+    floor.addColorStop(1, '#3E3A35');
+    ctx.fillStyle = floor;
+    ctx.fillRect(0, KATA_FLOOR, ARENA_WIDTH, ARENA_HEIGHT - KATA_FLOOR);
+    ctx.fillStyle = '#B8B0A2';
+    ctx.fillRect(0, KATA_FLOOR, ARENA_WIDTH, 8);
+  }
+
+  /** 옆 모습 캐릭터 하나. footY는 발 높이, pose: { facing, rot(라디안, 몸 가운데 기준), sx, sy, alpha, hurt } */
+  function kataSprite(characterId, x, footY, pose = {}) {
+    const { img, anchor } = assets[`${characterId}@pistol`] ?? assets[characterId];
+    const { facing = 1, rot = 0, sx = 1, sy = 1, alpha = 1, hurt = false } = pose;
+    const cy = footY - (KATA_FOOT - anchor[1]) * KATA_SIZE * sy;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, cy);
+    ctx.rotate(rot);
+    ctx.scale(facing * sx, sy);
+    if (hurt) ctx.filter = 'drop-shadow(0 0 18px #FF2A2A) saturate(1.6)';
+    ctx.drawImage(img, -anchor[0] * KATA_SIZE, -anchor[1] * KATA_SIZE, KATA_SIZE, KATA_SIZE);
+    ctx.restore();
+    return { x, y: cy };
+  }
+
+  /** 몸 가운데(cx, cy)에서 각도 angle 쪽 총구 위치 */
+  const kataMuzzle = (c, facing, rise = 0) => ({ x: c.x + facing * KATA_SIZE * 0.33, y: c.y - KATA_SIZE * 0.06 - rise });
+
+  function kataTracer(x1, y1, x2, y2, k) {
+    if (k <= 0 || k >= 1) return;
+    ctx.save();
+    ctx.globalAlpha = 1 - k;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,220,120,0.5)';
+    ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.strokeStyle = '#FFF6D6';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.restore();
+    star(x1, y1, 26 * (1 - k), '#FFD45E');
+  }
+
+  function kataDagger(x, y, angle, scale = 1) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#5A3A1E';
+    ctx.fillRect(-26, -6, 26, 12);
+    ctx.fillStyle = '#30353E';
+    ctx.fillRect(-2, -14, 8, 28);
+    ctx.fillStyle = '#E6EAF0';
+    ctx.strokeStyle = '#30353E';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(6, -8); ctx.lineTo(72, 0); ctx.lineTo(6, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  function kataPistol(x, y, angle) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = '#2A2E35';
+    ctx.fillRect(-26, -9, 52, 16);
+    ctx.fillRect(-26, 0, 16, 30);
+    ctx.restore();
+  }
+
+  function kataWord(text, x, y, size, color, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `bold ${size}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = size / 6;
+    ctx.strokeStyle = '#000';
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
+  /** 지금 공격의 두 사람 자세를 그린다. */
+  function drawKataActors(match, k, time, reducedMotion) {
+    const hero = match.players.find((p) => p.id === k.heroId);
+    const boss = match.players.find((p) => p.id === k.bossId);
+    const a = k.attack;
+    const u = a?.state === 'warn' ? kClamp(a.t / KATA_WARN) : 0;
+    const r = a && a.state !== 'warn' ? kClamp(a.t / KATA_RESOLVE) : 0;
+    const back = kEase((r - 0.6) / 0.4); // 장면 끝에 제자리로
+    const ok = a?.state === 'counter', hit = a?.state === 'hit';
+    let hx = KATA_HX, hFoot = KATA_FLOOR, hRot = 0, hSy = 1, hSx = 1;
+    let sx = KATA_SX, sFoot = KATA_FLOOR, sRot = 0, sSy = 1;
+    const sHurt = ok && r > 0.25 && r < 0.6;
+    const hHurt = hit && r < 0.45;
+    const fx = []; // 몸 위에 그릴 효과(총알 줄기 등)
+    const stagger = k.finish !== null ? Math.sin(time * 9) * 0.12 : 0;
+
+    if (a?.kind === 1) {
+      // 점프 사격: 웅크렸다 뛰어올라 공중에서 아래로 쏜다
+      const air = a.state === 'warn' ? 330 * kEase((u - 0.25) / 0.75) : 330 * (1 - kEase(r / 0.6));
+      sFoot = KATA_FLOOR - air;
+      sSy = a.state === 'warn' && u < 0.25 ? 0.86 : 1;
+      sRot = a.state === 'warn' ? -0.25 * u : ok ? -0.25 + r * 4 * (1 - back) : -0.25 * (1 - r);
+      if (ok) { hSy = r < 0.75 ? 0.6 : 0.6 + 0.4 * kEase((r - 0.75) / 0.25); hSx = 1.12 - 0.12 * back; }
+    } else if (a?.kind === 2) {
+      // 슬라이딩 사격: 뒤로 누워 미끄러져 들어온다
+      const slideX = 860;
+      sx = a.state === 'warn' ? KATA_SX + (slideX - KATA_SX) * kEase(u) : slideX + (KATA_SX - slideX) * back;
+      const lie = a.state === 'warn' ? kEase(u / 0.4) : 1 - back;
+      sRot = 1.15 * lie; // 얼굴이 하늘을 보게 뒤로 눕는다(왼쪽을 본 채)
+      sFoot = KATA_FLOOR - 18 * lie;
+      if (ok) {
+        // 공중제비: 뒤로 한 바퀴 돌며 높이 뛰어오른다
+        const flip = kClamp(r / 0.75);
+        hFoot = KATA_FLOOR - 300 * Math.sin(Math.PI * flip);
+        hRot = -Math.PI * 2 * kEase(flip);
+        hx = KATA_HX - 60 * Math.sin(Math.PI * flip);
+      }
+    } else if (a?.kind === 3) {
+      // 정면 권총: 한 걸음 다가와 똑바로 겨눈다(붉은 조준선)
+      sx = a.state === 'warn' ? KATA_SX - 60 * kEase(u) : KATA_SX - 60 * (1 - back);
+      if (ok) hx = KATA_HX + (sx - 230 - KATA_HX) * kEase(r / 0.22) * (1 - back);
+    } else if (a?.kind === 4) {
+      // 단검 찌르기: 단검을 들고 주인공에게 달려든다
+      const near = KATA_HX + 200;
+      sx = a.state === 'warn' ? KATA_SX + (near - KATA_SX) * kEase(u) : ok ? near + 120 * kEase(r / 0.3) + (KATA_SX - near - 120) * back : near + (KATA_SX - near) * back;
+      sRot = a.state === 'warn' ? 0.12 * u : 0;
+    }
+    if (hit) { hx -= 40 * Math.sin(Math.PI * kClamp(r / 0.4)); }
+    if (k.finish !== null) sRot += stagger;
+
+    const shake = (on) => (on && !reducedMotion ? Math.sin(time * 80) * 6 : 0);
+    const H = kataSprite(hero.characterId, hx + shake(hHurt), hFoot, { facing: 1, rot: hRot, sx: hSx, sy: hSy, hurt: hHurt });
+    // 스미스 요원: 붉은 기운
+    const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(time * 6);
+    ctx.fillStyle = `rgba(217,68,58,${0.12 + 0.12 * pulse})`;
+    ctx.beginPath(); ctx.ellipse(sx, sFoot - KATA_SIZE * 0.3, KATA_SIZE * 0.3, KATA_SIZE * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+    const S = kataSprite(boss.characterId, sx + shake(sHurt), sFoot, { facing: -1, rot: sRot, sy: sSy, hurt: sHurt });
+    const hm = kataMuzzle(H, 1), sm = kataMuzzle(S, -1);
+
+    if (a?.kind === 3 && a.state === 'warn') {
+      // 붉은 조준선이 주인공 가슴으로
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,40,40,${0.4 + 0.5 * u})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([14, 8]);
+      ctx.beginPath(); ctx.moveTo(sm.x, sm.y); ctx.lineTo(H.x + 20, H.y); ctx.stroke();
+      ctx.restore();
+    }
+    if (a?.kind === 4) {
+      // 스미스 요원의 단검(쳐내지면 하늘로 튕겨 나간다)
+      if (ok && r > 0.2) {
+        const f = kClamp((r - 0.2) / 0.6);
+        if (f < 1) kataDagger(sx - 120 + 260 * f, S.y - 60 - 380 * Math.sin(Math.PI * f * 0.8), -1 + f * 12, 1.1);
+      } else {
+        const thrust = a.state === 'warn' ? kEase((u - 0.6) / 0.4) : hit ? 1 : 0.6;
+        kataDagger(S.x - KATA_SIZE * 0.22 - 60 * thrust, S.y - 10, Math.PI + 0.25 * (1 - thrust), 1.1);
+      }
+      if (ok) {
+        kataDagger(H.x + KATA_SIZE * 0.2 + 40 * Math.sin(Math.PI * kClamp(r / 0.3)), H.y - 30, -0.6 + 0.9 * kClamp(r / 0.3), 1.1);
+        if (r < 0.35) { star((H.x + S.x) / 2, H.y - 40, 70 * (1 - r / 0.35), '#FFFFFF'); kataWord('챙!', (H.x + S.x) / 2, H.y - 150, 70, '#FFD45E', 1 - r / 0.35); }
+      }
+    }
+    if (a?.kind === 3 && ok) {
+      // 쳐낸 권총이 빙글빙글 날아간다
+      const f = kClamp((r - 0.15) / 0.6);
+      if (r > 0.15 && f < 1) kataPistol(sx + 40 + 300 * f, S.y - 40 - 420 * Math.sin(Math.PI * f * 0.8), f * 14);
+      if (r < 0.3) star(sm.x, sm.y, 50 * (1 - r / 0.3), '#FFFFFF');
+      fx.push(() => kataTracer(hm.x, hm.y, S.x, S.y - 10, (r - 0.3) / 0.25));
+    }
+    // 반격 사격(1 숙여서 위로, 2 공중제비 중 아래로)
+    if (ok && a.kind === 1) fx.push(() => kataTracer(hm.x, hm.y - 30, S.x, S.y, (r - 0.08) / 0.25));
+    if (ok && a.kind === 2) fx.push(() => kataTracer(H.x, H.y, S.x, S.y, (r - 0.35) / 0.25));
+    // 피격: 스미스 요원의 공격이 주인공에게
+    if (hit && a.kind !== 4) fx.push(() => kataTracer(sm.x, sm.y, H.x, H.y, r / 0.25));
+    if (hit && r < 0.6) kataWord(`-${KATA_DAMAGE}`, H.x + 60, H.y - 200 - r * 80, 64, '#FF3B30', 1 - r / 0.6);
+    if (ok && r < 0.7) kataWord(['', '격추!', '공중제비!', '쳐내기!', '막았다!'][a.kind], S.x, S.y - 230 - r * 60, 56, '#7CF29A', 1 - r / 0.7);
+    for (const f of fx) f();
+  }
+
+  /** 눌러야 할 버튼 안내: 빛나는 키캡과 남은 시간 고리 */
+  function drawKataPrompt(k, time, reducedMotion) {
+    const a = k.attack;
+    if (a?.state !== 'warn') return;
+    const left = 1 - kClamp(a.t / KATA_WARN);
+    const x = ARENA_WIDTH / 2, y = 330;
+    const glow = reducedMotion ? 1 : 0.7 + 0.3 * Math.sin(time * 30);
+    ctx.save();
+    ctx.fillStyle = `rgba(255,212,94,${0.25 * glow})`;
+    ctx.beginPath(); ctx.arc(x, y, 120, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#FFD45E';
+    ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.arc(x, y, 104, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); ctx.stroke();
+    ctx.fillStyle = '#FFF6D6';
+    ctx.strokeStyle = '#30353E';
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.roundRect(x - 70, y - 70, 140, 140, 22); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    kataWord(String(a.kind), x, y + 4, 110, '#B3261E');
+    kataWord(`${KATA_MOVES[a.kind].name} → ${a.kind} ${KATA_MOVES[a.kind].hint}`, x, y + 150, 40, '#FFD45E');
+  }
+
+  /** 위쪽 안내: 제목, 대응 횟수(10칸), 주인공 체력 */
+  function drawKataHud(match, k, time, reducedMotion) {
+    const hero = match.players.find((p) => p.id === k.heroId);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, ARENA_WIDTH, 50);
+    ctx.fillRect(0, ARENA_HEIGHT - 80, ARENA_WIDTH, 80);
+    kataWord('건 카타', ARENA_WIDTH / 2, 110, 64, '#FFFFFF');
+    const w = 46, gap = 12, x0 = ARENA_WIDTH / 2 - (KATA_GOAL * (w + gap) - gap) / 2;
+    for (let i = 0; i < KATA_GOAL; i++) {
+      ctx.fillStyle = i < k.done ? '#7CF29A' : 'rgba(255,255,255,0.2)';
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(x0 + i * (w + gap), 160, w, 22, 6); ctx.fill(); ctx.stroke();
+    }
+    kataWord(`대응 ${k.done} / ${KATA_GOAL}`, ARENA_WIDTH / 2, 210, 30, '#FFFFFF');
+    // 주인공 체력
+    ctx.font = 'bold 30px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(`${hero.id} ${hero.name}`, 60, 100);
+    drawHpBar(ctx, 60, 125, 380, 22, hero.hp, hero.maxHp);
+    ctx.fillText(`${hero.hp} / ${hero.maxHp}`, 60, 175);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#FF8A80';
+    ctx.fillText('스미스 요원', ARENA_WIDTH - 60, 100);
+    // 자막
+    if (k.caption) {
+      ctx.font = 'bold 36px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(k.caption, ARENA_WIDTH / 2, ARENA_HEIGHT - 40);
+    }
+    if (!k.attack && k.t < KATA_INTRO) {
+      const s = kEase(k.t / 0.4);
+      kataWord('건 카타 모드!', ARENA_WIDTH / 2, 420, 120 * s, '#FFD45E', Math.min(1, (KATA_INTRO - k.t) / 0.4));
+    }
+    if (k.finish !== null) kataWord('건 카타 완료!', ARENA_WIDTH / 2, 420, 110, '#7CF29A');
+  }
+
+  function drawGunKata(match, time, reducedMotion) {
+    const k = match.gunkata;
+    drawKataBackground(time, reducedMotion);
+    drawKataActors(match, k, time, reducedMotion);
+    drawKataPrompt(k, time, reducedMotion);
+    drawKataHud(match, k, time, reducedMotion);
+  }
+
   function floatText(text, x, y, color) {
     ctx.font = 'bold 30px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -1132,6 +1432,11 @@ export function createRenderer(canvas, wrap, assets) {
     draw(match, inputs, dt, time, reducedMotion) {
       elapsedTime = match.tick * TICK;
       ctx.setTransform(canvas.width / ARENA_WIDTH, 0, 0, canvas.height / ARENA_HEIGHT, 0, 0);
+      // 스토리 모드 건 카타: 옆에서 본 시점의 다른 화면
+      if (match.gunkata) {
+        drawGunKata(match, time, reducedMotion);
+        return;
+      }
       const killcam = match.killcam;
       moveCamera(killcam, dt, reducedMotion);
       ctx.save();
