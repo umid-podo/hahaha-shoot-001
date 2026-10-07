@@ -261,6 +261,78 @@
       "frames": 1
     },
     {
+      "id": "codename-x",
+      "name": "코드네임 X",
+      "path": "characters/codename-x.png",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 313708,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 무기를 덧그림. 스케이트보드를 지우고 그 손에 직접 그린 돌격소총을 쥐임",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.5,
+        0.56
+      ],
+      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이",
+      "frames": 1
+    },
+    {
+      "id": "codename-v",
+      "name": "코드네임 V",
+      "path": "characters/codename-v.png",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 349721,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 무기를 덧그림. 브이 하던 손가락을 지우고 두 주먹에 직접 그린 권총(위로 든 슬라이드)을 쥐임",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.5,
+        0.56
+      ],
+      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이",
+      "frames": 1
+    },
+    {
+      "id": "codename-r",
+      "name": "코드네임 R",
+      "path": "characters/codename-r.png",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 282759,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 무기를 덧그림. 가슴 앞 손에 직접 그린 저격총을 비스듬히 쥐임",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.5,
+        0.56
+      ],
+      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이",
+      "frames": 1
+    },
+    {
+      "id": "sirius-k",
+      "name": "시리우스 K",
+      "path": "characters/sirius-k.png",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 414871,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "source": "사용자가 제공한 캐릭터 소개 그림(사용 허락 받음)에서 배경을 지우고(rembg isnet-anime) 무기를 덧그림. 원래 권총을 든 그림. 그림 위에 겹친 렌즈 아이콘을 지우고 주변 색으로 메움, 오른쪽을 보게 좌우 반전",
+      "kind": "static-character",
+      "bodyAnchor": [
+        0.5,
+        0.56
+      ],
+      "anchorStatus": "키 큰 전신 그림이라 가슴~허리 높이",
+      "frames": 1
+    },
+    {
       "id": "akimbo-crossbow",
       "name": "아킴보 석궁",
       "path": "ui/akimbo-crossbow.svg",
