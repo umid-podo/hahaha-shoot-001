@@ -1238,3 +1238,38 @@ test('스테이지 건너뛰기·시작 스테이지: 다음 스테이지 처음
   assert.equal(c.story.stage, 'corridor');
   assert.ok(c.story.turrets);
 });
+
+test('데스스타 3갈래 미사일: 몇 초마다 가장 가까운 라이트닝 쪽으로 미사일 3발을 부채꼴로, 수치는 밸런스에서', async () => {
+  const { SKY } = await import('../src/game/config.js');
+  const { PARAMS, setValue, resetAll } = await import('../src/game/balance.js');
+  const { match, inputs } = sky(11);
+  const [P1] = match.players;
+  P1.hp = P1.maxHp = 99999;
+  let volleys = [];
+  for (let t = 0; t < SKY.dsFirstVolley + WEAPONS.dsmissile.interval + 0.2; t += TICK) {
+    const ev = step(match, inputs);
+    // 쏜 순간의 방향·속성(유도되며 휘기 전)을 남긴다
+    if (ev.some((e) => e.type === 'ds-volley')) {
+      volleys.push(match.projectiles.filter((m) => m.weapon === 'dsmissile' && m.life > 3.9)
+        .map((m) => ({ angle: Math.atan2(m.vy, m.vx), team: m.team, homing: m.homing, splash: m.splash })));
+    }
+  }
+  assert.equal(volleys.length, 2, '첫 미사일 뒤 interval초마다');
+  const first = volleys[0];
+  assert.equal(first.length, 3, '3갈래');
+  const angles = first.map((m) => m.angle).sort((a, b) => a - b);
+  assert.ok(Math.abs(angles[1] - angles[0] - (WEAPONS.dsmissile.volley.spread * Math.PI) / 180) < 0.05, "부채꼴 간격(유도로 조금 휨)");
+  assert.ok(first.every((b) => b.team === 'isb' && b.homing && b.splash));
+  assert.ok(angles[1] > 0, '아래(라이트닝 쪽)를 향함');
+
+  // 밸런스 메뉴: 공중전 수치(미사일 수 포함)를 바꿀 수 있다
+  const ids = PARAMS.map((p) => p.id);
+  for (const id of ['weapons.dsmissile.volley.count', 'weapons.overcool.boost.rate', 'weapons.missile.damage', 'weapons.lightning.damage',
+    'weapons.gunship.interval', 'weapons.flak.pellets', 'sky.planeSpeed']) assert.ok(ids.includes(id), id);
+  setValue(PARAMS.find((p) => p.id === 'weapons.dsmissile.volley.count'), 5);
+  const five = sky(11);
+  for (let t = 0; t < SKY.dsFirstVolley + 0.1; t += TICK) step(five.match, five.inputs);
+  assert.equal(five.match.projectiles.filter((b) => b.weapon === 'dsmissile').length, 5);
+  resetAll();
+  assert.equal(WEAPONS.dsmissile.volley.count, 3);
+});

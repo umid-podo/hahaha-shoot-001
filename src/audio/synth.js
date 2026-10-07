@@ -96,6 +96,7 @@ const SHOT = {
   missile: { filter: 600, q: 0.5, decay: 0.5, thump: 90, volume: 1.1 },
   gunship: { filter: 1100, decay: 0.12, thump: 140, volume: 0.8 },
   flak: { filter: 450, q: 0.4, decay: 0.4, thump: 100, volume: 1.3 },
+  dsmissile: { filter: 380, q: 0.4, decay: 0.6, thump: 80, volume: 1.4 },
 };
 
 /** 레이저: 높은 음에서 빠르게 떨어지는 톱니파 '피융' */

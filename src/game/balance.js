@@ -1,4 +1,4 @@
-import { WEAPONS, CHARACTERS, JET, COVER, RULES, TURRET } from './config.js';
+import { WEAPONS, CHARACTERS, JET, COVER, RULES, TURRET, SKY } from './config.js';
 
 /**
  * 밸런스 메뉴에서 조정하는 수치 목록. 값은 config.js의 객체(WEAPONS·CHARACTERS·JET·COVER·RULES)를 그 자리에서 바꾸므로
@@ -12,6 +12,7 @@ const ROOT = {
   cover: COVER,
   jet: JET,
   turret: TURRET,
+  sky: SKY,
 };
 
 const SEC = '초';
@@ -79,6 +80,37 @@ export const SECTIONS = [
       param('수류탄', '던지는 속도(초당)', ['weapons', 'grenade', 'speed'], { min: 50, max: 3000, step: 10 }),
       param('수류탄', '폭발 피해', ['weapons', 'grenade', 'splash', 'damage'], { max: 1000 }),
       param('수류탄', '폭발 반경', ['weapons', 'grenade', 'splash', 'radius'], { max: 800, step: 5 }),
+    ],
+  },
+  {
+    // 스토리 모드 3스테이지 하늘: 라이트닝(우리 편)과 건쉽·데스스타(ISB). 건쉽·데스스타의 체력·히트박스는 스토리 설정의 웨이브 칸에서.
+    title: '공중전(스토리 3스테이지 하늘)',
+    params: [
+      ...gun('lightning', [
+        ['나란히 쏘는 발 수', ['arrows'], { min: 1, max: 6 }],
+        ['나란한 탄 간격', ['arrowGap'], { max: 120, step: 1 }],
+      ]),
+      param('과냉각(보조무기)', '켜져 있는 시간', ['weapons', 'overcool', 'boost', 'active'], { min: 0.5, max: 30, step: 0.5, unit: SEC }),
+      param('과냉각(보조무기)', '연사 간격 배율(작을수록 빠름)', ['weapons', 'overcool', 'boost', 'rate'], { min: 0.05, max: 1, step: 0.05 }),
+      param('과냉각(보조무기)', '쿨타임', ['weapons', 'overcool', 'interval'], { min: 0.5, max: 120, step: 0.5, unit: SEC }),
+      param('미사일(아이템)', '직격 피해', ['weapons', 'missile', 'damage'], { max: 1000 }),
+      param('미사일(아이템)', '쿨타임', ['weapons', 'missile', 'interval'], { min: 0.5, max: 120, step: 0.5, unit: SEC }),
+      param('미사일(아이템)', '속도(초당)', ['weapons', 'missile', 'speed'], { min: 50, max: 3000, step: 10 }),
+      param('미사일(아이템)', '폭발 피해', ['weapons', 'missile', 'splash', 'damage'], { max: 1000 }),
+      param('미사일(아이템)', '폭발 반경', ['weapons', 'missile', 'splash', 'radius'], { max: 800, step: 5 }),
+      param('미사일(아이템)', '유도 회전(rad/초)', ['weapons', 'missile', 'homing', 'turnRate'], { max: 10, step: 0.1 }),
+      ...gun('gunship', [['점사 수', ['burst'], { min: 1, max: 10 }], ['점사 간격', ['burstGap'], { min: 0.02, max: 1, step: 0.01, unit: SEC }]]),
+      ...gun('flak', [['총알 개수', ['pellets'], { min: 1, max: 20 }], ['부채꼴 각도(도)', ['spread'], { max: 180, step: 1 }]]),
+      ...gun('dsmissile', [
+        ['한 번에 쏘는 미사일 수', ['volley', 'count'], { min: 1, max: 9 }],
+        ['미사일 사이 각도(도)', ['volley', 'spread'], { max: 90, step: 1 }],
+        ['폭발 피해', ['splash', 'damage'], { max: 1000 }],
+        ['폭발 반경', ['splash', 'radius'], { max: 800, step: 5 }],
+        ['유도 회전(rad/초)', ['homing', 'turnRate'], { max: 10, step: 0.1 }],
+      ]),
+      param('공중전 공통', '라이트닝 이동 속도 배율', ['sky', 'planeSpeed'], { min: 0.3, max: 4, step: 0.05 }),
+      param('공중전 공통', '건쉽이 날아 들어오는 시간', ['sky', 'enemyFlyIn'], { min: 0.2, max: 10, step: 0.1, unit: SEC }),
+      param('공중전 공통', '데스스타 첫 미사일까지', ['sky', 'dsFirstVolley'], { max: 30, step: 0.5, unit: SEC }),
     ],
   },
   {

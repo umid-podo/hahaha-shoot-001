@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS, CHARACTERS,
-  MAX_SPEED as MAX_SPEED_BASE,
+  MAX_SPEED as MAX_SPEED_BASE, SKY, WEAPONS,
 } from './config.js';
 import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers } from './state.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
@@ -152,7 +152,6 @@ export const CEILING_X = ARENA_WIDTH / 2 + 260; // R-10이 천장을 부수고 �
 export const CRACK_TIME = 1.2;  // 천장이 흔들리다 부서지기까지
 const LAND_TIME = 0.7;          // R-10이 떨어져 내려앉는 시간
 const TURRET_MUZZLE = 44;
-const FLY_TIME = 1.2;           // 하늘: 건쉽이 화면 위에서 날아 들어오는 시간
 const SKY_ARRIVE = 1.0;         // 하늘: 경고 뒤 적이 날아오기 시작할 때까지
 const TURRET_SHELL_LIFE = 4;
 
@@ -333,7 +332,7 @@ function spawnWave(match, inputs, index) {
     } else if (sky) {
       // 화면 위 밖에서 차례로 날아 들어온다(데스스타는 천천히)
       const from = deathstar ? -260 : -160;
-      p.entering = { kind: 'fly', t: -i * DROP_GAP, duration: deathstar ? 2.6 : FLY_TIME, fromY: from };
+      p.entering = { kind: 'fly', t: -i * DROP_GAP, duration: deathstar ? 2.6 : SKY.enemyFlyIn, fromY: from };
       p.y = from;
     }
     match.players.push(p);
@@ -377,9 +376,6 @@ function setupCorridor(match) {
   match.jetTimer = Infinity;
 }
 
-/** 공중전에서 사람 주인공이 타는 라이트닝의 이동 속도 배율 */
-const PLANE_SPEED = 1.3;
-
 /**
  * 3스테이지 하늘(공중전) 준비: 엄폐물·포탑·엘리베이터는 없고, 지구방위팀 전원(사람·AI 동료)이 전용기 라이트닝을 탄다.
  * 주무기는 라이트닝 기관포, 보조무기는 과냉각, 아이템은 미사일로 바뀌고 체력은 가득 찬다(AI 동료는 주무기만).
@@ -396,7 +392,7 @@ function setupSky(match, { heal = true } = {}) {
   list.forEach((p, i) => Object.assign(p, {
     plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', item: 'missile', slot: 'primary',
     primaryOnly: !!p.ai, drone: false, jetpack: null, scale: 1,
-    speed: MAX_SPEED_BASE * PLANE_SPEED, hurt: 0, dash: null,
+    speed: MAX_SPEED_BASE * SKY.planeSpeed, hurt: 0, dash: null,
     // 이어하기(heal: false)는 저장한 체력·쓰러짐을 그대로 둔다
     ...(heal ? { hp: p.maxHp, alive: true } : {}),
     x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
@@ -582,6 +578,44 @@ function updateTurrets(match, dt, events) {
 }
 
 /**
+ * 데스스타 3갈래 미사일: 보스전에서 싸우는 동안 WEAPONS.dsmissile.interval초마다, 가장 가까운 살아 있는 라이트닝 쪽으로
+ * volley.count발을 volley.spread도 간격 부채꼴로 쏜다. 미사일은 약하게 유도되고 맞거나 레일 선에서 터진다(폭발 피해).
+ * 피해는 데스스타 웨이브 설정의 피해(%)·탄속(%)을 따른다.
+ */
+function updateDeathstarVolley(match, dt, events) {
+  const story = match.story;
+  const boss = match.players.find((p) => p.characterId === 'deathstar' && p.alive && !p.entering);
+  if (!boss || story.phase !== 'fight') return;
+  const w = WEAPONS.dsmissile;
+  story.dsTimer = (story.dsTimer ?? SKY.dsFirstVolley) - dt;
+  if (story.dsTimer > 0) return;
+  story.dsTimer += w.interval;
+  let target = null, best = Infinity;
+  for (const p of heroes(match)) {
+    const d = Math.abs(p.x - boss.x);
+    if (p.alive && d < best) { best = d; target = p; }
+  }
+  if (!target) return;
+  const aim = Math.atan2(target.y - boss.y, target.x - boss.x);
+  const n = Math.max(1, Math.round(w.volley.count));
+  const scale = boss.damageScale ?? 1;
+  const speed = w.speed * (boss.bulletSpeedScale ?? 1);
+  const stats = match.stats?.[boss.id];
+  for (let i = 0; i < n; i++) {
+    const a = aim + ((i - (n - 1) / 2) * w.volley.spread * Math.PI) / 180;
+    const x = boss.x + Math.cos(a) * 90, y = boss.y + Math.sin(a) * 90;
+    match.projectiles.push({
+      id: match.nextProjectileId++, ownerId: boss.id, team: 'isb', weapon: w.id,
+      x, y, previousX: x, previousY: y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+      life: 4, damage: Math.round(w.damage * scale), connected: false, homing: w.homing,
+      splash: { ...w.splash, damage: Math.round(w.splash.damage * scale) }, endY: RAIL_Y[target.team],
+    });
+  }
+  if (stats) (stats.weapons[w.id] ??= { shots: 0, hits: 0, damage: 0, coverDamage: 0 }).shots += n;
+  events.push({ type: 'fire', playerId: boss.id, weapon: w.id }, { type: 'ds-volley', x: boss.x, y: boss.y });
+}
+
+/**
  * 포탄 한 발: ISB팀 탄이라 요원은 맞지 않는다. 엄폐물에 막히고, 맞히거나 플레이어 레일 선에서 터져 폭발 피해를 준다.
  * 쏜 쪽(ownerId)은 'turret'이라 결과 화면에 '포탑'으로 나온다.
  */
@@ -619,6 +653,7 @@ export function updateStory(match, inputs, dt, events) {
   moveCorridor(story, dt);
   moveEntering(match, dt, events);
   if (story.turrets) updateTurrets(match, dt, events);
+  if (story.stage === 'sky') updateDeathstarVolley(match, dt, events);
   // 연출 중에는 평소의 전투기가 나오지 않게 미룬다(복도에는 아예 나오지 않음)
   if (story.phase !== 'fight') match.jetTimer = Math.max(match.jetTimer, 2);
 
