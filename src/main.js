@@ -86,13 +86,15 @@ function storyPartner() {
   if (resumeFrom) return resumeFrom.coop ? resumeFrom.pick2 : null;
   return single.storyPlayers === 2 ? coopLoadout.P2 : null;
 }
+/** 스토리 모드에 데려갈 AI 동료 수. 이어하기·저장한 판은 저장할 때의 수. */
+const storyAllies = () => (resumeFrom ? resumeFrom.allies ?? 0 : single.storyAllies);
 /** 이번 틱에 움직일 AI들: 스토리 모드는 지금 경기장의 요원 전원, 자유 대전은 1명 */
-const brains = () => (match?.story ? match.story.brains : ai ? [ai] : []);
+const brains = () => (match?.story ? [...match.story.brains, ...match.story.allyBrains] : ai ? [ai] : []);
 
 function startMatch() {
   unlock();
   if (!storyMode()) resumeFrom = null;
-  match = storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom, storyPartner())
+  match = storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom, storyPartner(), storyAllies())
     : createMatch(mode === 'single' ? singleLoadout() : loadout);
   inputs = createInputs(match.players);
   humans = match.players.filter((p) => !p.ai);
@@ -166,6 +168,7 @@ function continueStory() {
   mode = 'single';
   single.mode = 'story';
   single.storyPlayers = save.coop ? 2 : 1;
+  single.storyAllies = save.allies ?? 0;
   saveSingle(single);
   loadout.P1 = { ...loadout.P1, ...save.pick };
   if (save.coop) coopLoadout.P2 = { ...coopLoadout.P2, ...save.pick2 };

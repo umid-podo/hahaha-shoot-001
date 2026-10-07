@@ -1,5 +1,5 @@
 import {
-  ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS,
+  ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS, CHARACTERS,
 } from './config.js';
 import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers } from './state.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
@@ -15,6 +15,8 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
  * 일반 요원의 무작위 주무기는 RPG·저격총·아킴보 석궁을 뺀 주무기 중 하나. 스미스 요원 말고는 보조무기·수류탄을 쓰지 않는다.
  * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스와 요원마다의 주무기(R-10 빼고)는 스토리 설정(밸런스 칸)에서 바꾼다.
  * 2인 협동: P2도 지구방위팀으로 함께 싸운다(COOP_SLOT). 둘 다 쓰러지면 패배, 한 명이라도 서 있으면 계속한다.
+ * AI 동료: 지구방위팀 AI를 MAX_ALLIES명까지 데려갈 수 있다. 대신 동료 수만큼 일반 웨이브마다 쉬움 난이도의
+ *   돌격소총 요원이 더 나온다(보스전 제외). 사람 주인공이 모두 쓰러지면 동료가 남아 있어도 패배.
  *   쓰러진 동료는 스테이지를 깰 때 체력 가득으로 다시 일어난다. 요원·포탑은 가까운 쪽 주인공을 노린다.
  */
 export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'crossbow'].includes(id));
@@ -141,28 +143,59 @@ const ISB = SLOTS.find((s) => s.team === 'isb');
 export const COOP_SLOT = { id: 'P2', team: 'earth', characterId: 'earth-pizza', weapon: 'rifle' };
 const COOP_GAP = 170; // 2인 협동에서 두 주인공이 서는 간격(가운데에서 양옆으로)
 
-/** 주인공들(1인이면 P1 하나, 2인 협동이면 P1·P2)의 시작 x */
+/** 지구방위팀(주인공·AI 동료) count명이 서는 x: 가운데를 기준으로 COOP_GAP 간격(사람이 많으면 좁힌다) */
 function heroXs(count) {
-  return count > 1 ? [ARENA_WIDTH / 2 - COOP_GAP, ARENA_WIDTH / 2 + COOP_GAP] : [ARENA_WIDTH / 2];
+  const gap = Math.min(COOP_GAP * 2, (MAX_X - MIN_X - 200) / Math.max(1, count - 1));
+  return Array.from({ length: count }, (_, i) => ARENA_WIDTH / 2 + (i - (count - 1) / 2) * gap);
+}
+
+/** 데려갈 수 있는 AI 동료 수(0~MAX_ALLIES). 동료 1명마다 일반 웨이브에 쉬움 돌격소총 요원 1명이 더 나온다. */
+export const MAX_ALLIES = 3;
+export const ALLY_IDS = ['A1', 'A2', 'A3'];
+const ALLY_DIFFICULTY = 'normal';
+/** 덤으로 나오는 요원: 쉬움 난이도, 돌격소총 */
+export const EXTRA_AGENT = { weapon: 'rifle', difficulty: 'easy' };
+/** 그림 속 무기가 정해지지 않은 지구방위팀 캐릭터의 동료 무기 */
+const ALLY_WEAPON = { 'earth-arrow': 'dual', 'earth-pizza': 'rifle' };
+const ALLY_POOL = ['earth-pizza', 'codename-x', 'codename-v', 'codename-r', 'sirius-k', 'earth-arrow'];
+export const allyCount = (n) => Math.min(MAX_ALLIES, Math.max(0, Math.floor(Number(n)) || 0));
+
+/** 동료 count명의 선택: 사람이 고른 캐릭터와 겹치지 않게 지구방위팀 캐릭터를 차례로, 무기는 그림 속 무기 */
+export function allyPicks(count, taken = []) {
+  const pool = ALLY_POOL.filter((id) => !taken.includes(id)).concat(ALLY_POOL.filter((id) => taken.includes(id)));
+  return Array.from({ length: allyCount(count) }, (_, i) => {
+    const characterId = pool[i % pool.length];
+    const c = CHARACTERS.find((ch) => ch.id === characterId);
+    return { characterId, weapon: c?.pictured ?? ALLY_WEAPON[characterId] ?? 'rifle' };
+  });
 }
 
 /**
  * 스토리 모드 경기. playerPick은 플레이어(P1) 선택, settings는 defaultStory() 모양.
  * 1웨이브 요원은 경기 시작부터 서 있다. resume({ wave, hp, hp2 })을 주면 저장한 웨이브가 오는 장면부터 그 체력으로 이어 한다
  * (hp2 0이면 P2는 쓰러진 채로, 다음 스테이지에서 일어난다). partnerPick을 주면 2인 협동: P2가 지구방위팀으로 함께 싸운다.
+ * allies: 데려갈 AI 동료 수(0~MAX_ALLIES). 동료는 체력 가득으로 시작하고 AI(match.story.allyBrains)가 조작한다.
  */
-export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null) {
-  const xs = heroXs(partnerPick ? 2 : 1);
+export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null, allies = 0) {
+  const picks = [playerPick, ...(partnerPick ? [partnerPick] : [])];
+  const team = allyPicks(allies, picks.map((p) => p.characterId));
+  const xs = heroXs(picks.length + team.length);
   const player = createPlayer(SLOTS[0], { ...playerPick, x: xs[0] });
   const heroes = partnerPick ? [player, createPlayer(COOP_SLOT, { ...partnerPick, x: xs[1] })] : [player];
-  const match = createMatchWith(heroes, seed);
+  const allyPlayers = team.map((pick, i) => createPlayer(
+    { id: ALLY_IDS[i], team: 'earth', characterId: pick.characterId, weapon: pick.weapon },
+    { ...pick, ai: true, x: xs[heroes.length + i] },
+  ));
+  const match = createMatchWith([...heroes, ...allyPlayers], seed);
   const rng = createRng(seed ^ 0x5eed);
   const start = Math.min(WAVES.length - 1, Math.max(0, Math.floor(Number(resume?.wave)) || 0));
   match.story = {
     stage: 'rooftop', wave: 0, phase: 'fight', timer: 0, settings: normalizeStory(settings), rng,
-    brains: [], roster: [], nextId: 1,
+    brains: [], roster: [], nextId: 1, allies: allyPlayers.length,
+    // AI 동료의 두뇌는 웨이브·스테이지가 바뀌어도 남는다(요원 두뇌 brains와 따로 둔다)
+    allyBrains: allyPlayers.map((p) => createAI(p.id, ALLY_DIFFICULTY, Math.floor(rng() * 2 ** 32))),
     carrier: null, jet: null, missile: null, elevator: null, ceiling: null, turrets: null,
-    banner: banner(waveLabel(0), waveInfo(0, settings)),
+    banner: banner(waveLabel(0), waveInfo(0, settings, allyPlayers.length)),
     started: start > 0, coop: heroes.length > 1,
   };
   if (resume) {
@@ -185,11 +218,16 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
   return match;
 }
 
-/** 웨이브 안내 문구: '요원 2명 · 체력 300' */
-export function waveInfo(index, settings) {
+/** 이 웨이브에 AI 동료 수만큼 더 나오는 요원 수(보스전은 없음) */
+export const extraAgents = (index, allies) => (WAVES[index].boss ? 0 : allyCount(allies));
+
+/** 웨이브 안내 문구: '요원 2명 · 체력 300' (동료가 있으면 '요원 2명 + 쉬움 1명') */
+export function waveInfo(index, settings, allies = 0) {
   const wave = WAVES[index];
   const hp = normalizeStory(settings).waves[index].hp;
-  const who = wave.boss === 'smith' ? BOSS_NAME : wave.boss === 'r10' ? R10_NAME : `요원 ${wave.count}명`;
+  const extra = extraAgents(index, allies);
+  const who = wave.boss === 'smith' ? BOSS_NAME : wave.boss === 'r10' ? R10_NAME
+    : `요원 ${wave.count}명${extra ? ` + 쉬움 ${extra}명` : ''}`;
   return `${who} · 체력 ${hp}`;
 }
 
@@ -205,11 +243,15 @@ function spawnWave(match, inputs, index) {
   const wave = WAVES[index];
   const cfg = story.settings.waves[index];
   const center = wave.from === 'ceiling' ? CEILING_X : wave.from === 'elevator' ? ELEVATOR.x : story.carrier?.x ?? ARENA_WIDTH / 2;
-  for (let i = 0; i < wave.count; i++) {
-    const spec = wave.agents?.[i] ?? {};
-    const x = Math.min(MAX_X, Math.max(MIN_X, center + (i - (wave.count - 1) / 2) * DROP_SPREAD));
-    // 스토리 설정에서 요원마다 고른 주무기(없으면 기획 무기). R-10은 레이저 캐논 고정.
-    const kind = cfg.weapons?.[i] ?? spec.weapon ?? wave.weapon;
+  // AI 동료 수만큼 쉬움 돌격소총 요원이 웨이브 끝에 덧붙는다(보스전 제외)
+  const total = wave.count + extraAgents(index, story.allies);
+  const spread = total > 4 ? Math.min(DROP_SPREAD, (MAX_X - MIN_X) / (total - 1)) : DROP_SPREAD;
+  for (let i = 0; i < total; i++) {
+    const extra = i >= wave.count;
+    const spec = extra ? EXTRA_AGENT : wave.agents?.[i] ?? {};
+    const x = Math.min(MAX_X, Math.max(MIN_X, center + (i - (total - 1) / 2) * spread));
+    // 스토리 설정에서 요원마다 고른 주무기(없으면 기획 무기). R-10은 레이저 캐논 고정. 덤 요원은 돌격소총.
+    const kind = extra ? EXTRA_AGENT.weapon : cfg.weapons?.[i] ?? spec.weapon ?? wave.weapon;
     const weapon = kind === 'random' ? pick(story.rng, STORY_WEAPONS) : kind;
     const id = wave.boss ? 'BOSS' : `E${story.nextId++}`;
     const smith = wave.boss === 'smith', r10 = wave.boss === 'r10';
@@ -239,7 +281,7 @@ function spawnWave(match, inputs, index) {
     match.players.push(p);
     inputs[id] = createInput(p);
     addStats(match, p);
-    const difficulty = cfg.difficulty === 'mixed' ? spec.difficulty ?? 'normal' : cfg.difficulty;
+    const difficulty = extra ? EXTRA_AGENT.difficulty : cfg.difficulty === 'mixed' ? spec.difficulty ?? 'normal' : cfg.difficulty;
     story.brains.push(createAI(id, difficulty, Math.floor(story.rng() * 2 ** 32)));
     story.roster.push(p);
   }
@@ -251,10 +293,13 @@ export function holdsResult(match) {
 }
 
 const enemies = (match) => match.players.filter((p) => p.team === 'isb');
+/** 지구방위팀 전원(사람 주인공 + AI 동료) */
 const heroes = (match) => match.players.filter((p) => p.team === 'earth');
-/** 장면에 나올 주인공: 살아 있는 주인공 중 prefer(예: 요원을 쓰러뜨린 쪽)가 있으면 그쪽, 없으면 먼저 오는 쪽 */
+/** 사람이 조작하는 주인공(P1, 2인 협동이면 P2). AI 동료는 빠진다. */
+export const humanHeroes = (match) => heroes(match).filter((p) => !p.ai);
+/** 장면에 나올 주인공(사람): 살아 있는 주인공 중 prefer(예: 요원을 쓰러뜨린 쪽)가 있으면 그쪽, 없으면 먼저 오는 쪽 */
 function heroOf(match, preferId = null) {
-  const list = heroes(match);
+  const list = humanHeroes(match);
   const alive = list.filter((p) => p.alive);
   return alive.find((p) => p.id === preferId) ?? alive[0] ?? list[0];
 }
@@ -565,9 +610,9 @@ export function updateStory(match, inputs, dt, events) {
  */
 export function checkpoint(match) {
   const story = match.story;
-  if (!story || !heroes(match).some((p) => p.alive) || match.phase === 'result') return null;
+  if (!story || !humanHeroes(match).some((p) => p.alive) || match.phase === 'result') return null;
   if (match.gunkata) return null; // 건 카타 중에는 저장하지 않는다(끝나면 엔딩 컷씬 중에 저장 가능)
-  const [hero, partner] = heroes(match);
+  const [hero, partner] = humanHeroes(match);
   let wave = currentWave(story);
   if (match.cutscene) {
     if (WAVES[story.wave].boss === 'r10') return null; // 이미 스토리를 깼다
@@ -581,12 +626,14 @@ export function checkpoint(match) {
   const hpOf = (p) => (nextStage ? p.maxHp : p.alive ? p.hp : 0);
   const point = { wave, hp: hpOf(hero), label: waveLabel(wave) };
   if (partner) Object.assign(point, { hp2: hpOf(partner), coop: true });
+  if (story.allies) point.allies = story.allies; // 데려간 AI 동료 수(이어 할 때 그대로 데려간다)
   return point;
 }
 
 /**
  * 저장해 둔 값 검사: 웨이브 번호·체력·캐릭터 선택이 맞지 않으면 null. label은 지금 웨이브 이름으로 다시 만든다.
  * 2인 협동 저장(coop)은 P2 체력 hp2·선택 pick2도 있고, 두 체력 중 하나만 0보다 크면 된다(0은 쓰러진 채로).
+ * allies(AI 동료 수)는 1명 이상일 때만 남긴다.
  */
 export function normalizeStorySave(save) {
   const wave = Number(save?.wave), hp = Number(save?.hp);
@@ -594,16 +641,18 @@ export function normalizeStorySave(save) {
   if (!Number.isInteger(wave) || wave < 0 || wave >= WAVES.length || !isPick(save.pick)) return null;
   const pickOf = ({ characterId, weapon, secondary }) => ({ characterId, weapon, secondary });
   const savedAt = Number(save.savedAt) || 0;
+  const allies = allyCount(save.allies);
+  const withAllies = (out) => (allies ? { ...out, allies } : out);
   if (save.coop) {
     const hp2 = Number(save.hp2);
     if (!isPick(save.pick2) || !(hp >= 0) || !(hp2 >= 0) || !(hp > 0 || hp2 > 0)) return null;
-    return {
+    return withAllies({
       wave, hp: Math.round(hp), hp2: Math.round(hp2), coop: true, label: waveLabel(wave),
       pick: pickOf(save.pick), pick2: pickOf(save.pick2), savedAt,
-    };
+    });
   }
   if (!(hp > 0)) return null;
-  return { wave, hp: Math.round(hp), label: waveLabel(wave), pick: pickOf(save.pick), savedAt };
+  return withAllies({ wave, hp: Math.round(hp), label: waveLabel(wave), pick: pickOf(save.pick), savedAt });
 }
 
 /* ───────── 엔딩 컷씬 ─────────
@@ -626,7 +675,7 @@ const CUT_BULLET_SPEED = 1300;
 /** 보스(스미스 요원·R-10)를 쓰러뜨리면 결과·다음 웨이브 대신 컷씬을 시작하는지 */
 export function startsCutscene(match) {
   if (!match.story || !WAVES[match.story.wave].boss) return false;
-  const hero = match.players.find((p) => p.team === 'earth' && p.alive);
+  const hero = humanHeroes(match).find((p) => p.alive);
   const boss = match.players.find((p) => p.boss);
   return !!hero && !!boss && !boss.alive;
 }
@@ -797,7 +846,11 @@ function startStairs(match) {
   match.cutscene = {
     kind: 'stairs', t: 0, door: 0, fade: 0, switched: false,
     // 2인 협동에서 쓰러져 있던 동료도 일어나 함께 내려간다(체력은 복도로 바뀔 때 회복)
-    heroes: list.map((p, i) => ({ id: p.id, fromX: p.x, x: p.x, y: p.y, alpha: 1, scale: 1, walk: 0, delay: i * STAIRS_GAP, alive: true })),
+    // 여럿(AI 동료 포함)이면 줄 간격을 좁혀 모두 같은 시간 안에 내려가게 한다
+    heroes: list.map((p, i) => ({
+      id: p.id, fromX: p.x, x: p.x, y: p.y, alpha: 1, scale: 1, walk: 0, alive: true,
+      delay: i * STAIRS_GAP / Math.max(1, list.length - 1),
+    })),
     caption: list.length > 1 ? '주인공: 계단으로 내려가자! 둘이 같이!' : '주인공: 계단으로 내려가자!',
   };
 }

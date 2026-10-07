@@ -190,8 +190,9 @@ export function createScreens(handlers) {
     setSaveStatus(text) { $('#save-status').textContent = text; },
     /** 스토리 저장이 있으면 메인 메뉴·싱글 플레이 화면에 '스토리 이어하기'와 저장 위치를 보인다. */
     setContinue(save) {
-      const text = !save ? '' : save.coop ? `저장(2인 협동): ${save.label} · 체력 P1 ${save.hp} · P2 ${save.hp2}`
-        : `저장: ${save.label} · 체력 ${save.hp}`;
+      const allies = save?.allies ? ` · AI 동료 ${save.allies}명` : '';
+      const text = !save ? '' : save.coop ? `저장(2인 협동): ${save.label} · 체력 P1 ${save.hp} · P2 ${save.hp2}${allies}`
+        : `저장: ${save.label} · 체력 ${save.hp}${allies}`;
       for (const btn of document.querySelectorAll('.continue-btn')) btn.hidden = !save;
       for (const info of document.querySelectorAll('.continue-info')) {
         info.hidden = !save;
@@ -225,7 +226,7 @@ export function createScreens(handlers) {
     showResult(match) {
       const { winner, stats, story } = match;
       // 스토리 모드는 경기장에서 치운 요원까지 나온 요원 전원을 보여 준다
-      const players = story ? [...match.players.filter((p) => !p.ai), ...story.roster] : match.players;
+      const players = story ? [...match.players.filter((p) => p.team === 'earth'), ...story.roster] : match.players;
       const time = match.tick * TICK;
       $('#result-time').textContent = `경기 시간 ${formatTime(time)}` + (story ? ` · 스토리 모드 ${waveLabel(story.wave)}` : '');
       const winnerPlayer = players.find((p) => p.team === winner);

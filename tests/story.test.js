@@ -7,7 +7,7 @@ import { step, spawnProjectile } from '../src/game/update.js';
 import { updateAI, nearestTarget } from '../src/game/ai.js';
 import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
-  LAST_WORDS, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
+  LAST_WORDS, MAX_ALLIES, allyPicks, extraAgents, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { glowingKey, GOAL, DAMAGE, WARN_TIME, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
@@ -945,4 +945,109 @@ test('건 카타: R-10을 쓰러뜨리면 드론과 10번 건 카타(공격 이�
   assert.equal(match.phase, 'cutscene');
   assert.equal(match.cutscene.kind, 'r10');
   assert.deepEqual(match.story.kataDone, [3, 7], '스미스 요원(옥상 중간보스)·R-10(복도 보스전) 웨이브');
+});
+
+/* ───────── AI 동료 ───────── */
+function withAllies(n, seed = 7) {
+  const match = createStoryMatch({ characterId: 'codename-x', weapon: 'rifle' }, undefined, seed, null, null, n);
+  match.phase = 'playing';
+  match.jetTimer = Infinity;
+  const inputs = createInputs(match.players);
+  return { match, inputs };
+}
+const allies = (match) => match.players.filter((p) => p.team === 'earth' && p.ai);
+
+test('AI 동료: 최대 3명, 지구방위팀 AI로 함께 싸우고 사람이 고른 캐릭터와 겹치지 않음', () => {
+  assert.equal(MAX_ALLIES, 3);
+  const { match } = withAllies(2);
+  const team = allies(match);
+  assert.deepEqual(team.map((p) => p.id), ['A1', 'A2']);
+  for (const p of team) {
+    assert.equal(p.team, 'earth');
+    assert.equal(p.y, RAIL_Y.earth);
+    assert.notEqual(p.characterId, 'codename-x', '사람이 고른 캐릭터와 겹치지 않음');
+  }
+  assert.equal(new Set(match.players.filter((p) => p.team === 'earth').map((p) => p.x)).size, 3, '서로 떨어져 섬');
+  assert.equal(match.story.allyBrains.length, 2);
+  assert.equal(match.story.allies, 2);
+  // 그림 속 무기를 든다(피자럭스 돌격소총, 코드네임 V 쌍권총 …)
+  assert.deepEqual(allyPicks(3, ['earth-pizza']).map((p) => [p.characterId, p.weapon]),
+    [['codename-x', 'rifle'], ['codename-v', 'dual'], ['codename-r', 'sniper']]);
+  assert.equal(allyPicks(9).length, 3, '3명까지');
+  assert.equal(withAllies(0).match.players.filter((p) => p.team === 'earth').length, 1);
+});
+
+test('AI 동료 수만큼 일반 웨이브마다 쉬움 돌격소총 요원이 더 나오고, 보스전은 그대로', () => {
+  const { match, inputs } = withAllies(2);
+  // 옥상 1웨이브: 요원 1명 + 덤 2명
+  let wave = enemies(match);
+  assert.equal(wave.length, 3);
+  assert.deepEqual(wave.slice(1).map((p) => p.primary), ['rifle', 'rifle']);
+  const diff = (p) => match.story.brains.find((b) => b.playerId === p.id).diff.name;
+  assert.deepEqual(wave.slice(1).map(diff), ['쉬움', '쉬움']);
+  assert.equal(wave[1].maxHp, wave[0].maxHp, '체력은 그 웨이브 설정과 같음');
+  assert.match(match.story.banner.sub, /요원 1명 \+ 쉬움 2명/);
+  // 2웨이브(헬기 2명) → 4명
+  killAll(match, inputs);
+  untilFight(match, inputs);
+  assert.equal(enemies(match).length, 4);
+  // 3웨이브 → 5명, 중간보스는 스미스 요원 혼자
+  killAll(match, inputs);
+  untilFight(match, inputs);
+  assert.equal(enemies(match).length, 5);
+  killAll(match, inputs);
+  untilFight(match, inputs);
+  assert.equal(enemies(match).length, 1);
+  assert.equal(enemies(match)[0].name, BOSS_NAME);
+  assert.deepEqual(WAVES.map((_, i) => extraAgents(i, 2)), [2, 2, 2, 0, 2, 2, 2, 0]);
+});
+
+test('AI 동료: 적을 조준해 싸우고, 사람이 모두 쓰러지면 동료가 남아도 패배, 건 카타는 사람이 함', () => {
+  const { match, inputs } = withAllies(1);
+  const [P1, A1] = match.players;
+  const brain = match.story.allyBrains[0];
+  for (let t = 0; t < 1; t += TICK) { updateAI(brain, match, inputs); step(match, inputs); }
+  assert.ok(inputs.A1.aim < 0, '동료는 위쪽(ISB) 적을 겨눔');
+
+  // 동료가 요원을 쓰러뜨려도 건 카타는 사람 주인공이 한다
+  const [agent] = enemies(match);
+  match.stats[agent.id].killedBy = { ownerId: 'A1', weapon: 'rifle' };
+  agent.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'gunkata');
+  assert.equal(match.gunkata.heroId, 'P1');
+  playKata(match, inputs);
+
+  const lose = withAllies(2);
+  lose.match.players[0].hp = 0;
+  step(lose.match, lose.inputs);
+  assert.ok(allies(lose.match).every((p) => p.alive));
+  assert.equal(lose.match.phase, 'result', '사람이 쓰러지면 패배');
+  assert.equal(lose.match.winner, 'isb');
+  assert.ok(A1);
+});
+
+test('AI 동료: 스테이지를 깨면 쓰러진 동료도 일어나 함께 계단으로, 저장·이어하기에 동료 수', () => {
+  const { match, inputs } = withAllies(2);
+  const [, A1] = match.players;
+  A1.hp = 0;
+  step(match, inputs);
+  for (let w = 0; w < 3; w++) { killAll(match, inputs); untilFight(match, inputs); }
+  killAll(match, inputs);
+  while (match.cutscene?.kind === 'smith') step(match, inputs);
+  assert.equal(match.cutscene.kind, 'stairs');
+  assert.equal(match.cutscene.heroes.length, 3, '동료도 함께 계단으로');
+  assert.equal(checkpoint(match).allies, 2);
+  runOut(match, inputs, ['cutscene']);
+  assert.equal(match.story.stage, 'corridor');
+  assert.ok(A1.alive && A1.hp === A1.maxHp, '쓰러진 동료도 일어남');
+  assert.ok(match.cutscene === null);
+
+  const pick = { characterId: 'earth-arrow', weapon: 'dual', secondary: 'smg' };
+  assert.equal(normalizeStorySave({ wave: 2, hp: 100, pick, allies: 2 }).allies, 2);
+  assert.equal(normalizeStorySave({ wave: 2, hp: 100, pick, allies: 9 }).allies, 3);
+  assert.equal('allies' in normalizeStorySave({ wave: 2, hp: 100, pick }), false);
+  const resumed = createStoryMatch(pick, undefined, 3, { wave: 5, hp: 100, allies: 2 }, null, 2);
+  assert.equal(allies(resumed).length, 2);
+  assert.equal(resumed.story.stage, 'corridor');
 });

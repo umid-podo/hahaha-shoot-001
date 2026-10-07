@@ -571,7 +571,8 @@ export function step(match, inputs, dt = TICK) {
     b.x > -OUT_MARGIN && b.x < ARENA_WIDTH + OUT_MARGIN && b.y > -OUT_MARGIN && b.y < ARENA_HEIGHT + OUT_MARGIN);
 
   // 팀 전원이 쓰러지면 패배. 같은 틱에 양 팀이 모두 쓰러지면 무승부.
-  const earthUp = match.players.some((p) => p.team === 'earth' && p.alive);
+  // 스토리 모드는 사람 주인공이 모두 쓰러지면 AI 동료가 남아 있어도 진다
+  const earthUp = match.players.some((p) => p.team === 'earth' && p.alive && !(match.story && p.ai));
   const isbUp = match.players.some((p) => p.team === 'isb' && p.alive);
   // 스토리 모드는 남은 웨이브가 있으면 ISB팀이 전멸해도 끝나지 않는다(다음 웨이브는 story.js가 불러온다).
   if (earthUp && !isbUp && startsCutscene(match)) {
