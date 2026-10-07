@@ -382,6 +382,11 @@ button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; 
 .choices.single-mode { grid-template-columns: repeat(2, 1fr); margin-bottom: 10px; --team: var(--isb); }
 .choices.story-players { --team: var(--earth); }
 .choices.story-allies { grid-template-columns: repeat(4, 1fr); margin-bottom: 10px; }
+/* 동료마다 캐릭터·주무기 고르는 칸 */
+.ally-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px; margin-bottom: 10px; text-align: left; }
+.ally-picks[hidden] { display: none; }
+.ally-pick { display: grid; gap: 6px; margin: 0; padding: 8px 12px; border: 2px solid var(--team); border-radius: 12px; }
+.ally-pick legend { color: var(--team); font-weight: 700; padding: 0 4px; }
 .story-waves { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
 .story-wave { display: grid; gap: 4px; margin: 0; padding: 6px 10px 8px; border: 2px solid var(--line); border-radius: 10px; }
 .story-wave legend { padding: 0 4px; font-weight: 700; }

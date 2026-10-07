@@ -7,7 +7,7 @@ import { step, spawnProjectile } from '../src/game/update.js';
 import { updateAI, nearestTarget } from '../src/game/ai.js';
 import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
-  LAST_WORDS, MAX_ALLIES, allyPicks, extraAgents, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
+  LAST_WORDS, MAX_ALLIES, allyPicks, extraAgents, normalizeAllyPicks, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { glowingKey, GOAL, DAMAGE, WARN_TIME, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
@@ -1050,4 +1050,41 @@ test('AI 동료: 스테이지를 깨면 쓰러진 동료도 일어나 함께 계
   const resumed = createStoryMatch(pick, undefined, 3, { wave: 5, hp: 100, allies: 2 }, null, 2);
   assert.equal(allies(resumed).length, 2);
   assert.equal(resumed.story.stage, 'corridor');
+});
+
+test('AI 동료 직접 고르기: 고른 캐릭터·주무기로 나오고, 동료는 주무기만 씀(보조무기·수류탄 없음)', () => {
+  const picks = [{ characterId: 'isb-agent-2', weapon: 'rpg' }, { characterId: 'r10', weapon: 'rifle' }];
+  const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'dual' }, undefined, 7, null, null, picks);
+  match.phase = 'playing';
+  match.jetTimer = Infinity;
+  const inputs = createInputs(match.players);
+  const [A1, A2] = allies(match);
+  assert.deepEqual([A1.characterId, A1.primary], ['isb-agent-2', 'rpg']);
+  assert.deepEqual([A2.characterId, A2.primary], ['r10', 'laser'], 'R-10은 전용 무기');
+  assert.equal(A1.team, 'earth');
+  assert.ok(A1.primaryOnly && A2.primaryOnly, '주무기만');
+  assert.equal(match.story.allies, 2);
+  assert.equal(enemies(match).length, 3, '동료 2명이면 1웨이브 요원 +2');
+
+  // 몇 초 싸워도 무기를 바꾸거나 수류탄을 던지지 않는다
+  const used = new Set();
+  for (let t = 0; t < 8; t += TICK) {
+    for (const b of match.story.allyBrains) updateAI(b, match, inputs);
+    for (const e of step(match, inputs)) {
+      if ((e.type === 'swap' || e.type === 'throw' || e.type === 'fire') && ['A1', 'A2'].includes(e.playerId)) used.add(`${e.type}:${e.weapon ?? ''}`);
+    }
+    if (match.phase !== 'playing') break;
+  }
+  assert.ok(![...used].some((u) => u.startsWith('swap') || u.includes('grenade') || u.includes('smg')), [...used].join(','));
+  assert.equal(match.stats.A1.weapons.grenade, undefined);
+
+  // 저장값에 고른 동료가 남고 이어 하면 같은 동료
+  const point = checkpoint(match) ?? { wave: 0, hp: 100, allies: 2, allyPicks: match.story.allyPicks };
+  const save = normalizeStorySave({ ...point, wave: point.wave, hp: point.hp || 100, pick: { characterId: 'earth-arrow', weapon: 'dual' } });
+  assert.deepEqual(save.allyPicks, [{ characterId: 'isb-agent-2', weapon: 'rpg' }, { characterId: 'r10', weapon: 'laser' }]);
+  // 잘못된 선택은 기본값으로
+  const fixed = normalizeAllyPicks([{ characterId: 'creator', weapon: 'instakill' }, { characterId: 'codename-r', weapon: 'nope' }]);
+  assert.equal(fixed.length, MAX_ALLIES);
+  assert.notEqual(fixed[0].characterId, 'creator', '숨겨진 캐릭터는 안 됨');
+  assert.deepEqual(fixed[1], { characterId: 'codename-r', weapon: 'sniper' });
 });
