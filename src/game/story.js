@@ -579,7 +579,7 @@ function updateTurrets(match, dt, events) {
 
 /**
  * 데스스타 3갈래 미사일: 보스전에서 싸우는 동안 WEAPONS.dsmissile.interval초마다, 가장 가까운 살아 있는 라이트닝 쪽으로
- * volley.count발을 volley.spread도 간격 부채꼴로 쏜다. 미사일은 약하게 유도되고 맞거나 레일 선에서 터진다(폭발 피해).
+ * volley.count발을 volley.spread도 간격 부채꼴로 쏜다. 미사일은 유도 없이 곧게 날아가 맞거나 레일 선에서 터진다(폭발 피해).
  * 피해는 데스스타 웨이브 설정의 피해(%)·탄속(%)을 따른다.
  */
 function updateDeathstarVolley(match, dt, events) {
@@ -607,7 +607,7 @@ function updateDeathstarVolley(match, dt, events) {
     match.projectiles.push({
       id: match.nextProjectileId++, ownerId: boss.id, team: 'isb', weapon: w.id,
       x, y, previousX: x, previousY: y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
-      life: 4, damage: Math.round(w.damage * scale), connected: false, homing: w.homing,
+      life: 4, damage: Math.round(w.damage * scale), connected: false,
       splash: { ...w.splash, damage: Math.round(w.splash.damage * scale) }, endY: RAIL_Y[target.team],
     });
   }

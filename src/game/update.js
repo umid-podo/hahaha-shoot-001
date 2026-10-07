@@ -54,7 +54,10 @@ function baseDamage(player, weaponId) {
  */
 export function spawnProjectile(match, player, aim, weaponId = player.weapon, { offset = 0, group = null } = {}) {
   const weapon = WEAPONS[weaponId];
-  const { damage, splash } = weaponDamage(player, weaponId);
+  const { damage: base, splash } = weaponDamage(player, weaponId);
+  // 과냉각 중 주무기는 연사가 빨라지는 대신 한 발 피해가 boost.damage(기본 1)
+  const boost = player.boost > 0 && weaponId === player.primary ? WEAPONS[player.secondary]?.boost : null;
+  const damage = Number.isFinite(boost?.damage) ? boost.damage : base;
   // bulletSpeedScale: 싱글플레이 AI 탄속 배율(기본 1)
   const speed = weapon.speed * (player.bulletSpeedScale ?? 1);
   const x = player.x + Math.cos(aim) * MUZZLE_OFFSET - Math.sin(aim) * offset;
@@ -273,7 +276,7 @@ const fireRate = (p) => (p.boost > 0 ? WEAPONS[p.secondary]?.boost?.rate ?? 1 : 
 
 /**
  * 아이템: 든 무기와 상관없이 지금 조준 방향으로 바로 쓴다. 평소에는 수류탄을 던지고,
- * 스토리 공중전에서는 유도 미사일을 쏜다(p.item). 쿨타임 중이면 무시.
+ * 스토리 공중전에서는 미사일(유도 없음)을 쏜다(p.item). 쿨타임 중이면 무시.
  */
 function throwGrenade(match, p, events) {
   if (p.grenadeCooldown > 0) return;

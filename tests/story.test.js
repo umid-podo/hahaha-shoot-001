@@ -1148,7 +1148,7 @@ test('라이트닝 컷씬: R-10을 물리치면 옥상에서 본부에 라이트
   assert.equal(match.story.turrets, null);
 });
 
-test('공중전: 적은 건쉽, 아이템은 유도 미사일, 보조무기 과냉각은 5초 동안 연사력을 크게 올림', () => {
+test('공중전: 적은 건쉽, 아이템은 미사일(유도 없음), 보조무기 과냉각은 5초 동안 연사력을 크게 올림(한 발 피해 1)', () => {
   const { match, inputs } = sky();
   const [P1] = match.players;
   assert.equal(P1.hp, 400, '이어하기는 저장한 체력 그대로');
@@ -1159,13 +1159,13 @@ test('공중전: 적은 건쉽, 아이템은 유도 미사일, 보조무기 과�
     assert.equal(g.primary, 'gunship');
     assert.ok(g.primaryOnly);
   }
-  // 미사일: 아이템 버튼으로 쏘는 유도탄
+  // 미사일: 아이템 버튼으로 쏘는 탄(유도 없음)
   for (const g of gunships) g.hp = 99999;
   inputs.P1.item = true;
   const ev = step(match, inputs);
   assert.ok(ev.some((e) => e.type === 'fire' && e.weapon === 'missile'));
   const missile = match.projectiles.find((b) => b.weapon === 'missile');
-  assert.ok(missile.homing && missile.splash);
+  assert.ok(!missile.homing && missile.splash);
   assert.equal(P1.grenadeCooldown, WEAPONS.missile.interval);
 
   // 과냉각: 보조무기 버튼으로 켜고, 무기는 바꾸지 않는다
@@ -1183,7 +1183,11 @@ test('공중전: 적은 건쉽, 아이템은 유도 미사일, 보조무기 과�
   assert.ok(on.some((e) => e.type === 'overcool'));
   assert.equal(P1.slot, 'primary', '과냉각은 들지 않고 바로 켜짐');
   assert.ok(P1.boost > 0);
+  assert.ok(match.projectiles.some((b) => b.weapon === 'lightning' && b.damage === WEAPONS.lightning.damage), '평소 탄은 원래 피해');
+  match.projectiles = [];
   const boosted = shots(2);
+  const boostedShots = match.projectiles.filter((b) => b.weapon === 'lightning' && b.ownerId === 'P1');
+  assert.ok(boostedShots.length > 0 && boostedShots.every((b) => b.damage === 1), '과냉각 중 한 발 피해 1');
   assert.ok(boosted >= normal * 2.5, `과냉각 ${boosted}발 vs 평소 ${normal}발`);
   inputs.P1.select = 'secondary';
   shots(4);
@@ -1258,8 +1262,8 @@ test('데스스타 3갈래 미사일: 몇 초마다 가장 가까운 라이트�
   const first = volleys[0];
   assert.equal(first.length, 3, '3갈래');
   const angles = first.map((m) => m.angle).sort((a, b) => a - b);
-  assert.ok(Math.abs(angles[1] - angles[0] - (WEAPONS.dsmissile.volley.spread * Math.PI) / 180) < 0.05, "부채꼴 간격(유도로 조금 휨)");
-  assert.ok(first.every((b) => b.team === 'isb' && b.homing && b.splash));
+  assert.ok(Math.abs(angles[1] - angles[0] - (WEAPONS.dsmissile.volley.spread * Math.PI) / 180) < 0.05, "부채꼴 간격");
+  assert.ok(first.every((b) => b.team === 'isb' && !b.homing && b.splash));
   assert.ok(angles[1] > 0, '아래(라이트닝 쪽)를 향함');
 
   // 밸런스 메뉴: 공중전 수치(미사일 수 포함)를 바꿀 수 있다
