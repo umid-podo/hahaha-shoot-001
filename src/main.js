@@ -45,7 +45,7 @@ let ai = null;
 let humans = [];
 
 // cutscene: 스토리 모드 엔딩 컷씬(입력은 받지 않지만 시간은 흐른다)
-// killcam: 스토리 모드에서 요원을 쓰러뜨릴 때의 짧은 처치 컷씬, gunkata: 스미스 요원과의 건 카타(1·2·3·4 버튼만)
+// killcam: 스토리 모드에서 요원을 쓰러뜨릴 때의 짧은 처치 컷씬, gunkata: 쓰러뜨린 요원·보스와의 건 카타(1·2·3·4 버튼만)
 const active = () => match && ['playing', 'countdown', 'cutscene', 'killcam', 'gunkata'].includes(match.phase);
 
 function cancelAllInput() {

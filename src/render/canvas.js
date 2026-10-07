@@ -5,7 +5,9 @@ import {
 import {
   WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel,
 } from '../game/story.js';
-import { KATA_MOVES, DAMAGE as KATA_DAMAGE, GOAL as KATA_GOAL, WARN_TIME as KATA_WARN, RESOLVE_TIME as KATA_RESOLVE, INTRO_TIME as KATA_INTRO } from '../game/gunkata.js';
+import {
+  movesOf, foeName, DAMAGE as KATA_DAMAGE, WARN_TIME as KATA_WARN, RESOLVE_TIME as KATA_RESOLVE,
+} from '../game/gunkata.js';
 
 const INK = '#30353E';
 const MAX_DPR = 2;
@@ -1111,6 +1113,50 @@ export function createRenderer(canvas, wrap, assets) {
     return { x: i * 92 - 20, w: 84 + ((i * 13) % 3) * 10, h, lit: (i * 7919) % 97 };
   });
 
+  /** 2스테이지(복도) 건 카타 배경: ISB 본부 복도를 옆에서 본 모습(벽·문·천장 조명·붉은 카펫) */
+  function drawKataCorridor(time, reducedMotion) {
+    const wall = ctx.createLinearGradient(0, 0, 0, KATA_FLOOR);
+    wall.addColorStop(0, '#3A4150');
+    wall.addColorStop(1, '#5E6672');
+    ctx.fillStyle = wall;
+    ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    // 천장과 조명
+    ctx.fillStyle = '#262B35';
+    ctx.fillRect(0, 0, ARENA_WIDTH, 120);
+    for (let x = 140; x < ARENA_WIDTH; x += 330) {
+      const on = reducedMotion ? 1 : 0.85 + 0.15 * Math.sin(time * 3 + x);
+      ctx.fillStyle = `rgba(255,244,214,${0.16 * on})`;
+      ctx.beginPath(); ctx.moveTo(x - 30, 120); ctx.lineTo(x + 30, 120); ctx.lineTo(x + 130, KATA_FLOOR); ctx.lineTo(x - 130, KATA_FLOOR); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#FFF4D6';
+      ctx.fillRect(x - 40, 112, 80, 10);
+    }
+    // 벽 패널과 문
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 3;
+    for (let x = 0; x < ARENA_WIDTH; x += 200) { ctx.beginPath(); ctx.moveTo(x, 120); ctx.lineTo(x, KATA_FLOOR); ctx.stroke(); }
+    for (const x of [250, 1010]) {
+      ctx.fillStyle = '#8A5A2B';
+      ctx.fillRect(x, KATA_FLOOR - 330, 150, 330);
+      ctx.fillStyle = '#FFD45E';
+      ctx.beginPath(); ctx.arc(x + 128, KATA_FLOOR - 160, 7, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = '#D56A26';
+    ctx.beginPath(); ctx.roundRect(1330, 230, 140, 70, 10); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 44px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ISB', 1400, 267);
+    // 바닥: 붉은 카펫
+    ctx.fillStyle = '#4A4E57';
+    ctx.fillRect(0, KATA_FLOOR, ARENA_WIDTH, ARENA_HEIGHT - KATA_FLOOR);
+    ctx.fillStyle = '#8E3B3B';
+    ctx.fillRect(0, KATA_FLOOR + 10, ARENA_WIDTH, 120);
+    ctx.fillStyle = '#C9A24A';
+    ctx.fillRect(0, KATA_FLOOR + 14, ARENA_WIDTH, 5);
+    ctx.fillRect(0, KATA_FLOOR + 121, ARENA_WIDTH, 5);
+  }
+
   function drawKataBackground(time, reducedMotion) {
     const sky = ctx.createLinearGradient(0, 0, 0, KATA_FLOOR);
     sky.addColorStop(0, '#0B1030');
@@ -1152,18 +1198,19 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillRect(0, KATA_FLOOR, ARENA_WIDTH, 8);
   }
 
-  /** 옆 모습 캐릭터 하나. footY는 발 높이, pose: { facing, rot(라디안, 몸 가운데 기준), sx, sy, alpha, hurt } */
+  /** 옆 모습 캐릭터 하나. footY는 발 높이, pose: { facing, rot(라디안, 몸 가운데 기준), sx, sy, alpha, hurt, scale(크기 배율) } */
   function kataSprite(characterId, x, footY, pose = {}) {
     const { img, anchor } = assets[`${characterId}@pistol`] ?? assets[characterId];
-    const { facing = 1, rot = 0, sx = 1, sy = 1, alpha = 1, hurt = false } = pose;
-    const cy = footY - (KATA_FOOT - anchor[1]) * KATA_SIZE * sy;
+    const { facing = 1, rot = 0, sx = 1, sy = 1, alpha = 1, hurt = false, scale = 1 } = pose;
+    const size = KATA_SIZE * scale;
+    const cy = footY - (KATA_FOOT - anchor[1]) * size * sy;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(x, cy);
     ctx.rotate(rot);
     ctx.scale(facing * sx, sy);
     if (hurt) ctx.filter = 'drop-shadow(0 0 18px #FF2A2A) saturate(1.6)';
-    ctx.drawImage(img, -anchor[0] * KATA_SIZE, -anchor[1] * KATA_SIZE, KATA_SIZE, KATA_SIZE);
+    ctx.drawImage(img, -anchor[0] * size, -anchor[1] * size, size, size);
     ctx.restore();
     return { x, y: cy };
   }
@@ -1171,15 +1218,16 @@ export function createRenderer(canvas, wrap, assets) {
   /** 몸 가운데(cx, cy)에서 각도 angle 쪽 총구 위치 */
   const kataMuzzle = (c, facing, rise = 0) => ({ x: c.x + facing * KATA_SIZE * 0.33, y: c.y - KATA_SIZE * 0.06 - rise });
 
-  function kataTracer(x1, y1, x2, y2, k) {
+  /** 총알 줄기(laser면 R-10의 붉은 레이저) */
+  function kataTracer(x1, y1, x2, y2, k, laser = false) {
     if (k <= 0 || k >= 1) return;
     ctx.save();
     ctx.globalAlpha = 1 - k;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,220,120,0.5)';
-    ctx.lineWidth = 12;
+    ctx.strokeStyle = laser ? 'rgba(255,40,40,0.4)' : 'rgba(255,220,120,0.5)';
+    ctx.lineWidth = laser ? 18 : 12;
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    ctx.strokeStyle = '#FFF6D6';
+    ctx.strokeStyle = laser ? '#FF2A2A' : '#FFF6D6';
     ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     ctx.restore();
@@ -1227,17 +1275,23 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.restore();
   }
 
-  /** 지금 공격의 두 사람 자세를 그린다. */
+  /**
+   * 지금 공격의 두 사람 자세를 그린다. 적은 쓰러뜨린 요원·스미스 요원·R-10 중 하나이고,
+   * R-10(드론)은 공중에 떠서 상공 레이저·저공 돌진·정면 레이저·프로펠러 돌진으로 같은 자리를 움직인다.
+   */
   function drawKataActors(match, k, time, reducedMotion) {
     const hero = match.players.find((p) => p.id === k.heroId);
-    const boss = match.players.find((p) => p.id === k.bossId);
+    const foe = match.players.find((p) => p.id === k.foeId);
+    const { drone } = k;
+    // 드론은 바닥 위에 떠 있다(둥실)
+    const hover = drone ? 190 + (reducedMotion ? 0 : Math.sin(time * 4) * 10) : 0;
     const a = k.attack;
     const u = a?.state === 'warn' ? kClamp(a.t / KATA_WARN) : 0;
     const r = a && a.state !== 'warn' ? kClamp(a.t / KATA_RESOLVE) : 0;
     const back = kEase((r - 0.6) / 0.4); // 장면 끝에 제자리로
     const ok = a?.state === 'counter', hit = a?.state === 'hit';
     let hx = KATA_HX, hFoot = KATA_FLOOR, hRot = 0, hSy = 1, hSx = 1;
-    let sx = KATA_SX, sFoot = KATA_FLOOR, sRot = 0, sSy = 1;
+    let sx = KATA_SX, sFoot = KATA_FLOOR - hover, sRot = 0, sSy = 1;
     const sHurt = ok && r > 0.25 && r < 0.6;
     const hHurt = hit && r < 0.45;
     const fx = []; // 몸 위에 그릴 효과(총알 줄기 등)
@@ -1246,8 +1300,8 @@ export function createRenderer(canvas, wrap, assets) {
     if (a?.kind === 1) {
       // 점프 사격: 웅크렸다 뛰어올라 공중에서 아래로 쏜다
       const air = a.state === 'warn' ? 330 * kEase((u - 0.25) / 0.75) : 330 * (1 - kEase(r / 0.6));
-      sFoot = KATA_FLOOR - air;
-      sSy = a.state === 'warn' && u < 0.25 ? 0.86 : 1;
+      sFoot = KATA_FLOOR - hover - air;
+      sSy = a.state === 'warn' && u < 0.25 && !drone ? 0.86 : 1;
       sRot = a.state === 'warn' ? -0.25 * u : ok ? -0.25 + r * 4 * (1 - back) : -0.25 * (1 - r);
       if (ok) { hSy = r < 0.75 ? 0.6 : 0.6 + 0.4 * kEase((r - 0.75) / 0.25); hSx = 1.12 - 0.12 * back; }
     } else if (a?.kind === 2) {
@@ -1255,8 +1309,9 @@ export function createRenderer(canvas, wrap, assets) {
       const slideX = 860;
       sx = a.state === 'warn' ? KATA_SX + (slideX - KATA_SX) * kEase(u) : slideX + (KATA_SX - slideX) * back;
       const lie = a.state === 'warn' ? kEase(u / 0.4) : 1 - back;
-      sRot = 1.15 * lie; // 얼굴이 하늘을 보게 뒤로 눕는다(왼쪽을 본 채)
-      sFoot = KATA_FLOOR - 18 * lie;
+      // 사람은 얼굴이 하늘을 보게 뒤로 눕고(왼쪽을 본 채), 드론은 앞으로 기울어 바닥 가까이 내려온다
+      sRot = drone ? -0.35 * lie : 1.15 * lie;
+      sFoot = drone ? KATA_FLOOR - hover + (hover - 40) * lie : KATA_FLOOR - 18 * lie;
       if (ok) {
         // 공중제비: 뒤로 한 바퀴 돌며 높이 뛰어오른다
         const flip = kClamp(r / 0.75);
@@ -1279,12 +1334,16 @@ export function createRenderer(canvas, wrap, assets) {
 
     const shake = (on) => (on && !reducedMotion ? Math.sin(time * 80) * 6 : 0);
     const H = kataSprite(hero.characterId, hx + shake(hHurt), hFoot, { facing: 1, rot: hRot, sx: hSx, sy: hSy, hurt: hHurt });
-    // 스미스 요원: 붉은 기운
-    const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(time * 6);
-    ctx.fillStyle = `rgba(217,68,58,${0.12 + 0.12 * pulse})`;
-    ctx.beginPath(); ctx.ellipse(sx, sFoot - KATA_SIZE * 0.3, KATA_SIZE * 0.3, KATA_SIZE * 0.38, 0, 0, Math.PI * 2); ctx.fill();
-    const S = kataSprite(boss.characterId, sx + shake(sHurt), sFoot, { facing: -1, rot: sRot, sy: sSy, hurt: sHurt });
-    const hm = kataMuzzle(H, 1), sm = kataMuzzle(S, -1);
+    if (k.boss) {
+      // 보스(스미스 요원·R-10): 붉은 기운
+      const pulse = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(time * 6);
+      ctx.fillStyle = `rgba(217,68,58,${0.12 + 0.12 * pulse})`;
+      ctx.beginPath(); ctx.ellipse(sx, sFoot - KATA_SIZE * 0.3, KATA_SIZE * 0.3, KATA_SIZE * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    const S = kataSprite(foe.characterId, sx + shake(sHurt), sFoot, { facing: -1, rot: sRot, sy: sSy, hurt: sHurt, scale: drone ? 0.9 : 1 });
+    const hm = kataMuzzle(H, 1);
+    // 드론의 레이저 발사기는 몸 앞쪽 가운데
+    const sm = drone ? { x: S.x - KATA_SIZE * 0.3, y: S.y } : kataMuzzle(S, -1);
 
     if (a?.kind === 3 && a.state === 'warn') {
       // 붉은 조준선이 주인공 가슴으로
@@ -1296,8 +1355,10 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.restore();
     }
     if (a?.kind === 4) {
-      // 스미스 요원의 단검(쳐내지면 하늘로 튕겨 나간다)
-      if (ok && r > 0.2) {
+      // 적의 단검(쳐내지면 하늘로 튕겨 나간다). 드론은 단검 대신 프로펠러로 들이받는다.
+      if (drone) {
+        if (a.state === 'warn' || hit) star(S.x - KATA_SIZE * 0.3, S.y - 40, 22 + (reducedMotion ? 0 : Math.sin(time * 40) * 6), '#E6EAF0');
+      } else if (ok && r > 0.2) {
         const f = kClamp((r - 0.2) / 0.6);
         if (f < 1) kataDagger(sx - 120 + 260 * f, S.y - 60 - 380 * Math.sin(Math.PI * f * 0.8), -1 + f * 12, 1.1);
       } else {
@@ -1310,17 +1371,18 @@ export function createRenderer(canvas, wrap, assets) {
       }
     }
     if (a?.kind === 3 && ok) {
-      // 쳐낸 권총이 빙글빙글 날아간다
+      // 쳐낸 권총이 빙글빙글 날아간다(드론은 포신을 쳐내 불꽃만)
       const f = kClamp((r - 0.15) / 0.6);
-      if (r > 0.15 && f < 1) kataPistol(sx + 40 + 300 * f, S.y - 40 - 420 * Math.sin(Math.PI * f * 0.8), f * 14);
+      if (!drone && r > 0.15 && f < 1) kataPistol(sx + 40 + 300 * f, S.y - 40 - 420 * Math.sin(Math.PI * f * 0.8), f * 14);
       if (r < 0.3) star(sm.x, sm.y, 50 * (1 - r / 0.3), '#FFFFFF');
       fx.push(() => kataTracer(hm.x, hm.y, S.x, S.y - 10, (r - 0.3) / 0.25));
     }
     // 반격 사격(1 숙여서 위로, 2 공중제비 중 아래로)
     if (ok && a.kind === 1) fx.push(() => kataTracer(hm.x, hm.y - 30, S.x, S.y, (r - 0.08) / 0.25));
     if (ok && a.kind === 2) fx.push(() => kataTracer(H.x, H.y, S.x, S.y, (r - 0.35) / 0.25));
-    // 피격: 스미스 요원의 공격이 주인공에게
-    if (hit && a.kind !== 4) fx.push(() => kataTracer(sm.x, sm.y, H.x, H.y, r / 0.25));
+    // 피격: 적의 공격이 주인공에게(드론은 붉은 레이저)
+    if (hit && a.kind !== 4) fx.push(() => kataTracer(sm.x, sm.y, H.x, H.y, r / 0.25, drone));
+    if (drone && a?.kind === 3 && a.state === 'warn') star(sm.x, sm.y, 14 + 24 * u, '#FF2A2A'); // 레이저 충전
     if (hit && r < 0.6) kataWord(`-${KATA_DAMAGE}`, H.x + 60, H.y - 200 - r * 80, 64, '#FF3B30', 1 - r / 0.6);
     if (ok && r < 0.7) kataWord(['', '격추!', '공중제비!', '쳐내기!', '막았다!'][a.kind], S.x, S.y - 230 - r * 60, 56, '#7CF29A', 1 - r / 0.7);
     for (const f of fx) f();
@@ -1345,7 +1407,8 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.beginPath(); ctx.roundRect(x - 70, y - 70, 140, 140, 22); ctx.fill(); ctx.stroke();
     ctx.restore();
     kataWord(String(a.kind), x, y + 4, 110, '#B3261E');
-    kataWord(`${KATA_MOVES[a.kind].name} → ${a.kind} ${KATA_MOVES[a.kind].hint}`, x, y + 150, 40, '#FFD45E');
+    const move = movesOf(k)[a.kind];
+    kataWord(`${move.name} → ${a.kind} ${move.hint}`, x, y + 150, 40, '#FFD45E');
   }
 
   /** 위쪽 안내: 제목, 대응 횟수(10칸), 주인공 체력 */
@@ -1355,14 +1418,14 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillRect(0, 0, ARENA_WIDTH, 50);
     ctx.fillRect(0, ARENA_HEIGHT - 80, ARENA_WIDTH, 80);
     kataWord('건 카타', ARENA_WIDTH / 2, 110, 64, '#FFFFFF');
-    const w = 46, gap = 12, x0 = ARENA_WIDTH / 2 - (KATA_GOAL * (w + gap) - gap) / 2;
-    for (let i = 0; i < KATA_GOAL; i++) {
+    const w = 46, gap = 12, x0 = ARENA_WIDTH / 2 - (k.goal * (w + gap) - gap) / 2;
+    for (let i = 0; i < k.goal; i++) {
       ctx.fillStyle = i < k.done ? '#7CF29A' : 'rgba(255,255,255,0.2)';
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.roundRect(x0 + i * (w + gap), 160, w, 22, 6); ctx.fill(); ctx.stroke();
     }
-    kataWord(`대응 ${k.done} / ${KATA_GOAL}`, ARENA_WIDTH / 2, 210, 30, '#FFFFFF');
+    kataWord(`대응 ${k.done} / ${k.goal}`, ARENA_WIDTH / 2, 210, 30, '#FFFFFF');
     // 주인공 체력
     ctx.font = 'bold 30px system-ui, sans-serif';
     ctx.textAlign = 'left';
@@ -1373,7 +1436,7 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillText(`${hero.hp} / ${hero.maxHp}`, 60, 175);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#FF8A80';
-    ctx.fillText('스미스 요원', ARENA_WIDTH - 60, 100);
+    ctx.fillText(foeName(match.players.find((p) => p.id === k.foeId)), ARENA_WIDTH - 60, 100);
     // 자막
     if (k.caption) {
       ctx.font = 'bold 36px system-ui, sans-serif';
@@ -1381,16 +1444,18 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.fillStyle = '#FFFFFF';
       ctx.fillText(k.caption, ARENA_WIDTH / 2, ARENA_HEIGHT - 40);
     }
-    if (!k.attack && k.t < KATA_INTRO) {
+    if (!k.attack && k.t < k.intro) {
       const s = kEase(k.t / 0.4);
-      kataWord('건 카타 모드!', ARENA_WIDTH / 2, 420, 120 * s, '#FFD45E', Math.min(1, (KATA_INTRO - k.t) / 0.4));
+      kataWord('건 카타 모드!', ARENA_WIDTH / 2, 420, 120 * s, '#FFD45E', Math.min(1, (k.intro - k.t) / 0.4));
     }
     if (k.finish !== null) kataWord('건 카타 완료!', ARENA_WIDTH / 2, 420, 110, '#7CF29A');
   }
 
   function drawGunKata(match, time, reducedMotion) {
     const k = match.gunkata;
-    drawKataBackground(time, reducedMotion);
+    // 옥상(1스테이지)은 밤의 옥상 끝, 복도(2스테이지)는 본부 복도
+    if (match.story?.stage === 'corridor') drawKataCorridor(time, reducedMotion);
+    else drawKataBackground(time, reducedMotion);
     drawKataActors(match, k, time, reducedMotion);
     drawKataPrompt(k, time, reducedMotion);
     drawKataHud(match, k, time, reducedMotion);

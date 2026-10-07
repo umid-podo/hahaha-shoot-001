@@ -9,7 +9,7 @@ import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
   LAST_WORDS, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
-import { glowingKey, GOAL, DAMAGE, WARN_TIME, KATA_KEYS } from '../src/game/gunkata.js';
+import { glowingKey, GOAL, DAMAGE, WARN_TIME, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
 import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
 
 function story(settings, seed = 7) {
@@ -39,12 +39,20 @@ function playKata(match, inputs) {
   }
   return events;
 }
+/** 한 틱 진행하고, 요원을 쓰러뜨려 건 카타가 나오면 끝까지(빛나는 버튼을 바로 눌러) 돌린다. */
+function stepKata(match, inputs) {
+  const events = step(match, inputs);
+  if (match.phase === 'gunkata') events.push(...playKata(match, inputs));
+  return events;
+}
 /** 경기장의 요원을 모두 쓰러뜨리고, 처치 컷씬(킬캠)·건 카타가 나오면 끝날 때까지 돌린다. */
 function killAll(match, inputs) {
   for (const p of enemies(match)) p.hp = 0;
   const events = step(match, inputs);
-  while (match.phase === 'killcam') events.push(...step(match, inputs));
-  if (match.phase === 'gunkata') events.push(...playKata(match, inputs));
+  for (let i = 0; i < 20 && ['killcam', 'gunkata'].includes(match.phase); i++) {
+    if (match.phase === 'gunkata') events.push(...playKata(match, inputs));
+    while (match.phase === 'killcam') events.push(...step(match, inputs));
+  }
   return events;
 }
 /** 컷씬·카운트다운이 끝날 때까지 돌린다. */
@@ -327,7 +335,7 @@ test('요원을 쓰러뜨릴 때마다 킬캠: 경기가 멈추고 확대·마�
 
   // 첫 요원: 짧은 킬캠, 그동안 탄·플레이어·AI는 멈춤
   a.hp = 0;
-  step(match, inputs);
+  stepKata(match, inputs);
   assert.equal(match.phase, 'killcam');
   const k = match.killcam;
   assert.equal(k.victimId, a.id);
@@ -346,7 +354,7 @@ test('요원을 쓰러뜨릴 때마다 킬캠: 경기가 멈추고 확대·마�
 
   // 웨이브 마지막 요원: 주인공 장면까지
   b.hp = 0;
-  step(match, inputs);
+  stepKata(match, inputs);
   assert.equal(match.killcam.waveEnd, true);
   assert.ok(match.killcam.shots.some((s) => s.mode === 'hero'));
   const end = [];
@@ -361,7 +369,7 @@ test('웨이브 마무리 장면: 1웨이브 무전 지원 요청, 3웨이브 �
   const modes = [];
   for (let w = 0; w < 3; w++) {
     for (const p of enemies(match)) p.hp = 0;
-    step(match, inputs);
+    stepKata(match, inputs);
     modes.push(match.killcam.shots.map((s) => s.mode));
     while (match.phase === 'killcam') step(match, inputs);
     untilFight(match, inputs);
@@ -446,24 +454,24 @@ test('복도 장면: 1웨이브 "요원들은 복도로 와라!", 2웨이브 "�
   const captions = () => match.killcam.shots.map((s) => s.caption).join(' / ');
 
   for (const p of enemies(match)) p.hp = 0;
-  step(match, inputs);
+  stepKata(match, inputs);
   assert.match(captions(), /요원들은 복도로 와라!/);
   runOut(match, inputs, ['killcam']);
   untilFight(match, inputs);
 
   const [a, b] = enemies(match);
   a.hp = 0;
-  step(match, inputs);
+  stepKata(match, inputs);
   assert.equal(match.killcam.shot.caption, '요원: 나 이제 승급인데!!!');
   runOut(match, inputs, ['killcam']);
   b.hp = 0;
-  step(match, inputs);
+  stepKata(match, inputs);
   assert.match(captions(), /주인공: 에잇크\./);
   runOut(match, inputs, ['killcam']);
   untilFight(match, inputs);
 
   for (const p of enemies(match)) p.hp = 0;
-  step(match, inputs);
+  stepKata(match, inputs);
   const modes = match.killcam.shots.map((s) => s.mode);
   assert.deepEqual(modes, ['kill', 'hero', 'rumble', 'what']);
   assert.match(captions(), /이 정도냐\? 들어와—.*\(쿠쿵!\).*…이게 뭐야\?/);
@@ -652,6 +660,9 @@ test('2인 협동: 요원·포탑은 가까운 주인공을 노리고, 킬캠은
   match.stats[agent.id].killedBy = { ownerId: 'P2', weapon: 'pistol' };
   agent.hp = 0;
   step(match, inputs);
+  assert.equal(match.phase, 'gunkata');
+  assert.equal(match.gunkata.heroId, 'P2', '쓰러뜨린 주인공이 건 카타');
+  playKata(match, inputs);
   assert.equal(match.phase, 'killcam');
   assert.deepEqual(match.killcam.hero, { x: P2.x, y: P2.y });
 
@@ -803,7 +814,8 @@ test('건 카타: 스미스 요원을 쓰러뜨리면 건 카타, 공격 0.5초 
   const hp = hero.hp;
 
   const seen = new Set();
-  for (let n = 1; n <= GOAL; n++) {
+  assert.equal(k.goal, GOAL.boss);
+  for (let n = 1; n <= GOAL.boss; n++) {
     const warn = untilWarn(match, inputs);
     const key = glowingKey(k);
     assert.ok(KATA_KEYS.includes(key));
@@ -885,4 +897,52 @@ test('건 카타 2인 협동: 쓰러뜨린 주인공이 하고, 그 주인공이
   step(match, inputs);
   assert.equal(k.done, 1);
   assert.ok(P2.alive);
+});
+
+test('건 카타: 일반 요원을 쓰러뜨릴 때마다 3번 대응하는 건 카타, 끝나면 처치 컷씬(킬캠)', () => {
+  const { match, inputs } = story();
+  const [agent] = enemies(match);
+  agent.hp = 0;
+  const ev = step(match, inputs);
+  assert.equal(match.phase, 'gunkata', '요원을 쓰러뜨리면 바로 건 카타');
+  assert.ok(ev.some((e) => e.type === 'gunkata' && e.foeId === agent.id));
+  const k = match.gunkata;
+  assert.equal(k.foeId, agent.id);
+  assert.equal(k.goal, GOAL.agent);
+  assert.equal(k.boss, false);
+  assert.equal(k.drone, false);
+  assert.ok(!k.caption.includes('(AI)'), '이름 뒤 (AI)는 뺌');
+  let counters = 0;
+  while (match.phase === 'gunkata') {
+    const key = glowingKey(k);
+    if (key) inputs.P1.kata = key;
+    if (step(match, inputs).some((e) => e.type === 'kata-counter')) counters++;
+  }
+  assert.equal(counters, GOAL.agent);
+  assert.equal(match.phase, 'killcam', '건 카타 뒤 처치 컷씬');
+  assert.equal(match.killcam.victimId, agent.id);
+  assert.equal(match.killcam.waveEnd, true, '1웨이브 마지막 요원이라 무전 장면까지');
+  assert.ok(match.killcam.shots.some((s) => s.mode === 'radio'));
+});
+
+test('건 카타: R-10을 쓰러뜨리면 드론과 10번 건 카타(공격 이름은 드론용), 끝나면 R-10 엔딩 컷씬', () => {
+  const { match, inputs } = story();
+  toCorridor(match, inputs);
+  for (let w = 0; w < 3; w++) { killAll(match, inputs); untilFight(match, inputs); }
+  runOut(match, inputs, ['killcam']);
+  const r10 = enemies(match)[0];
+  assert.equal(r10.name, R10_NAME);
+  r10.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'gunkata');
+  const k = match.gunkata;
+  assert.equal(k.drone, true);
+  assert.equal(k.boss, true);
+  assert.equal(k.goal, GOAL.boss);
+  untilWarn(match, inputs);
+  assert.ok(Object.values(DRONE_MOVES).some((m) => k.caption.includes(m.name)), k.caption);
+  playKata(match, inputs);
+  assert.equal(match.phase, 'cutscene');
+  assert.equal(match.cutscene.kind, 'r10');
+  assert.deepEqual(match.story.kataDone, [3, 7], '스미스 요원(옥상 중간보스)·R-10(복도 보스전) 웨이브');
 });
