@@ -1,4 +1,4 @@
-import { WEAPONS, CHARACTERS, JET, COVER, RULES, TURRET, SKY } from './config.js';
+import { WEAPONS, CHARACTERS, JET, TANK, COVER, RULES, TURRET, SKY } from './config.js';
 
 /**
  * 밸런스 메뉴에서 조정하는 수치 목록. 값은 config.js의 객체(WEAPONS·CHARACTERS·JET·COVER·RULES)를 그 자리에서 바꾸므로
@@ -11,6 +11,7 @@ const ROOT = {
   weapons: WEAPONS,
   cover: COVER,
   jet: JET,
+  tank: TANK,
   turret: TURRET,
   sky: SKY,
 };
@@ -110,6 +111,21 @@ export const SECTIONS = [
       param('공중전 공통', '라이트닝 이동 속도 배율', ['sky', 'planeSpeed'], { min: 0.3, max: 4, step: 0.05 }),
       param('공중전 공통', '건쉽이 날아 들어오는 시간', ['sky', 'enemyFlyIn'], { min: 0.2, max: 10, step: 0.1, unit: SEC }),
       param('공중전 공통', '데스스타 첫 미사일까지', ['sky', 'dsFirstVolley'], { max: 30, step: 0.5, unit: SEC }),
+    ],
+  },
+  {
+    title: '도로 탱크(스토리 4스테이지)',
+    params: [
+      param('탱크', '달리는 속도(초당)', ['tank', 'speed'], { min: 20, max: 1500, step: 10 }),
+      param('탱크', '첫 등장 최소', ['tank', 'firstDelay', 0], { max: 120, step: 0.5, unit: SEC }),
+      param('탱크', '첫 등장 최대', ['tank', 'firstDelay', 1], { max: 120, step: 0.5, unit: SEC }),
+      param('탱크', '재등장 최소', ['tank', 'delay', 0], { max: 120, step: 0.5, unit: SEC }),
+      param('탱크', '재등장 최대', ['tank', 'delay', 1], { max: 120, step: 0.5, unit: SEC }),
+      param('탱크', '포탄 간격', ['tank', 'missile', 'interval'], { min: 0.1, max: 10, step: 0.1, unit: SEC }),
+      param('탱크', '포탄 피해', ['tank', 'missile', 'damage'], { max: 1000 }),
+      param('탱크', '포탄 속도(초당)', ['tank', 'missile', 'speed'], { min: 50, max: 3000, step: 10 }),
+      param('탱크', '포탄 폭발 피해', ['tank', 'missile', 'splash', 'damage'], { max: 1000 }),
+      param('탱크', '포탄 폭발 반경', ['tank', 'missile', 'splash', 'radius'], { max: 800, step: 5 }),
     ],
   },
   {

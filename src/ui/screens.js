@@ -25,10 +25,10 @@ function formatTime(seconds) {
   const s = Math.max(0, Math.round(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
-const OTHER_SOURCES = { jet: '전투기', turret: '포탑' };
+const OTHER_SOURCES = { jet: '전투기', turret: '포탑', tank: '탱크' };
 const sourceName = (players, id) => OTHER_SOURCES[id] ?? players.find((p) => p.id === id)?.name ?? id;
 /** 쓰러뜨린 무기 이름. 전투기·포탑은 무기표에 없다. */
-const killWeaponName = (killedBy) => WEAPONS[killedBy.weapon]?.name ?? (killedBy.weapon === 'turret' ? '포탄' : '미사일');
+const killWeaponName = (killedBy) => WEAPONS[killedBy.weapon]?.name ?? (killedBy.weapon === 'turret' || killedBy.weapon === 'tank' ? '포탄' : '미사일');
 
 /** 한 플레이어의 무기별 통계 합계 */
 function totals(stats) {

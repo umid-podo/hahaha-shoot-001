@@ -291,8 +291,10 @@ function frame(now) {
         }
         if (e.type === 'wave-clear') screens.announce(`${waveLabel(e.wave)} 클리어`);
         if (e.type === 'stage') {
-          screens.announce(e.stage === 'sky' ? '3스테이지 하늘. 라이트닝을 타고 공중전! 체력이 모두 회복되었습니다.'
-            : '2스테이지 복도. 체력이 모두 회복되었습니다.');
+          screens.announce({
+            sky: '3스테이지 하늘. 라이트닝을 타고 공중전! 체력이 모두 회복되었습니다.',
+            road: '4스테이지 도로. 달리는 차 위에서 싸웁니다. 탱크를 조심하세요! 체력이 모두 회복되었습니다.',
+          }[e.stage] ?? '2스테이지 복도. 체력이 모두 회복되었습니다.');
         }
         if (e.type === 'gunkata') screens.announce('건 카타 모드! 빛나는 버튼 1, 2, 3, 4를 0.5초 안에 누르세요.');
         if (e.type === 'kata-warn') screens.announce(`${e.key}번`);
