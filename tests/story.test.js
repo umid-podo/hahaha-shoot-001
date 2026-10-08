@@ -213,10 +213,25 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
     assert.equal(enemies(match).length, n);
     killAll(match, inputs);
   }
-  for (let i = 0; i < 10 && match.phase !== 'result'; i++) step(match, inputs);
+  // 도로 보스전: 쌍 RPG를 든 윌슨 요원(체력 800) → 건 카타 → 엔딩 컷씬(차가 미끄러져 폭발) → 승리
+  untilFight(match, inputs);
+  const [wilson] = enemies(match);
+  assert.equal(wilson.name, '윌슨 요원');
+  assert.equal(wilson.maxHp, 800);
+  assert.equal(wilson.primary, 'dualrpg');
+  assert.ok(wilson.primaryOnly && wilson.boss);
+  wilson.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'gunkata');
+  assert.equal(match.gunkata.goal, 10);
+  playKata(match, inputs);
+  assert.equal(match.cutscene.kind, 'wilson');
+  assert.equal(checkpoint(match), null, '이미 스토리를 깸');
+  const boom = runOut(match, inputs, ['cutscene']);
+  assert.ok(boom.filter((e) => e.type === 'explode').length >= 4, '윌슨 요원의 차 폭발');
   assert.equal(match.phase, 'result');
   assert.equal(match.winner, 'earth');
-  assert.equal(match.story.roster.length, 7 + 1 + 2 + 4 + 1 + 2 + 3 + 4 + 1 + 2 + 3 + 4, '결과 화면용: 나온 적 전원');
+  assert.equal(match.story.roster.length, 7 + 1 + 2 + 4 + 1 + 2 + 3 + 4 + 1 + 2 + 3 + 4 + 1, '결과 화면용: 나온 적 전원');
 });
 
 test('무작위 무기는 RPG·저격총·아킴보 석궁을 뺀 무기 중 하나', () => {
@@ -266,8 +281,8 @@ test('내려오는 중인 요원은 맞지 않고 움직이지 않으며, AI도 
 
 test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이동 속도·히트박스, 보스 보조무기', () => {
   const settings = defaultStory();
-  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 3000, 300, 250, 200]);
-  assert.deepEqual(settings.waves.map((w) => w.difficulty), ['normal', 'normal', 'normal', 'normal', 'normal', 'mixed', 'easy', 'normal', 'easy', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal']);
+  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 3000, 300, 250, 200, 800]);
+  assert.deepEqual(settings.waves.map((w) => w.difficulty), ['normal', 'normal', 'normal', 'normal', 'normal', 'mixed', 'easy', 'normal', 'easy', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal']);
   settings.waves[0] = { ...settings.waves[0], hp: 1234, difficulty: 'hard', damage: 200, bulletSpeed: 150, speed: 50, radius: 45 };
   settings.waves[3].secondary = 'shotgun';
   const { match, inputs } = story(settings);
@@ -289,8 +304,8 @@ test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이�
   assert.equal(fixed.waves[0].damage, 100);
   assert.equal(fixed.waves[3].secondary, 'random');
   assert.equal(fixed.waves[5].difficulty, 'hard');
-  assert.equal(fixed.waves.length, 15, '예전(옥상만) 저장값도 복도·하늘·도로 기본값으로 채움');
-  assert.equal(WAVES.length, 15);
+  assert.equal(fixed.waves.length, 16, '예전(옥상만) 저장값도 복도·하늘·도로 기본값으로 채움');
+  assert.equal(WAVES.length, 16);
 });
 
 test('요원·보스가 올 때마다 경고음(alarm): 전투 시작, 헬리콥터, 보스 건쉽', () => {
@@ -753,7 +768,7 @@ test('요원별 주무기: 모든 요원(R-10 빼고)의 주무기를 정할 수
   assert.deepEqual(settings.waves.map((w) => w.weapons), [
     ['rifle'], ['random', 'random'], ['random', 'random', 'random'], ['pistol'],
     ['random'], ['rifle', 'rifle'], ['dual', 'pistol', 'pistol', 'rifle'], [], [], [], [], [],
-    ['rifle', 'rifle'], ['random', 'random', 'random'], ['random', 'random', 'random', 'random'],
+    ['rifle', 'rifle'], ['random', 'random', 'random'], ['random', 'random', 'random', 'random'], [],
   ]);
   assert.deepEqual(AGENT_WEAPON_CHOICES, ['random', 'rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow']);
 
@@ -1031,7 +1046,7 @@ test('AI 동료 수만큼 일반 웨이브마다 쉬움 돌격소총 요원이 �
   untilFight(match, inputs);
   assert.equal(enemies(match).length, 1);
   assert.equal(enemies(match)[0].name, BOSS_NAME);
-  assert.deepEqual(WAVES.map((_, i) => extraAgents(i, 2)), [2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2]);
+  assert.deepEqual(WAVES.map((_, i) => extraAgents(i, 2)), [2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0]);
 });
 
 test('AI 동료: 적을 조준해 싸우고, 사람이 모두 쓰러지면 동료가 남아도 패배, 건 카타는 사람이 함', () => {
@@ -1300,6 +1315,28 @@ test('도로: 요원은 차를 타고 왼쪽 뒤에서 달려와 자리 잡고(�
   enemies(match)[0].hp = 0;
   step(match, inputs);
   assert.equal(match.phase, 'gunkata', '도로 요원도 건 카타');
+});
+
+test('윌슨 요원의 쌍 RPG: 쌍권총처럼 2점사, 로켓은 유도 없이 곧게 날아가 맞거나 레일 선에서 터짐', () => {
+  const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 5, { wave: 15, hp: 99999 });
+  runOut(match, {}, ['countdown']);
+  const inputs = createInputs(match.players);
+  match.jetTimer = Infinity;
+  untilFight(match, inputs);
+  const [wilson] = enemies(match);
+  assert.equal(wilson.characterId, 'wilson');
+  const [P1] = match.players;
+  P1.x = 300; wilson.x = 1300; // 멀리 떨어뜨려 놓고 아래를 향해 쏜다
+  inputs[wilson.id] = { ...inputs[wilson.id], aim: Math.PI / 2, aiming: true, moveAxis: 0 };
+  const events = [];
+  for (let t = 0; t < 0.2; t += TICK) events.push(...step(match, inputs));
+  const rockets = match.projectiles.filter((b) => b.weapon === 'dualrpg');
+  assert.equal(rockets.length, 2, '2점사');
+  assert.ok(rockets.every((b) => !b.homing && b.splash && b.splash.damage === WEAPONS.dualrpg.splash.damage));
+  assert.ok(rockets.every((b) => Math.abs(b.vx) < 1e-6), '곧게');
+  inputs[wilson.id].aiming = false;
+  for (let t = 0; t < 2; t += TICK) events.push(...step(match, inputs));
+  assert.ok(events.filter((e) => e.type === 'explode').length >= 2, '레일 선에서 터짐');
 });
 
 test('도로 탱크: 전투기 대신 탱크가 가운데 차선을 지나가며 위아래로 포탄(양 팀 모두 맞음), 수치는 밸런스에서', async () => {

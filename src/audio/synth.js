@@ -90,6 +90,7 @@ const SHOT = {
   dagger: { filter: 3000, q: 0.6, decay: 0.12, thump: 0, volume: 0.45 }, // 돌진하며 휙
   shotgun: { filter: 700, q: 0.5, decay: 0.3, thump: 70, volume: 1.4 }, // 묵직한 쾅
   crossbow: { filter: 2600, q: 1.2, decay: 0.07, thump: 0, volume: 0.45 }, // 시위 튕기는 탁
+  dualrpg: { filter: 900, q: 0.6, decay: 0.3, thump: 90, volume: 1.1 }, // 쌍 RPG: 작은 로켓 발사음
   jet: { filter: 700, q: 0.5, decay: 0.35, thump: 110, volume: 1.1 },
   // 공중전: 라이트닝 기관포(빠르고 가벼움), 미사일(쉬익), 건쉽 기관포, 데스스타 산탄포
   lightning: { filter: 2200, decay: 0.07, thump: 150, volume: 0.6 },

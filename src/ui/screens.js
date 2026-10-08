@@ -289,7 +289,7 @@ export function createScreens(handlers) {
 
       // 무기별 표: 쏜 무기만, 주무기 → 보조무기 → 아이템 순
       const order = [...PRIMARY_IDS, 'laser', 'instakill', ...SECONDARY_IDS, 'grenade',
-        'lightning', 'missile', 'gunship', 'flak', 'dsmissile']; // 공중전 무기
+        'lightning', 'missile', 'gunship', 'flak', 'dsmissile', 'dualrpg']; // 공중전 무기
       const rows = [];
       for (const p of players) {
         const used = order.filter((id) => stats[p.id].weapons[id]);

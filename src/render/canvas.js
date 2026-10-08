@@ -22,6 +22,8 @@ const EXPLODE_TIME = 0.4;
 const LASER_TIME = 0.1;
 const MEGA_TIME = 0.6;
 const GAUGE_H = 6;
+const SMOKE_TIME = 1.1;   // 로켓 연기가 퍼지며 사라지는 시간
+const SMOKE_STEP = 26;    // 연기 덩이 사이 거리
 // 오른쪽 팀 체력판. 상단은 윗변, 하단은 아랫변 기준으로 캐릭터·체력바와 겹치지 않게 둔다.
 const TEAM_BOX = { isbTop: RAIL_Y.isb + 98, earthBottom: RAIL_Y.earth - 102, w: 190, right: 20 };
 const HP_BAR = { w: 88, h: 10 };
@@ -82,6 +84,16 @@ export function createRenderer(canvas, wrap, assets) {
   let effects = [];
   // 킬캠 카메라: 지금 보는 중심(x, y)과 확대 배율(z). 매 프레임 목표로 부드럽게 따라간다.
   const cam = { x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2, z: 1 };
+  // 로켓 연기: 탄마다 마지막으로 연기를 남긴 자리(SMOKE_STEP마다 한 덩이)
+  const smokeFrom = new Map();
+  function puffSmoke(b) {
+    const last = smokeFrom.get(b.id);
+    if (last && Math.hypot(b.x - last.x, b.y - last.y) < SMOKE_STEP) return;
+    smokeFrom.set(b.id, { x: b.x, y: b.y });
+    if (smokeFrom.size > 200) smokeFrom.delete(smokeFrom.keys().next().value);
+    const back = Math.atan2(b.vy, b.vx) + Math.PI;
+    effects.push({ kind: 'smoke', x: b.x + Math.cos(back) * 20, y: b.y + Math.sin(back) * 20, seed: b.id % 7, age: 0 });
+  }
   const recoil = {};
 
   function resize() {
@@ -203,6 +215,7 @@ export function createRenderer(canvas, wrap, assets) {
     if (p.jetpack) drawJetFlame(p, anchor, size, facing, bounce, moving, time, reducedMotion);
 
     if (p.weapon === 'instakill') drawMegaCannon(p, time, reducedMotion);
+    if (p.weapon === 'dualrpg') drawDualRpg(p);
     // 아킴보 석궁: 권총형 석궁 두 자루를 조준 방향으로 겨눈 모습으로 덧그린다
     if (p.weapon === 'crossbow') {
       const { img: bow } = assets['akimbo-crossbow'];
@@ -1647,7 +1660,7 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.stroke();
   }
 
-  /** 킬캠 화면 안내: 검은 띠·자막, 처치 순간 'K.O.!', 스미스 요원 무전(붉은 화면 + 초상) */
+  /** 킬캠 화면 안내: 검은 띠·자막, 처치 순간 'K.O.!', 보스 무전(붉은 화면 + 초상: 스미스 요원·윌슨 요원) */
   function drawKillcamOverlay(k, time, reducedMotion) {
     const mode = k.shot.mode;
     if (mode === 'smith') {
@@ -1657,7 +1670,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
       // 무전 화면: 오른쪽에서 밀려 들어오는 스미스 요원 초상
       const slide = reducedMotion ? 1 : Math.min(1, t / 0.4);
-      const { img, anchor } = assets['isb-agent-1'];
+      const { img, anchor } = assets[k.shot.portrait ?? 'isb-agent-1']; // 무전한 보스(스미스 요원·윌슨 요원)
       const size = 520;
       const px = ARENA_WIDTH - 330 + (1 - slide) * 500, py = 560;
       ctx.save();
@@ -1668,6 +1681,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.stroke();
       ctx.beginPath(); ctx.roundRect(px - 250, py - 400, 500, 520, 24); ctx.clip();
       ctx.drawImage(img, px - anchor[0] * size, py - anchor[1] * size, size, size);
+      if (k.shot.portrait === 'wilson') drawRpgTube(px - 10, py + 40, 0.06, 2.3); // 아래쪽 손에 든 두 번째 RPG
       ctx.fillStyle = 'rgba(200,20,30,0.28)'; // 붉은 무전 화면 색
       ctx.fillRect(px - 250, py - 400, 500, 520);
       // 무전 잡음 줄
@@ -1701,6 +1715,31 @@ export function createRenderer(canvas, wrap, assets) {
   }
 
   /** R-10 컷씬 끝: 주인공이 어깨에 멘 RPG(로켓이 끼워진 발사관) */
+  /** RPG 발사관 하나(로켓 장전): (x, y)에서 angle 방향, s배 크기 */
+  function drawRpgTube(x, y, angle, s) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    if (Math.cos(angle) < 0) ctx.scale(1, -1); // 왼쪽을 겨눠도 손잡이가 아래로
+    ctx.scale(s, s);
+    ctx.fillStyle = '#7A4A2A';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(-34, -8, 72, 16, 5); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#3A2A1E';
+    ctx.fillRect(-8, 6, 8, 12); // 손잡이
+    ctx.drawImage(assets.rocket.img, 32, -10, 38, 20);
+    ctx.restore();
+  }
+
+  /**
+   * 윌슨 요원의 두 번째 RPG: 그림(요원 2)이 허리에 RPG 하나를 들고 있으니, 나머지 하나를 어깨에 메고 조준 방향으로 겨눈다.
+   */
+  function drawDualRpg(p) {
+    const s = p.scale ?? 1;
+    drawRpgTube(p.x + Math.cos(p.aim) * 10 * s, p.y - 26 * s + Math.sin(p.aim) * 10 * s, p.aim, s * 0.85);
+  }
+
   function drawHeldRpg(pose) {
     ctx.save();
     ctx.translate(pose.x + Math.cos(pose.aim) * 20, pose.y - 6 + Math.sin(pose.aim) * 20);
@@ -2206,6 +2245,7 @@ export function createRenderer(canvas, wrap, assets) {
     },
     reset() {
       effects = [];
+      smokeFrom.clear();
       for (const id of Object.keys(recoil)) delete recoil[id];
       Object.assign(cam, { x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2, z: 1 });
     },
@@ -2264,7 +2304,7 @@ export function createRenderer(canvas, wrap, assets) {
         // 낙하산 컷씬: 지구방위팀(라이트닝·낙하산·차)은 컷씬이 따로 그린다
         if (cut?.kind === 'parachute' && p.team === 'earth') continue;
         // 4스테이지 도로: 모두 달리는 차 지붕 위에 선다
-        if (story?.stage === 'road') drawCar(p.x, p.y, p.team, time, reducedMotion, p.alive ? 1 : 0.7);
+        if (story?.stage === 'road' && !(cut && p.id === cut.bossId)) drawCar(p.x, p.y, p.team, time, reducedMotion, p.alive ? 1 : 0.7);
         // 데스스타 엔딩: 데스스타와 컷씬 주인공의 라이트닝은 따로 그린다
         if (cut?.kind === 'deathstar' && (p.id === cut.bossId || p.id === cut.heroId)) continue;
         if (cut?.kind === 'stairs' && p.team === 'earth') {
@@ -2394,6 +2434,18 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.beginPath(); ctx.arc(b.x, b.y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
           continue;
         }
+        if (b.weapon === 'dualrpg') {
+          // 윌슨 요원의 작은 로켓: 지나간 길에 연기를 남긴다(연기는 효과로 따로 그림)
+          if (!paused && !reducedMotion) puffSmoke(b);
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate(Math.atan2(b.vy, b.vx));
+          ctx.fillStyle = '#FFB23F';
+          ctx.beginPath(); ctx.moveTo(-14, -4); ctx.lineTo(-24 - (reducedMotion ? 0 : Math.random() * 8), 0); ctx.lineTo(-14, 4); ctx.fill();
+          ctx.drawImage(assets.rocket.img, -17, -8.5, 34, 17);
+          ctx.restore();
+          continue;
+        }
         const rocket = b.weapon === 'rpg' || b.weapon === 'missile' || b.weapon === 'dsmissile';
         const { img } = assets[rocket ? 'rocket' : 'bullet'];
         const sniper = b.weapon === 'sniper';
@@ -2409,6 +2461,21 @@ export function createRenderer(canvas, wrap, assets) {
       if (match.jet?.kind === 'tank') drawTank(match.jet, time, reducedMotion);
       else if (match.jet) drawJet(match.jet);
       if (cut?.kind === 'parachute') drawParachuteCutscene(match, cut, time, reducedMotion);
+      else if (cut?.kind === 'wilson') {
+        // 윌슨 요원 엔딩: 비틀거리던 윌슨 요원이 탄 차가 미끄러지며 빙글 돌아 뒤로 처지고, 갓길에 부딪혀 터진다
+        const { car } = cut;
+        const boss = match.players.find((p) => p.id === cut.bossId);
+        if (boss && car.alpha > 0.01) {
+          ctx.save();
+          ctx.globalAlpha = car.alpha;
+          ctx.translate(car.x, car.y);
+          ctx.rotate(car.angle);
+          ctx.translate(-car.x, -car.y);
+          drawCar(car.x, car.y, 'isb', time, reducedMotion);
+          drawPlayer({ ...boss, alive: true, hp: 0, x: car.x, y: car.y, aim: Math.PI / 2, hurt: 0.2 }, { moveAxis: 0, aiming: false }, time, reducedMotion);
+          ctx.restore();
+        }
+      }
       else if (cut?.kind === 'r10') drawR10Cutscene(match, cut, time, reducedMotion);
       else if (cut?.kind === 'smith') drawCutsceneActors(match, cut, time, reducedMotion);
       else if (cut?.kind === 'lightning' && !cut.switched) drawLightningCutscene(match, cut, inputs, time, reducedMotion);
@@ -2428,8 +2495,17 @@ export function createRenderer(canvas, wrap, assets) {
       }
 
       if (!paused) for (const fx of effects) fx.age += dt;
-      effects = effects.filter((fx) => fx.age < EFFECT_TIME);
+      effects = effects.filter((fx) => fx.age < (fx.kind === 'smoke' ? SMOKE_TIME : EFFECT_TIME));
       for (const fx of effects) {
+        if (fx.kind === 'smoke') {
+          // 회색 연기: 커지며 옅어지고 바람에 조금 뒤로 밀린다
+          const k = fx.age / SMOKE_TIME;
+          ctx.fillStyle = `rgba(${150 + fx.seed * 6},${150 + fx.seed * 6},${158 + fx.seed * 6},${0.55 * (1 - k)})`;
+          ctx.beginPath();
+          ctx.arc(fx.x - (reducedMotion ? 0 : fx.age * 60), fx.y - (reducedMotion ? 0 : fx.age * 10), 9 + 22 * k, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
         if (fx.kind === 'megalaser') {
           if (fx.age < MEGA_TIME) drawMegaLaser(fx);
           continue;

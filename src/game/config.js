@@ -37,6 +37,11 @@ export const WEAPONS = {
   rifle: { id: 'rifle', name: '돌격소총', interval: 0.2, damage: 7, speed: 760, burst: 1 },
   pistol: { id: 'pistol', name: '권총', interval: 0.5, damage: 20, speed: 720, burst: 1 },
   dual: { id: 'dual', name: '쌍권총', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1 },
+  // 쌍 RPG(윌슨 요원 전용): 쌍권총처럼 2점사로 쏘지만 탄이 작은 로켓이라 맞거나 레일 선에서 터진다(유도 없음, 지나간 길에 연기)
+  dualrpg: {
+    id: 'dualrpg', name: '쌍 RPG', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1,
+    splash: { damage: 8, radius: 90 },
+  },
   rpg: {
     id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release',
     splash: { damage: 10, radius: 120 }, homing: { turnRate: 0.8 },
@@ -144,6 +149,11 @@ export const CHARACTERS = [
   {
     id: 'r10', name: 'R-10', drone: true, weapon: 'laser', maxHp: 400, radius: 48, speed: MAX_SPEED, scale: 1.4,
     image: 'assets/characters/r10.svg',
+  },
+  // 스토리 모드 4스테이지(도로)의 보스: RPG 두 자루를 든 윌슨 요원(쌍 RPG 전용). 그림은 요원 2에 RPG 두 자루를 덧그린다.
+  {
+    id: 'wilson', name: '윌슨 요원', hidden: true, weapon: 'dualrpg', maxHp: 800, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2,
+    image: 'assets/characters/isb-agent-2.png',
   },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 2번 누르면 온이름 대신 나타난다. 모든 피해에 +5.
   {
