@@ -1,9 +1,9 @@
-import { BOSS_NAME, R10_NAME, startCutscene, startKillcam } from './story.js';
+import { BOSS_NAME, R10_NAME, WILSON_NAME, startCutscene, startKillcam } from './story.js';
 import { createRng } from './state.js';
 import { TICK } from './config.js';
 
 /**
- * 건 카타 모드(스토리 모드). 요원을 쓰러뜨릴 때마다(스미스 요원·R-10 포함) 이 모드로 들어간다.
+ * 건 카타 모드(스토리 모드). 요원을 쓰러뜨릴 때마다(스미스 요원·R-10·윌슨 요원 포함, 하늘의 건쉽·데스스타 제외) 이 모드로 들어간다.
  * 화면이 옆에서 본 시점으로 바뀌어 주인공(왼쪽)과 쓰러뜨린 적(오른쪽)이 마주 보고, 조작은 1·2·3·4 버튼만 남는다.
  * 적이 무작위로 공격하는데, 공격하기 WARN_TIME(0.5초) 전부터 눌러야 할 버튼이 빛난다.
  * 빛나는 동안 맞는 버튼을 누르면 대응(주인공의 반격), 못 누르거나 다른 버튼을 누르면 체력 DAMAGE(100)가 깎인다.
@@ -47,7 +47,7 @@ export const movesOf = (kata) => (kata?.drone ? DRONE_MOVES : KATA_MOVES);
  */
 export function needsGunKata(match) {
   const boss = match.story && match.players.find((p) => p.boss && !p.alive);
-  // 하늘(공중전)의 데스스타는 건 카타 없이 바로 엔딩 컷씬
+  // 하늘(공중전)의 데스스타는 건 카타 없이 바로 엔딩 컷씬. 스미스 요원·R-10·윌슨 요원은 웨이브 번호로 센다.
   return !!boss && match.story.stage !== 'sky' && !match.story.kataDone?.includes(match.story.wave);
 }
 
@@ -58,6 +58,7 @@ export const foeName = (foe) => foe.name.replace(/ \(AI\)$/, '');
 function introLine(foe) {
   if (foe.characterId === 'r10') return `${R10_NAME}: 삐빅! 근접 전투 모드 가동!`;
   if (foe.name === BOSS_NAME) return `${BOSS_NAME}: 총알로는 안 끝난다… 건 카타로 붙자!`;
+  if (foe.name === WILSON_NAME) return `${WILSON_NAME}: 로켓이 떨어졌군… 맨손으로 상대해 주마!`;
   return `${foeName(foe)}: 아직 안 끝났어! 덤벼라!`;
 }
 

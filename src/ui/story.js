@@ -25,6 +25,10 @@ const DIFFICULTY_NAME = Object.fromEntries(DIFFICULTY_IDS.map((id) => [id, DIFFI
 function waveNote(wave) {
   const from = FROM[wave.from];
   if (wave.boss === 'r10') return `${from} · 레이저 캐논(피해 20 레이저 탄 3점사, 약 3초 쏘고 2초 재장전) · 보조무기·수류탄 없음`;
+  if (wave.boss === 'wilson') {
+    const w = WEAPONS.dualrpg;
+    return `${from} · ${w.name}(쌍권총처럼 ${w.burst}점사, 터지는 로켓·폭발 ${w.splash.damage}, 유도 없음) · 보조무기·수류탄 없음`;
+  }
   if (wave.boss === 'deathstar') return `${from} · 거대 비행선 · ${WEAPONS.flak.name}(부채꼴 ${WEAPONS.flak.pellets}발)`;
   if (wave.stage === 'sky') return `${from} · ${WEAPONS.gunship.name}(${WEAPONS.gunship.burst}점사)`;
   const levels = wave.agents?.some((a) => a.difficulty)

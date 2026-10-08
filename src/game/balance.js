@@ -114,8 +114,14 @@ export const SECTIONS = [
     ],
   },
   {
-    title: '도로 탱크(스토리 4스테이지)',
+    title: '도로(스토리 4스테이지) · 탱크 · 윌슨 요원',
     params: [
+      ...gun('dualrpg', [
+        ['점사 수', ['burst'], { min: 1, max: 10 }],
+        ['점사 간격', ['burstGap'], { min: 0.02, max: 1, step: 0.01, unit: SEC }],
+        ['폭발 피해', ['splash', 'damage'], { max: 1000 }],
+        ['폭발 반경', ['splash', 'radius'], { max: 800, step: 5 }],
+      ]),
       param('탱크', '달리는 속도(초당)', ['tank', 'speed'], { min: 20, max: 1500, step: 10 }),
       param('탱크', '첫 등장 최소', ['tank', 'firstDelay', 0], { max: 120, step: 0.5, unit: SEC }),
       param('탱크', '첫 등장 최대', ['tank', 'firstDelay', 1], { max: 120, step: 0.5, unit: SEC }),

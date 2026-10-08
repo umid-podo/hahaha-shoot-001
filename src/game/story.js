@@ -15,7 +15,8 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
  *   R-10을 쓰러뜨리면 RPG 엔딩 컷씬 뒤 3스테이지로. 복도에는 전투기 대신 벽 포탑 2개가 플레이어를 쏜다(config.js TURRET).
  * 3스테이지 하늘(공중전): 라이트닝을 타고 건쉽과 싸우고, 보스 데스스타를 쓰러뜨리면 엔딩 컷씬 → 낙하산 컷씬으로 4스테이지로.
  * 4스테이지 도로: 비 내리는 밤 도시 도로에서 달리는 자동차 위에서 싸운다. ISB 요원도 차를 타고 뒤에서 따라붙고,
- *   전투기 대신 탱크(config.js TANK)가 가운데 차선을 지나가며 위아래로 포탄을 쏜다. 마지막 웨이브를 깨면 스토리 클리어.
+ *   전투기 대신 탱크(config.js TANK)가 가운데 차선을 지나가며 위아래로 포탄을 쏜다. 보스는 RPG 두 자루를 든 윌슨 요원(체력 800)으로,
+ *   쓰러뜨리면 건 카타 → 엔딩 컷씬(윌슨 요원의 차가 미끄러져 폭발) 뒤 스토리 클리어.
  * 일반 요원의 무작위 주무기는 RPG·저격총·아킴보 석궁을 뺀 주무기 중 하나. 스미스 요원 말고는 보조무기·수류탄을 쓰지 않는다.
  * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스와 요원마다의 주무기(R-10 빼고)는 스토리 설정(밸런스 칸)에서 바꾼다.
  * 2인 협동: P2도 지구방위팀으로 함께 싸운다(COOP_SLOT). 둘 다 쓰러지면 패배, 한 명이라도 서 있으면 계속한다.
@@ -26,6 +27,7 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
 export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'crossbow'].includes(id));
 export const BOSS_NAME = '스미스 요원';
 export const R10_NAME = 'R-10';
+export const WILSON_NAME = '윌슨 요원';
 
 export const STAGES = {
   rooftop: { num: 1, name: '옥상' },
@@ -44,7 +46,7 @@ export const GUNSHIP_NAME = '건쉽';
  * 웨이브 구성. from: 'start'(경기 시작부터 서 있음)·'heli'(헬리콥터)·'gunship'(건쉽)·'elevator'(엘리베이터)·'ceiling'(천장을 부수고)
  *   ·'sky'(하늘에서 날아옴)·'car'(차를 타고 뒤에서 따라붙음).
  * weapon 'random'은 STORY_WEAPONS 중 무작위. agents가 있으면 요원마다 { weapon, difficulty }(difficulty는 설정이 '기획대로'일 때).
- * boss: 'smith'(중간보스)·'r10'(마지막 보스). end: 웨이브 마지막 요원을 쓰러뜨렸을 때의 장면(killcamShots).
+ * boss: 'smith'(옥상)·'r10'(복도)·'deathstar'(하늘)·'wilson'(도로). fixed: 무기를 바꿀 수 없는 웨이브. end: 웨이브 마지막 요원을 쓰러뜨렸을 때의 장면(killcamShots).
  * killLine: 그 웨이브의 마지막이 아닌 요원을 쓰러뜨렸을 때 나오는 한마디(없으면 LAST_WORDS 중 무작위).
  */
 export const WAVES = [
@@ -67,10 +69,11 @@ export const WAVES = [
   { stage: 'sky', title: '2웨이브', count: 3, weapon: 'gunship', from: 'sky', fixed: true },
   { stage: 'sky', title: '3웨이브', count: 4, weapon: 'gunship', from: 'sky', fixed: true },
   { stage: 'sky', title: '보스전', count: 1, weapon: 'flak', from: 'sky', boss: 'deathstar', fixed: true },
-  // 4스테이지 도로: 요원들이 차를 타고 뒤(왼쪽)에서 따라붙는다. 마지막 웨이브를 깨면 스토리 클리어.
+  // 4스테이지 도로: 요원들이 차를 타고 뒤(왼쪽)에서 따라붙는다. 보스는 쌍 RPG를 쏘는 윌슨 요원.
   { stage: 'road', title: '1웨이브', count: 2, weapon: 'rifle', from: 'car', end: 'road-radio' },
   { stage: 'road', title: '2웨이브', count: 3, weapon: 'random', from: 'car', end: 'hero' },
-  { stage: 'road', title: '3웨이브', count: 4, weapon: 'random', from: 'car', end: 'road-end' },
+  { stage: 'road', title: '3웨이브', count: 4, weapon: 'random', from: 'car', end: 'wilson' },
+  { stage: 'road', title: '보스전', count: 1, weapon: 'dualrpg', from: 'car', boss: 'wilson', fixed: true },
 ].map((w) => ({ ...w, count: w.agents?.length ?? w.count }));
 
 /** '복도 2웨이브' */
@@ -105,8 +108,8 @@ export function defaultStory() {
     // 하늘: 건쉽(히트박스 46), 데스스타(히트박스 130)
     { ...agent(250, 'easy'), radius: 46 }, { ...agent(300), radius: 46 }, { ...agent(350), radius: 46 },
     { ...agent(3000), radius: 130 },
-    // 도로
-    agent(300), agent(250), agent(200),
+    // 도로: 보스 윌슨 요원 체력 800
+    agent(300), agent(250), agent(200), agent(800),
   ];
   return { waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
 }
@@ -288,7 +291,7 @@ export function waveInfo(index, settings, allies = 0) {
 
 /** 웨이브에 나오는 적 이름: '요원 2명', '건쉽 3대', '스미스 요원'… extra는 AI 동료 때문에 더 나오는 쉬움 적 수 */
 export function waveWho(wave, extra = 0) {
-  const names = { smith: BOSS_NAME, r10: R10_NAME, deathstar: DEATHSTAR_NAME };
+  const names = { smith: BOSS_NAME, r10: R10_NAME, deathstar: DEATHSTAR_NAME, wilson: WILSON_NAME };
   if (wave.boss) return names[wave.boss];
   const sky = wave.stage === 'sky';
   const unit = sky ? `${GUNSHIP_NAME} ${wave.count}대` : `요원 ${wave.count}명`;
@@ -320,14 +323,15 @@ function spawnWave(match, inputs, index) {
     const kind = extra ? EXTRA_AGENT.weapon : cfg.weapons?.[i] ?? spec.weapon ?? wave.weapon;
     const weapon = kind === 'random' ? pick(story.rng, STORY_WEAPONS) : kind;
     const id = wave.boss ? 'BOSS' : `E${story.nextId++}`;
-    const smith = wave.boss === 'smith', r10 = wave.boss === 'r10';
+    const smith = wave.boss === 'smith', r10 = wave.boss === 'r10', wilson = wave.boss === 'wilson';
     const p = createPlayer({ ...ISB, id }, {
       ai: true, x, weapon,
       // 스미스 요원은 권총을 든 요원 1 그림을 크게, R-10은 드론 그림을 크게 그린다. 하늘에서는 요원 대신 건쉽·데스스타.
-      characterId: deathstar ? 'deathstar' : sky ? 'gunship' : smith ? 'isb-agent-1' : r10 ? 'r10' : pick(story.rng, AI_CHARACTERS),
-      name: deathstar ? DEATHSTAR_NAME : sky ? GUNSHIP_NAME : smith ? BOSS_NAME : r10 ? R10_NAME : undefined,
+      characterId: deathstar ? 'deathstar' : sky ? 'gunship' : smith ? 'isb-agent-1' : r10 ? 'r10' : wilson ? 'wilson'
+        : pick(story.rng, AI_CHARACTERS),
+      name: deathstar ? DEATHSTAR_NAME : sky ? GUNSHIP_NAME : smith ? BOSS_NAME : r10 ? R10_NAME : wilson ? WILSON_NAME : undefined,
       // 스미스 요원만 보조무기·수류탄을 쓴다(R-10은 레이저 캐논 전용)
-      primaryOnly: !smith, boss: !!wave.boss, scale: smith ? 1.2 : r10 ? 1.6 : undefined,
+      primaryOnly: !smith, boss: !!wave.boss, scale: smith || wilson ? 1.2 : r10 ? 1.6 : undefined,
       secondary: smith ? (cfg.secondary === 'random' ? pick(story.rng, SECONDARY_IDS) : cfg.secondary) : undefined,
       maxHp: cfg.hp, radius: cfg.radius, bulletSpeedScale: cfg.bulletSpeed / 100,
       damageScale: cfg.damage / 100, speedScale: cfg.speed / 100,
@@ -497,7 +501,7 @@ function callNext(story, next, events) {
   } else if (from === 'sky' || from === 'car') {
     events.push({ type: 'alarm', boss: !!boss });
     story.timer = 0;
-    if (from === 'car') story.banner = banner('경고!', 'ISB 추격 차량 접근!');
+    if (from === 'car') story.banner = banner('경고!', boss ? `${WILSON_NAME}의 차가 따라붙는다!` : 'ISB 추격 차량 접근!');
     if (boss) story.banner = banner('경고!', `거대 비행선 ${DEATHSTAR_NAME} 접근!`);
   } else {
     callCarrier(story, 'heli', events);
@@ -801,6 +805,7 @@ export function checkpoint(match) {
   const [hero, partner] = humanHeroes(match);
   let wave = currentWave(story);
   if (match.cutscene) {
+    if (WAVES[story.wave].boss === 'wilson') return null; // 이미 스토리를 깼다
     wave = story.wave + 1;
   } else if (match.killcam?.waveEnd || (story.phase === 'fight' && enemies(match).every((p) => !p.alive))) {
     wave = story.wave + 1;
@@ -875,6 +880,10 @@ export function startCutscene(match) {
     startDeathstarCutscene(match);
     return;
   }
+  if (WAVES[match.story.wave].boss === 'wilson') {
+    startWilsonCutscene(match);
+    return;
+  }
   const boss = match.players.find((p) => p.boss);
   const hero = heroOf(match, killerOf(match, boss)); // 2인 협동이면 보스를 쓰러뜨린 쪽이 컷씬의 주인공
   match.phase = 'cutscene';
@@ -945,6 +954,10 @@ export function updateCutscene(match, dt, events) {
   }
   if (match.cutscene.kind === 'parachute') {
     updateParachute(match, dt, events);
+    return;
+  }
+  if (match.cutscene.kind === 'wilson') {
+    updateWilsonCutscene(match, dt, events);
     return;
   }
   if (match.cutscene.kind === 'r10') {
@@ -1423,12 +1436,69 @@ function updateParachute(match, dt, events) {
   }
 }
 
+/* ───────── 윌슨 요원 엔딩 컷씬(도로 보스) ─────────
+ * 윌슨 요원을 쓰러뜨리면(건 카타 뒤): 차 지붕 위에서 비틀거리던 윌슨 요원의 차가 미끄러지며 뒤로 처지고,
+ * 빙글 돌다 갓길에 부딪혀 폭발한다. 주인공 "본부, 윌슨 요원 처리. 이번엔 진짜 임무 완료!" → 결과(지구방위팀 승리, 스토리 클리어).
+ * 시간표(초): 0~1.2 비틀거림, 1.2~3.4 미끄러지며 뒤로 처짐(회전), 3.4 충돌·연쇄 폭발, 4.4~ 주인공 대사, 7 끝.
+ */
+export const WILSON_CUTSCENE_TIME = 7;
+const WS_SKID = 1.2, WS_CRASH = 3.4, WS_LINE = 4.4;
+
+function startWilsonCutscene(match) {
+  const boss = match.players.find((p) => p.boss);
+  const hero = heroOf(match, killerOf(match, boss));
+  match.phase = 'cutscene';
+  match.projectiles = [];
+  match.jet = null;
+  match.story.banner = null;
+  match.cutscene = {
+    kind: 'wilson', t: 0, heroId: hero.id, bossId: boss.id, booms: 0,
+    hero: { x: hero.x, y: hero.y, aim: Math.atan2(boss.y - hero.y, boss.x - hero.x), lunge: 0, weapon: hero.primary },
+    car: { x: boss.x, y: boss.y, fromX: boss.x, fromY: boss.y, angle: 0, alpha: 1, scale: boss.scale },
+    caption: `${WILSON_NAME}: 크윽… 내 로켓이…!`,
+  };
+}
+
+function updateWilsonCutscene(match, dt, events) {
+  const c = match.cutscene;
+  const t = (c.t += dt);
+  const car = c.car;
+  const crashX = 220, crashY = 150; // 왼쪽 위 갓길 쪽
+  if (t < WS_SKID) {
+    car.angle = Math.sin(t * 18) * 0.06; // 비틀거림
+  } else if (t < WS_CRASH) {
+    // 미끄러지며 속도가 줄어 뒤(왼쪽)로 처지고 갓길 쪽으로 돈다
+    const k = ease(clamp01((t - WS_SKID) / (WS_CRASH - WS_SKID)));
+    car.x = car.fromX + (crashX - car.fromX) * k;
+    car.y = car.fromY + (crashY - car.fromY) * k;
+    car.angle = -k * Math.PI * 1.3;
+    c.caption = '끼이이익—!! 윌슨 요원의 차가 미끄러진다!';
+  }
+  if (t >= WS_CRASH) {
+    // 0.25초 간격으로 네 번 펑
+    while (c.booms < 4 && t >= WS_CRASH + c.booms * 0.25) {
+      const k = c.booms++;
+      events.push({ type: 'explode', x: car.x + (k % 2 ? 50 : -40), y: car.y + (k - 1.5) * 20, radius: 140 + k * 30 });
+      if (k === 0) events.push({ type: 'cover-break', x: car.x, y: car.y });
+    }
+    car.alpha = Math.max(0, 1 - (t - WS_CRASH) / 0.6);
+    c.caption = t < WS_LINE ? '콰콰쾅!!' : t < WILSON_CUTSCENE_TIME - 0.8
+      ? `주인공: 본부, ${WILSON_NAME} 처리. 이번엔 진짜 임무 완료!` : `${WILSON_NAME}을 물리쳤다! 스토리 클리어!`;
+  }
+  if (t >= WILSON_CUTSCENE_TIME) {
+    match.cutscene.done = true;
+    match.phase = 'result';
+    match.winner = 'earth';
+    events.push({ type: 'result', winner: 'earth' });
+  }
+}
+
 /* ───────── 처치 컷씬(킬캠) ─────────
  * 스토리 모드에서 요원을 쓰러뜨릴 때마다 경기가 잠깐 멈추고 카메라가 쓰러진 요원을 확대하며 마지막 한마디가 나온다.
  * 웨이브의 마지막 요원이면 웨이브마다 다른 장면(WAVES의 end)이 이어진다(보스는 엔딩 컷씬).
  *   옥상 1웨이브: 쓰러진 요원이 무전기로 본부에 지원 요청 → 헬리콥터가 오는 이유
  *   옥상 2웨이브: 카메라가 주인공에게 넘어가 한마디
- *   옥상 3웨이브: 화면이 붉어지고 스미스 요원이 무전으로 경고 → 중간보스
+ *   옥상 3웨이브: 화면이 붉어지고 스미스 요원이 무전으로 경고 → 중간보스(도로 3웨이브는 윌슨 요원이 같은 방식으로)
  *   복도 1웨이브: 요원이 무전으로 "요원들은 복도로 와라!"
  *   복도 2웨이브: 첫 요원은 "나 이제 승급인데!!!", 마지막 요원 뒤 주인공이 "에잇크."
  *   복도 3웨이브: 주인공 "이 정도냐? 들어와—" (쿠쿵!) "…이게 뭐야?" → 천장이 부서지며 R-10
@@ -1468,9 +1538,10 @@ function killcamShots(end, line) {
       return [kill,
         { until: 2.4, focus: 'victim', zoom: 2.1, caption: '(치지직…) 요원이 무전기를 꺼낸다', mode: 'radio', bubble: '치지직…' },
         { until: 4.0, focus: 'victim', zoom: 2.1, caption: '요원(무전): 추격대! 전부 따라붙어!', mode: 'radio', bubble: '따라붙어!' }];
-    case 'road-end':
+    case 'wilson':
       return [kill,
-        { until: 3.4, focus: 'hero', zoom: 1.7, caption: '주인공: 본부, ISB 추격대 전멸. 이번엔 진짜 임무 완료!', mode: 'hero' }];
+        { until: 2.4, focus: null, zoom: 1, caption: '(치지직…) 낯선 무전이 끼어든다…', mode: 'smith', portrait: 'wilson' },
+        { until: 4.4, focus: null, zoom: 1, caption: `${WILSON_NAME}(무전): 추격대가 당했나… 내 RPG 두 자루로 끝내 주지.`, mode: 'smith', portrait: 'wilson' }];
     case 'eikk':
       return [kill, { until: 3.2, focus: 'hero', zoom: 1.8, caption: '주인공: 에잇크.', mode: 'sigh' }];
     case 'rumble':
