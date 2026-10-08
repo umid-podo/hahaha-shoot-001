@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS, COVER, TICK, CHARACTERS,
+  MAX_HP, WEAPONS, COVER, TICK, CHARACTERS, TANK,
 } from '../game/config.js';
 import {
   WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel,
@@ -12,6 +12,8 @@ import {
 const INK = '#30353E';
 // 데스스타 그림 위치·크기(판정 중심 기준)
 const DS_DRAW_DY = 40, DS_DRAW_SCALE = 0.85;
+// 도로 탱크 그림 크기(위에서 본 길이·폭)
+const TANK_DRAW = { l: 230, w: 124 };
 const MAX_DPR = 2;
 const RECOIL_TIME = 0.08;
 const SPARK_TIME = 0.15;
@@ -413,9 +415,11 @@ export function createRenderer(canvas, wrap, assets) {
   }
 
   /** 엄폐물: 콘크리트 방호벽. 팀 진영 엄폐물은 윗면에 팀 색 띠를 두른다. 깎일수록 금이 늘고 위에 내구도 바를 띄운다. */
-  function drawCovers(covers) {
+  /** 엄폐물. roadTime이 있으면(4스테이지 도로) 엄폐물을 짐칸에 실은 트럭이 함께 달린다. */
+  function drawCovers(covers, roadTime = null, reducedMotion = false) {
     for (const c of covers) {
       if (c.hp <= 0) continue;
+      if (roadTime !== null) drawTruck(c, roadTime, reducedMotion);
       if (c.steel) { drawSteel(c); continue; }
       const x = c.x - c.w / 2, y = c.y - c.h / 2;
       ctx.fillStyle = 'rgba(48,53,62,0.25)';
@@ -451,6 +455,30 @@ export function createRenderer(canvas, wrap, assets) {
       }
       if (c.hp < COVER.hp) drawHpBar(ctx, x + 10, y - 14, c.w - 20, 8, c.hp, COVER.hp);
     }
+  }
+
+  /** 도로의 엄폐물을 실은 평판 트럭(위에서 봄, 오른쪽으로 달림): 짐칸이 엄폐물보다 조금 크고 오른쪽에 운전석 */
+  function drawTruck(c, time, reducedMotion) {
+    const bed = { w: c.w + 40, h: Math.max(c.h + 40, 88) };
+    const x = c.x - bed.w / 2, y = c.y - bed.h / 2 + (reducedMotion ? 0 : Math.sin(time * 9 + c.x) * 1.2);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.roundRect(x + 6, y + 10, bed.w + 70, bed.h, 10); ctx.fill();
+    ctx.fillStyle = '#0D0F14';
+    for (const wx of [x + 26, x + bed.w - 30, x + bed.w + 40]) for (const side of [0, 1]) ctx.fillRect(wx - 16, y - 6 + side * (bed.h), 32, 12);
+    ctx.fillStyle = '#4A4F5A';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(x, y, bed.w, bed.h, 6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#B8862E';
+    ctx.beginPath(); ctx.roundRect(x + bed.w + 4, y + 4, 62, bed.h - 8, 14); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(120,170,230,0.6)';
+    ctx.fillRect(x + bed.w + 46, y + 12, 12, bed.h - 24);
+    ctx.fillStyle = '#FFF7D6';
+    ctx.fillRect(x + bed.w + 62, y + 12, 4, 10);
+    ctx.fillRect(x + bed.w + 62, y + bed.h - 22, 4, 10);
+    ctx.fillStyle = '#FF3B30';
+    ctx.fillRect(x - 3, y + 8, 4, 12);
+    ctx.fillRect(x - 3, y + bed.h - 20, 4, 12);
   }
 
   /** 강철 엄폐물: 파란빛 도는 금속판 + 리벳 + 팀 색 띠. 금·내구도 바 없음. */
@@ -537,6 +565,12 @@ export function createRenderer(canvas, wrap, assets) {
     const e = p.entering;
     if (e.t < 0) return;
     const k = Math.min(1, e.t / e.duration);
+    if (e.kind === 'drive') {
+      // 도로: 요원을 태운 차가 뒤에서 달려온다
+      drawCar(p.x, p.y, p.team, time, reducedMotion);
+      drawPlayer(p, { moveAxis: 0, aiming: false }, time, reducedMotion);
+      return;
+    }
     if (e.kind === 'walk') {
       ctx.save();
       ctx.globalAlpha = Math.min(1, 0.3 + k * 2);
@@ -848,7 +882,96 @@ export function createRenderer(canvas, wrap, assets) {
         ctx.beginPath(); ctx.ellipse(x + dx * k, y + dy * k, r * k * 1.5, r * k, 0, 0, Math.PI * 2); ctx.fill();
       }
     }
-    // 비: 비스듬히 빠르게 떨어지는 빗줄기
+    drawRain(time, reducedMotion);
+  }
+
+  /*
+   * 4스테이지 도로 배경: 비 내리는 밤, 도시의 넓은 도로를 위에서 내려다본다. 모두 오른쪽으로 달리고 있으니
+   * 차선 점선·가로등 불빛·젖은 노면의 반사가 계속 왼쪽으로 흘러간다. 위아래 끝은 갓길 난간과 건물 지붕.
+   * 차선 경계(LANES)는 요원(위)·엄폐물 트럭·탱크·주인공(아래)이 각자 차선 하나씩 쓰게 나눴다.
+   */
+  const ROAD_SPEED = 900;     // 노면이 흘러가는 속도(초당)
+  const ROAD_EDGE = 26;       // 위아래 갓길 두께
+  const LANES = [180, 320, 440, 560, 680, 820];
+  const CAR = { l: 150, w: 84 };
+
+  function drawRoadBackground(time, reducedMotion) {
+    const t = reducedMotion ? 0 : time;
+    const asphalt = ctx.createLinearGradient(0, 0, 0, ARENA_HEIGHT);
+    asphalt.addColorStop(0, '#161A24');
+    asphalt.addColorStop(0.5, '#1E2330');
+    asphalt.addColorStop(1, '#161A24');
+    ctx.fillStyle = asphalt;
+    ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    const scroll = (t * ROAD_SPEED) % 2000;
+    // 젖은 노면에 비친 가로등 불빛(길게 번진 주황 빛)
+    for (let i = 0; i < 6; i++) {
+      for (const top of [true, false]) {
+        const x = ((i * 400 + (top ? 0 : 200) - scroll) % 2400 + 2400) % 2400 - 400;
+        const y = top ? ROAD_EDGE + 40 : ARENA_HEIGHT - ROAD_EDGE - 40;
+        const glow = ctx.createRadialGradient(x, y, 0, x, y, 170);
+        glow.addColorStop(0, 'rgba(255,190,100,0.22)');
+        glow.addColorStop(1, 'rgba(255,190,100,0)');
+        ctx.fillStyle = glow;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(1.8, 1);
+        ctx.translate(-x, -y);
+        ctx.fillRect(x - 170, y - 170, 340, 340);
+        ctx.restore();
+      }
+    }
+    // 네온 간판 반사(분홍·하늘색 번짐)
+    for (let i = 0; i < 4; i++) {
+      const x = ((i * 530 + 260 - scroll * 0.9) % 2120 + 2120) % 2120 - 260;
+      const y = i % 2 ? 150 : ARENA_HEIGHT - 150;
+      ctx.fillStyle = i % 2 ? 'rgba(255,70,170,0.07)' : 'rgba(70,230,255,0.07)';
+      ctx.beginPath(); ctx.ellipse(x, y, 160, 46, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // 차선: 흰 점선이 왼쪽으로 흐른다(가운데 두 줄은 노란 중앙선 대신 굵은 흰 선)
+    for (const [i, y] of LANES.entries()) {
+      ctx.fillStyle = i === 2 || i === 3 ? 'rgba(255,214,110,0.55)' : 'rgba(235,240,250,0.55)';
+      const dash = 90, gap = 70, period = dash + gap;
+      const off = scroll % period;
+      for (let x = -off; x < ARENA_WIDTH; x += period) ctx.fillRect(x, y - 3, dash, 6);
+    }
+    // 갓길: 위아래 난간과 그 너머 건물 지붕(어둡게), 난간 기둥이 흐른다
+    for (const top of [true, false]) {
+      const y0 = top ? 0 : ARENA_HEIGHT - ROAD_EDGE;
+      ctx.fillStyle = '#0B0F1A';
+      ctx.fillRect(0, y0, ARENA_WIDTH, ROAD_EDGE);
+      const railY = top ? ROAD_EDGE - 4 : ARENA_HEIGHT - ROAD_EDGE + 2;
+      ctx.fillStyle = '#8A93A3';
+      ctx.fillRect(0, railY, ARENA_WIDTH, 3);
+      ctx.fillStyle = '#5E6672';
+      const off = (t * ROAD_SPEED) % 60;
+      for (let x = -off; x < ARENA_WIDTH; x += 60) ctx.fillRect(x, top ? railY - 6 : railY, 4, 9);
+      // 지붕 창문 불빛
+      for (let i = 0; i < 30; i++) {
+        const x = ((i * 97 - t * ROAD_SPEED * 0.97) % ARENA_WIDTH + ARENA_WIDTH) % ARENA_WIDTH;
+        if ((i * 7) % 3 === 0) continue;
+        ctx.fillStyle = i % 4 ? 'rgba(255,214,120,0.7)' : 'rgba(160,220,255,0.7)';
+        ctx.fillRect(x, y0 + (top ? 5 : 10), 6, 6);
+      }
+    }
+    // 바람에 날리는 물보라·속도선
+    if (!reducedMotion) {
+      ctx.strokeStyle = 'rgba(200,215,240,0.12)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < 24; i++) {
+        const y = 40 + ((i * 211) % (ARENA_HEIGHT - 80));
+        const x = ((i * 389 - time * ROAD_SPEED * 1.6) % (ARENA_WIDTH + 300) + ARENA_WIDTH + 300) % (ARENA_WIDTH + 300) - 150;
+        ctx.moveTo(x, y); ctx.lineTo(x + 120, y);
+      }
+      ctx.stroke();
+    }
+    drawRain(time, reducedMotion, true);
+  }
+
+  /** 비: 비스듬히 빠르게 떨어지는 빗줄기(도로에서는 바닥에 튀는 물방울도). 번개가 가끔 번쩍인다. */
+  function drawRain(time, reducedMotion, splash = false) {
+    const t = reducedMotion ? 0 : time;
     ctx.strokeStyle = 'rgba(170,195,255,0.35)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -860,7 +983,18 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.lineTo(x - 7, y + 34);
     }
     ctx.stroke();
-    // 번개: 몇 초마다 두 번 번쩍
+    if (splash && !reducedMotion) {
+      ctx.strokeStyle = 'rgba(190,210,255,0.4)';
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 40; i++) {
+        const k = (time * 2.3 + i * 0.37) % 1;
+        const x = (i * 271 + Math.floor(time * 2.3 + i * 0.37) * 577) % ARENA_WIDTH;
+        const y = (i * 523 + Math.floor(time * 2.3 + i * 0.37) * 311) % ARENA_HEIGHT;
+        ctx.globalAlpha = 1 - k;
+        ctx.beginPath(); ctx.ellipse(x, y, 4 + k * 12, 2 + k * 5, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
     if (!reducedMotion) {
       const p = time % 7.3;
       const flash = p < 0.08 ? 0.45 : p > 0.18 && p < 0.26 ? 0.3 : 0;
@@ -868,6 +1002,195 @@ export function createRenderer(canvas, wrap, assets) {
         ctx.fillStyle = `rgba(220,230,255,${flash})`;
         ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
       }
+    }
+  }
+
+  /**
+   * 위에서 본 달리는 자동차(오른쪽으로 달림). 지구방위팀은 파란 스포츠카, ISB는 검은 세단에 주황 줄.
+   * 앞(오른쪽)으로 전조등 빛, 뒤(왼쪽)로 붉은 미등과 물보라. (x, y)는 지붕 가운데(그 위에 캐릭터가 선다).
+   */
+  function drawCar(x, y, team, time, reducedMotion, alpha = 1) {
+    const { l, w } = CAR;
+    const bob = reducedMotion ? 0 : Math.sin(time * 11 + x * 0.05) * 1.5;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y + 10 + bob);
+    // 전조등 빛
+    const beam = ctx.createLinearGradient(l / 2, 0, l / 2 + 260, 0);
+    beam.addColorStop(0, 'rgba(255,248,210,0.35)');
+    beam.addColorStop(1, 'rgba(255,248,210,0)');
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(l / 2, -w / 2 + 10); ctx.lineTo(l / 2 + 260, -w / 2 - 40); ctx.lineTo(l / 2 + 260, w / 2 + 40); ctx.lineTo(l / 2, w / 2 - 10);
+    ctx.closePath(); ctx.fill();
+    // 뒤로 튀는 물보라
+    if (!reducedMotion) {
+      ctx.fillStyle = 'rgba(200,215,240,0.18)';
+      for (const side of [-1, 1]) {
+        ctx.beginPath(); ctx.ellipse(-l / 2 - 26 - Math.random() * 10, side * (w / 2 - 6), 36, 10, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // 그림자·바퀴
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.roundRect(-l / 2 + 6, -w / 2 + 10, l, w, 22); ctx.fill();
+    ctx.fillStyle = '#0D0F14';
+    for (const wx of [-l / 2 + 34, l / 2 - 40]) for (const side of [-1, 1]) ctx.fillRect(wx - 18, side * w / 2 - 7, 36, 14);
+    // 차체
+    const body = team === 'earth' ? ['#2E7BE0', '#1B4F99'] : ['#2A2D35', '#15171C'];
+    const grad = ctx.createLinearGradient(0, -w / 2, 0, w / 2);
+    grad.addColorStop(0, body[0]);
+    grad.addColorStop(0.5, body[1]);
+    grad.addColorStop(1, body[0]);
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(-l / 2, -w / 2, l, w, 26); ctx.fill(); ctx.stroke();
+    // 줄무늬(팀 색)
+    ctx.fillStyle = team === 'earth' ? 'rgba(255,255,255,0.75)' : TEAM_COLOR.isb;
+    ctx.fillRect(-l / 2 + 8, -6, l - 16, 5);
+    ctx.fillRect(-l / 2 + 8, 3, l - 16, 5);
+    // 앞뒤 유리(지붕은 가운데)
+    ctx.fillStyle = 'rgba(120,170,230,0.55)';
+    ctx.beginPath(); ctx.roundRect(l / 2 - 62, -w / 2 + 12, 26, w - 24, 8); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(-l / 2 + 26, -w / 2 + 14, 20, w - 28, 8); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-l / 2 + 50, -w / 2 + 10, l - 116, w - 20, 10); ctx.stroke();
+    // 전조등·미등
+    ctx.fillStyle = '#FFF7D6';
+    for (const side of [-1, 1]) { ctx.beginPath(); ctx.ellipse(l / 2 - 6, side * (w / 2 - 14), 5, 9, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#FF3B30';
+    for (const side of [-1, 1]) ctx.fillRect(-l / 2 + 1, side * (w / 2 - 14) - 8, 5, 16);
+    // 경찰 경광등처럼 ISB 차 지붕엔 주황 경광등
+    if (team === 'isb') {
+      const on = reducedMotion ? 1 : (Math.floor(time * 6) % 2);
+      ctx.fillStyle = on ? '#FF9D3F' : '#7A3A12';
+      ctx.fillRect(-14, -w / 2 + 4, 28, 8);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 위에서 본 탱크(도로에서 전투기 대신). 무한궤도 두 줄, 몸체, 가운데 포탑에 위·아래로 뻗은 포신 두 개
+   * (위아래 양쪽으로 포탄을 쏜다). 막 쐈을 때는 포구에 불꽃.
+   */
+  function drawTank(jet, time, reducedMotion) {
+    const len = TANK_DRAW.l, w = TANK_DRAW.w;
+    const flash = jet.fireTimer > TANK.missile.interval - 0.12;
+    ctx.save();
+    ctx.translate(jet.x, jet.y);
+    ctx.scale(jet.dir, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.roundRect(-len / 2 + 8, -w / 2 + 12, len, w, 14); ctx.fill();
+    // 무한궤도(움직이는 마디)
+    const tread = reducedMotion ? 0 : (time * 140) % 16;
+    for (const side of [-1, 1]) {
+      const ty = side > 0 ? w / 2 - 22 : -w / 2;
+      ctx.fillStyle = '#1C1F18';
+      ctx.fillRect(-len / 2, ty, len, 22);
+      ctx.fillStyle = '#3A3F33';
+      for (let x = -len / 2 + tread; x < len / 2; x += 16) ctx.fillRect(x, ty + 2, 6, 18);
+    }
+    // 몸체
+    ctx.fillStyle = '#56663F';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(-len / 2 + 14, -w / 2 + 16, len - 28, w - 32, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#6E7F50';
+    ctx.fillRect(len / 2 - 60, -w / 2 + 22, 34, w - 44);
+    ctx.fillStyle = '#FFF7D6';
+    for (const side of [-1, 1]) ctx.fillRect(len / 2 - 18, side * (w / 2 - 30) - 4, 6, 8);
+    ctx.fillStyle = '#C0392B';
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ISB', -len / 2 + 50, 0);
+    // 포신 두 개(위·아래)와 포탑
+    for (const side of [-1, 1]) {
+      ctx.fillStyle = '#3F4A2D';
+      ctx.fillRect(-7, side > 0 ? 20 : -20 - 70, 14, 70);
+      ctx.fillStyle = '#2A3120';
+      ctx.fillRect(-9, side > 0 ? 82 : -92, 18, 10);
+      if (flash) {
+        ctx.fillStyle = '#FFD45E';
+        ctx.beginPath(); ctx.arc(0, side * 104, 16, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#FF9D3F';
+        ctx.beginPath(); ctx.arc(0, side * 104, 9, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.fillStyle = '#4B5A36';
+    ctx.strokeStyle = INK;
+    ctx.beginPath(); ctx.arc(0, 0, 38, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#3A4529';
+    ctx.beginPath(); ctx.arc(10, -6, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * 낙하산: 캐릭터(x, y) 위로 펼쳐진 붉은·흰 줄무늬 덮개와 줄. open(0~1)만큼 펼쳐지고, s는 크기 배율.
+   */
+  function drawChute(x, y, s, open, alpha = 1) {
+    if (open <= 0.01) return;
+    const cw = 150 * s * (0.3 + 0.7 * open), ch = 70 * s * open, cy = y - 120 * s;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = 'rgba(230,235,245,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const k of [-1, -0.5, 0.5, 1]) { ctx.moveTo(x + k * cw / 2, cy); ctx.lineTo(x + k * 10 * s, y - 20 * s); }
+    ctx.stroke();
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(x, cy, cw / 2, ch, 0, Math.PI, 0);
+    ctx.closePath();
+    ctx.clip();
+    const n = 6;
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = i % 2 ? '#F4F1E8' : '#D9443A';
+      ctx.fillRect(x - cw / 2 + (cw / n) * i, cy - ch, cw / n + 1, ch + 2);
+    }
+    ctx.restore();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(x, cy, cw / 2, ch, 0, Math.PI, 0);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * 낙하산 컷씬: 하늘에서는 라이트닝에서 뛰어내린 주인공이 작아지며(떨어지며) 낙하산을 펴고, 라이트닝은 위로 날아간다.
+   * 도로로 바뀐 뒤에는 각자의 차가 달리고, 주인공이 낙하산을 타고 내려와 지붕에 내려앉으면 낙하산이 접히며 뒤로 날아간다.
+   */
+  function drawParachuteCutscene(match, cut, time, reducedMotion) {
+    for (const h of cut.heroes) {
+      const p = match.players.find((q) => q.id === h.id);
+      if (!p) continue;
+      const pose = (x, y, scale) => ({
+        ...p, plane: false, alive: true, hurt: 0, x, y, scale, aim: -Math.PI / 2,
+        weapon: p.ground?.primary ?? p.primary, primaryOnly: true,
+      });
+      if (!cut.switched) {
+        if (h.planeAlpha > 0.01) {
+          ctx.save();
+          ctx.globalAlpha = h.planeAlpha;
+          drawLightning(h.planeX, h.planeY, 0, 0.95, time, reducedMotion);
+          ctx.restore();
+        }
+        if (!h.jumped) continue;
+        drawChute(h.x, h.y, h.scale, h.chute);
+        drawPlayer(pose(h.x, h.y, (p.ground?.scale ?? 1) * h.scale), { moveAxis: 0, aiming: false }, time, reducedMotion);
+        continue;
+      }
+      drawCar(h.toX, RAIL_Y.earth, 'earth', time, reducedMotion);
+      if (h.landed) {
+        // 접히며 뒤로 날아가는 낙하산
+        drawChute(h.x - (1 - h.chute) * 260, h.y - (1 - h.chute) * 40, 1, h.chute, h.chute);
+      } else {
+        drawChute(h.x, h.y, 1, h.chute);
+      }
+      drawPlayer(pose(h.x, h.y, p.scale), { moveAxis: 0, aiming: false }, time, reducedMotion);
     }
   }
 
@@ -1484,6 +1807,70 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillRect(0, KATA_FLOOR + 121, ARENA_WIDTH, 5);
   }
 
+  /** 건 카타 배경(4스테이지 도로): 비 내리는 밤, 옆으로 흘러가는 도시. 둘은 달리는 트레일러 지붕 위에서 맞선다. */
+  function drawKataRoad(time, reducedMotion) {
+    const t = reducedMotion ? 0 : time;
+    const sky = ctx.createLinearGradient(0, 0, 0, KATA_FLOOR);
+    sky.addColorStop(0, '#070A18');
+    sky.addColorStop(1, '#1D2140');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    // 먼 도시: 왼쪽으로 흘러간다(가로로 이어 붙임)
+    const span = ARENA_WIDTH + 200;
+    const off = (t * 260) % span;
+    for (const shift of [0, span]) {
+      for (const b of KATA_CITY) {
+        const x = b.x - off + shift;
+        if (x > ARENA_WIDTH || x + b.w < 0) continue;
+        const top = KATA_FLOOR - 120 - b.h;
+        ctx.fillStyle = '#121630';
+        ctx.fillRect(x, top, b.w, b.h + 120);
+        for (let wy = top + 18; wy < KATA_FLOOR - 130; wy += 34) {
+          for (let wx = 12; wx < b.w - 14; wx += 24) {
+            if (((wx * 3 + wy * 7 + b.lit) % 5) >= 2) continue;
+            ctx.fillStyle = 'rgba(255,214,110,0.5)';
+            ctx.fillRect(x + wx, wy, 10, 14);
+          }
+        }
+      }
+    }
+    // 가로등이 빠르게 지나간다
+    for (let i = 0; i < 4; i++) {
+      const x = ((i * 520 - t * 1100) % 2080 + 2080) % 2080 - 240;
+      ctx.fillStyle = '#3A3F4D';
+      ctx.fillRect(x, 260, 10, KATA_FLOOR - 260);
+      ctx.fillRect(x, 260, 70, 8);
+      const glow = ctx.createRadialGradient(x + 66, 270, 0, x + 66, 270, 120);
+      glow.addColorStop(0, 'rgba(255,200,110,0.45)');
+      glow.addColorStop(1, 'rgba(255,200,110,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(x - 60, 150, 250, 240);
+    }
+    // 트레일러 지붕(발판)과 그 아래 젖은 도로·바퀴
+    ctx.fillStyle = '#15181F';
+    ctx.fillRect(0, KATA_FLOOR, ARENA_WIDTH, ARENA_HEIGHT - KATA_FLOOR);
+    const roof = ctx.createLinearGradient(0, KATA_FLOOR, 0, KATA_FLOOR + 60);
+    roof.addColorStop(0, '#A9B0BC');
+    roof.addColorStop(1, '#5E6672');
+    ctx.fillStyle = roof;
+    ctx.fillRect(0, KATA_FLOOR, ARENA_WIDTH, 60);
+    ctx.fillStyle = '#2E7BE0';
+    ctx.fillRect(0, KATA_FLOOR + 60, ARENA_WIDTH, 70);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillRect(0, KATA_FLOOR + 90, ARENA_WIDTH, 6);
+    const spin = (t * 20) % (Math.PI * 2);
+    for (const wx of [220, 420, 1180, 1380]) {
+      ctx.fillStyle = '#0D0F14';
+      ctx.beginPath(); ctx.arc(wx, KATA_FLOOR + 150, 42, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#5E6672';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(wx + Math.cos(spin) * 30, KATA_FLOOR + 150 + Math.sin(spin) * 30); ctx.lineTo(wx - Math.cos(spin) * 30, KATA_FLOOR + 150 - Math.sin(spin) * 30); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(235,240,250,0.5)';
+    for (let x = -((t * 1100) % 200); x < ARENA_WIDTH; x += 200) ctx.fillRect(x, ARENA_HEIGHT - 12, 110, 6);
+    drawRain(time, reducedMotion);
+  }
+
   function drawKataBackground(time, reducedMotion) {
     const sky = ctx.createLinearGradient(0, 0, 0, KATA_FLOOR);
     sky.addColorStop(0, '#0B1030');
@@ -1780,8 +2167,9 @@ export function createRenderer(canvas, wrap, assets) {
 
   function drawGunKata(match, time, reducedMotion) {
     const k = match.gunkata;
-    // 옥상(1스테이지)은 밤의 옥상 끝, 복도(2스테이지)는 본부 복도
+    // 옥상(1스테이지)은 밤의 옥상 끝, 복도(2스테이지)는 본부 복도, 도로(4스테이지)는 달리는 트레일러 지붕
     if (match.story?.stage === 'corridor') drawKataCorridor(time, reducedMotion);
+    else if (match.story?.stage === 'road') drawKataRoad(time, reducedMotion);
     else drawKataBackground(time, reducedMotion);
     drawKataActors(match, k, time, reducedMotion);
     drawKataPrompt(k, time, reducedMotion);
@@ -1843,9 +2231,10 @@ export function createRenderer(canvas, wrap, assets) {
       // 천장이 울리는 장면(쿠쿵!): 화면이 흔들린다
       if (killcam?.shot.mode === 'rumble' && !reducedMotion) ctx.translate(Math.sin(time * 70) * 12, Math.cos(time * 53) * 9);
       const story = match.story;
-      // 스토리 모드 2스테이지는 복도, 3스테이지는 하늘 배경. 라이트닝 컷씬에서 옥상으로 올라가면 옥상 배경.
+      // 스토리 모드 2스테이지는 복도, 3스테이지는 하늘, 4스테이지는 비 내리는 밤의 도로 배경. 라이트닝 컷씬에서 옥상으로 올라가면 옥상 배경.
       const roofScene = match.cutscene?.kind === 'lightning' && match.cutscene.scene === 'roof' && story.stage !== 'sky';
       if (story?.stage === 'sky') drawSkyBackground(time, reducedMotion);
+      else if (story?.stage === 'road') drawRoadBackground(time, reducedMotion);
       else ctx.drawImage((story?.stage === 'corridor' && !roofScene ? assets.corridor : assets.arena).img, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
       if (story?.elevator && !roofScene) drawElevator(story.elevator);
       if (story?.turrets && !roofScene) for (const t of story.turrets) drawTurret(t, story, time, reducedMotion);
@@ -1863,7 +2252,7 @@ export function createRenderer(canvas, wrap, assets) {
       }
       ctx.globalAlpha = 1;
 
-      drawCovers(match.covers);
+      drawCovers(match.covers, story?.stage === 'road' ? time : null, reducedMotion);
 
       const paused = match.phase === 'paused';
       const cut = match.cutscene;
@@ -1872,6 +2261,10 @@ export function createRenderer(canvas, wrap, assets) {
         if (p.entering) continue; // 줄 타고 내려오는 요원은 헬리콥터 위에 그린다
         // 라이트닝 컷씬: 하늘로 바뀌기 전에는 주인공·라이트닝을 컷씬이 따로 그린다(동료는 안 보임)
         if (cut?.kind === 'lightning' && !cut.switched && p.team === 'earth') continue;
+        // 낙하산 컷씬: 지구방위팀(라이트닝·낙하산·차)은 컷씬이 따로 그린다
+        if (cut?.kind === 'parachute' && p.team === 'earth') continue;
+        // 4스테이지 도로: 모두 달리는 차 지붕 위에 선다
+        if (story?.stage === 'road') drawCar(p.x, p.y, p.team, time, reducedMotion, p.alive ? 1 : 0.7);
         // 데스스타 엔딩: 데스스타와 컷씬 주인공의 라이트닝은 따로 그린다
         if (cut?.kind === 'deathstar' && (p.id === cut.bossId || p.id === cut.heroId)) continue;
         if (cut?.kind === 'stairs' && p.team === 'earth') {
@@ -1979,7 +2372,7 @@ export function createRenderer(canvas, wrap, assets) {
           ctx.restore();
           continue;
         }
-        if (b.weapon === 'turret') {
+        if (b.weapon === 'turret' || b.weapon === 'tank') {
           // 복도 포탑 포탄: 검은 쇳덩이 + 노란 불꽃 꼬리
           ctx.save();
           ctx.translate(b.x, b.y);
@@ -2013,8 +2406,10 @@ export function createRenderer(canvas, wrap, assets) {
         ctx.restore();
       }
 
-      if (match.jet) drawJet(match.jet);
-      if (cut?.kind === 'r10') drawR10Cutscene(match, cut, time, reducedMotion);
+      if (match.jet?.kind === 'tank') drawTank(match.jet, time, reducedMotion);
+      else if (match.jet) drawJet(match.jet);
+      if (cut?.kind === 'parachute') drawParachuteCutscene(match, cut, time, reducedMotion);
+      else if (cut?.kind === 'r10') drawR10Cutscene(match, cut, time, reducedMotion);
       else if (cut?.kind === 'smith') drawCutsceneActors(match, cut, time, reducedMotion);
       else if (cut?.kind === 'lightning' && !cut.switched) drawLightningCutscene(match, cut, inputs, time, reducedMotion);
       else if (cut?.kind === 'deathstar') {
@@ -2114,7 +2509,7 @@ export function createRenderer(canvas, wrap, assets) {
         drawKillcamOverlay(killcam, time, reducedMotion);
       } else if (cut) {
         // 계단 컷씬: 스테이지가 바뀌는 동안 화면이 어두워졌다 밝아진다
-        if ((cut.kind === 'stairs' || cut.kind === 'lightning') && cut.fade > 0) {
+        if ((cut.kind === 'stairs' || cut.kind === 'lightning' || cut.kind === 'parachute') && cut.fade > 0) {
           ctx.fillStyle = `rgba(0,0,0,${cut.fade})`;
           ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
         }

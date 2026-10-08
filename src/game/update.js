@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, BULLET_RADIUS,
-  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, COVER,
+  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
@@ -77,49 +77,59 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
   return projectile;
 }
 
+/** 지금 경기의 전투기 설정: 스토리 4스테이지(도로)는 탱크(TANK), 그 밖에는 전투기(JET) */
+const jetConfig = (match) => (match.story?.stage === 'road' ? TANK : JET);
+
 /**
- * 전투기 미사일: 위(ISB 쪽)·아래(지구방위 쪽)로 똑바로 한 발씩. 팀이 'jet'이라 양 팀 모두 맞고,
- * overCovers는 엄폐물을 넘어간다는 뜻이다.
+ * 전투기 미사일(탱크 포탄): 위(ISB 쪽)·아래(지구방위 쪽)로 똑바로 한 발씩. 팀이 'jet'이라 양 팀 모두 맞고,
+ * overCovers는 엄폐물을 넘어간다는 뜻이다. 탱크는 쏜 쪽·무기가 'tank'(결과 화면에 '탱크')다.
  */
 function fireJet(match, jet, events) {
-  const { missile } = JET;
+  const tank = jet.kind === 'tank';
+  const { missile } = tank ? TANK : JET;
+  const source = tank ? 'tank' : 'jet';
   for (const [dy, targetTeam] of [[-1, 'isb'], [1, 'earth']]) {
     const y = jet.y + dy * missile.offset;
     match.projectiles.push({
-      id: match.nextProjectileId++, ownerId: 'jet', team: 'jet', weapon: 'jet',
+      id: match.nextProjectileId++, ownerId: source, team: 'jet', weapon: source,
       x: jet.x, y, previousX: jet.x, previousY: y,
       vx: 0, vy: dy * missile.speed,
       life: RULES.bulletLife, damage: missile.damage, connected: false,
       splash: missile.splash, endY: RAIL_Y[targetTeam], overCovers: true,
     });
   }
-  events.push({ type: 'jet-fire', x: jet.x, y: jet.y });
+  events.push({ type: tank ? 'tank-fire' : 'jet-fire', x: jet.x, y: jet.y });
 }
 
-/** 전투기를 움직이고 화면 안에서는 주기적으로 쏜다. 화면을 벗어나면 다음 등장까지 무작위로 기다린다. */
+/**
+ * 전투기(도로에서는 탱크)를 움직이고 화면 안에서는 주기적으로 쏜다. 화면을 벗어나면 다음 등장까지 무작위로 기다린다.
+ * 탱크는 도로 가운데 차선을 달리며(kind 'tank'), 포탑을 쏠 쪽으로 돌린다.
+ */
 function updateJet(match, dt, events) {
   const { jet } = match;
   if (jet) {
+    const cfg = jet.kind === 'tank' ? TANK : JET;
     jet.previousX = jet.x;
-    jet.x += jet.dir * JET.speed * dt;
-    const edge = JET.length / 2 + OUT_MARGIN;
+    jet.x += jet.dir * cfg.speed * dt;
+    const edge = cfg.length / 2 + OUT_MARGIN;
     if (jet.x < -edge || jet.x > ARENA_WIDTH + edge) {
       match.jet = null;
-      match.jetTimer = between(match.rng, JET.delay);
+      match.jetTimer = between(match.rng, cfg.delay);
       return;
     }
     jet.fireTimer -= dt;
     if (jet.fireTimer <= 0) {
-      jet.fireTimer += JET.missile.interval;
+      jet.fireTimer += cfg.missile.interval;
       if (jet.x >= 0 && jet.x <= ARENA_WIDTH) fireJet(match, jet, events);
     }
     return;
   }
   match.jetTimer -= dt;
   if (match.jetTimer > 0) return;
+  const cfg = jetConfig(match);
   const dir = match.rng() < 0.5 ? 1 : -1;
-  const x = dir > 0 ? -JET.length / 2 : ARENA_WIDTH + JET.length / 2;
-  match.jet = { x, previousX: x, y: JET.y, dir, fireTimer: JET.missile.interval };
+  const x = dir > 0 ? -cfg.length / 2 : ARENA_WIDTH + cfg.length / 2;
+  match.jet = { x, previousX: x, y: cfg.y, dir, fireTimer: cfg.missile.interval, ...(cfg === TANK ? { kind: 'tank' } : {}) };
 }
 
 /** 유도탄: 가장 가까운 살아있는 적 쪽으로 turnRate 한도 안에서 꺾는다. 속력은 그대로. */

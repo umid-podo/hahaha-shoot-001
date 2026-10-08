@@ -17,6 +17,7 @@ function el(tag, className, text) {
 const FROM = {
   start: '처음부터 옥상에', heli: '헬리콥터에서 내려옴', gunship: '전투기가 헬리콥터를 격추한 뒤 건쉽에서 내려옴',
   elevator: '엘리베이터에서 나옴', ceiling: '천장을 부수고 나타남', sky: '하늘 위에서 날아옴',
+  car: '차를 타고 뒤에서 따라붙음',
 };
 const DIFFICULTY_NAME = Object.fromEntries(DIFFICULTY_IDS.map((id) => [id, DIFFICULTY[id].name]));
 
