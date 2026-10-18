@@ -1,4 +1,4 @@
-import { BOSS_NAME, R10_NAME, WILSON_NAME, startCutscene, startKillcam } from './story.js';
+import { BOSS_NAME, R10_NAME, WILSON_NAME, JOHNSON_NAME, startCutscene, startKillcam } from './story.js';
 import { createRng } from './state.js';
 import { TICK } from './config.js';
 
@@ -7,7 +7,7 @@ import { TICK } from './config.js';
  * 화면이 옆에서 본 시점으로 바뀌어 주인공(왼쪽)과 쓰러뜨린 적(오른쪽)이 마주 보고, 조작은 1·2·3·4 버튼만 남는다.
  * 적이 무작위로 공격하는데, 공격하기 WARN_TIME(0.5초) 전부터 눌러야 할 버튼이 빛난다.
  * 빛나는 동안 맞는 버튼을 누르면 대응(주인공의 반격), 못 누르거나 다른 버튼을 누르면 체력 DAMAGE(100)가 깎인다.
- * 일반 요원은 GOAL.agent(3)번, 보스(스미스 요원·R-10)는 GOAL.boss(10)번 대응하면 끝나고 원래 장면으로 이어진다:
+ * 일반 요원은 GOAL.agent(3)번(대교 2웨이브의 보통 요원처럼 foe.kataGoal이 있으면 그 횟수), 보스는 GOAL.boss(10)번 대응하면 끝나고 원래 장면으로 이어진다:
  *   일반 요원 → 처치 컷씬(킬캠: 마지막 한마디·웨이브 마무리 장면), 스미스 요원 → 엔딩 컷씬(발차기), R-10 → RPG 엔딩 컷씬.
  * 공격(요원·스미스 요원 / R-10):
  *   1 점프 사격 / 상공 레이저 → 몸을 숙여 피하며 위의 적을 쏴 떨어뜨림
@@ -59,6 +59,8 @@ function introLine(foe) {
   if (foe.characterId === 'r10') return `${R10_NAME}: 삐빅! 근접 전투 모드 가동!`;
   if (foe.name === BOSS_NAME) return `${BOSS_NAME}: 총알로는 안 끝난다… 건 카타로 붙자!`;
   if (foe.name === WILSON_NAME) return `${WILSON_NAME}: 로켓이 떨어졌군… 맨손으로 상대해 주마!`;
+  if (foe.name === JOHNSON_NAME) return `${JOHNSON_NAME}: 이 거리라면… 저격총은 필요 없지.`;
+  if (foe.kataGoal) return `${foeName(foe)}: 난 보통 요원이다! 그렇게 쉽게는 안 쓰러져!`;
   return `${foeName(foe)}: 아직 안 끝났어! 덤벼라!`;
 }
 
@@ -78,7 +80,7 @@ export function startGunKata(match, foe, after, events = [], seed = match.tick) 
   if (match.story) { match.story.banner = null; match.story.carrier = null; }
   match.gunkata = {
     t: 0, heroId: hero.id, foeId: foe.id, boss: !!foe.boss, drone: foe.characterId === 'r10',
-    goal: GOAL[size], intro: INTRO_TIME[size], outro: OUTRO_TIME[size], after,
+    goal: foe.kataGoal ?? GOAL[size], intro: INTRO_TIME[size], outro: OUTRO_TIME[size], after,
     done: 0, misses: 0, attack: null, last: [], gap: INTRO_TIME[size],
     rng: createRng(((seed * 2654435761) >>> 0) ^ (0x6a7a + foe.id.length * 977 + match.nextProjectileId)),
     finish: null, takeover: null, caption: introLine(foe),

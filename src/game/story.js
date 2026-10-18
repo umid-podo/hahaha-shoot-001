@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS, CHARACTERS,
-  MAX_SPEED as MAX_SPEED_BASE, SKY, TANK, WEAPONS,
+  MAX_SPEED as MAX_SPEED_BASE, SKY, TANK, SHIP, DRIVE, RULES, WEAPONS,
 } from './config.js';
 import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers, between } from './state.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
@@ -16,7 +16,11 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
  * 3스테이지 하늘(공중전): 라이트닝을 타고 건쉽과 싸우고, 보스 데스스타를 쓰러뜨리면 엔딩 컷씬 → 낙하산 컷씬으로 4스테이지로.
  * 4스테이지 도로: 비 내리는 밤 도시 도로에서 달리는 자동차 위에서 싸운다. ISB 요원도 차를 타고 뒤에서 따라붙고,
  *   전투기 대신 탱크(config.js TANK)가 가운데 차선을 지나가며 위아래로 포탄을 쏜다. 보스는 RPG 두 자루를 든 윌슨 요원(체력 800)으로,
- *   쓰러뜨리면 건 카타 → 엔딩 컷씬(윌슨 요원의 차가 미끄러져 폭발) 뒤 스토리 클리어.
+ *   쓰러뜨리면 건 카타 → 엔딩 컷씬(윌슨 요원의 차가 미끄러져 폭발) 뒤, 자동차로 눈길의 구멍을 피해 달리는 대교 가는 길(drive)로.
+ * 5스테이지 대교(손그림 기획서): 눈 내리는 대교. 요원들이 낙하산을 메고 다리 위에 멈춘 차 지붕에 내려앉는다(1웨이브 쉬움 3명은
+ *   쓰러질 때 저마다 한마디, 2웨이브 4명 중 보통 요원은 건 카타 5번, 3웨이브 쉬움 5명). 전투기 대신 다리 가운데가 벌어지며
+ *   배(config.js SHIP)가 지나가 대포를 쏜다(명중 20, 폭발 8). 보스는 존슨 요원(체력 900, 보통): "내가 처리하지… 멍청이들…" 뒤
+ *   1.5초마다 빨간 조준선을 따라 저격총 3발(체력 절반 아래면 5발). 쓰러뜨리면 건 카타 → 엔딩 컷씬(얼음에 미끄러져 강으로) 뒤 스토리 클리어.
  * 일반 요원의 무작위 주무기는 RPG·저격총·아킴보 석궁을 뺀 주무기 중 하나. 스미스 요원 말고는 보조무기·수류탄을 쓰지 않는다.
  * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스와 요원마다의 주무기(R-10 빼고)는 스토리 설정(밸런스 칸)에서 바꾼다.
  * 2인 협동: P2도 지구방위팀으로 함께 싸운다(COOP_SLOT). 둘 다 쓰러지면 패배, 한 명이라도 서 있으면 계속한다.
@@ -28,12 +32,14 @@ export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'cros
 export const BOSS_NAME = '스미스 요원';
 export const R10_NAME = 'R-10';
 export const WILSON_NAME = '윌슨 요원';
+export const JOHNSON_NAME = '존슨 요원';
 
 export const STAGES = {
   rooftop: { num: 1, name: '옥상' },
   corridor: { num: 2, name: '복도' },
   sky: { num: 3, name: '하늘' },
   road: { num: 4, name: '도로' },
+  bridge: { num: 5, name: '대교' },
 };
 /** 스테이지 순서와 각 스테이지 첫 웨이브 번호, 다음 스테이지(없으면 null) — 스테이지 건너뛰기·시작 스테이지 고르기용 */
 export const STAGE_ORDER = Object.keys(STAGES);
@@ -44,9 +50,10 @@ export const GUNSHIP_NAME = '건쉽';
 
 /**
  * 웨이브 구성. from: 'start'(경기 시작부터 서 있음)·'heli'(헬리콥터)·'gunship'(건쉽)·'elevator'(엘리베이터)·'ceiling'(천장을 부수고)
- *   ·'sky'(하늘에서 날아옴)·'car'(차를 타고 뒤에서 따라붙음).
+ *   ·'sky'(하늘에서 날아옴)·'car'(차를 타고 뒤에서 따라붙음)·'chute'(낙하산을 메고 다리 위 차 지붕에 내려앉음).
  * weapon 'random'은 STORY_WEAPONS 중 무작위. agents가 있으면 요원마다 { weapon, difficulty }(difficulty는 설정이 '기획대로'일 때).
- * boss: 'smith'(옥상)·'r10'(복도)·'deathstar'(하늘)·'wilson'(도로). fixed: 무기를 바꿀 수 없는 웨이브. end: 웨이브 마지막 요원을 쓰러뜨렸을 때의 장면(killcamShots).
+ * agents의 line은 그 요원이 쓰러질 때의 한마디. normalKata: 이 웨이브에서 보통 난이도 요원과의 건 카타 대응 횟수.
+ * boss: 'smith'(옥상)·'r10'(복도)·'deathstar'(하늘)·'wilson'(도로)·'johnson'(대교). fixed: 무기를 바꿀 수 없는 웨이브. end: 웨이브 마지막 요원을 쓰러뜨렸을 때의 장면(killcamShots).
  * killLine: 그 웨이브의 마지막이 아닌 요원을 쓰러뜨렸을 때 나오는 한마디(없으면 LAST_WORDS 중 무작위).
  */
 export const WAVES = [
@@ -74,6 +81,17 @@ export const WAVES = [
   { stage: 'road', title: '2웨이브', count: 3, weapon: 'random', from: 'car', end: 'hero' },
   { stage: 'road', title: '3웨이브', count: 4, weapon: 'random', from: 'car', end: 'wilson' },
   { stage: 'road', title: '보스전', count: 1, weapon: 'dualrpg', from: 'car', boss: 'wilson', fixed: true },
+  // 5스테이지 대교: 요원들이 낙하산을 메고 다리 위에 멈춘 차에 내려앉는다(무기는 스토리 설정에서). 보스는 저격총의 존슨 요원.
+  {
+    stage: 'bridge', title: '1웨이브', weapon: 'random', from: 'chute', end: 'bridge-radio',
+    agents: ['눈 때문에… 조준이…', '낙하산… 괜히 멨어…', '추워… 집에 갈래…'].map((line) => ({ line })),
+  },
+  {
+    stage: 'bridge', title: '2웨이브', weapon: 'random', from: 'chute', end: 'hero', normalKata: 5,
+    agents: ['easy', 'easy', 'easy', 'normal'].map((difficulty) => ({ difficulty })),
+  },
+  { stage: 'bridge', title: '3웨이브', count: 5, weapon: 'random', from: 'chute', end: 'johnson-call' },
+  { stage: 'bridge', title: '보스전', count: 1, weapon: 'jsniper', from: 'chute', boss: 'johnson', fixed: true },
 ].map((w) => ({ ...w, count: w.agents?.length ?? w.count }));
 
 /** '복도 2웨이브' */
@@ -110,6 +128,8 @@ export function defaultStory() {
     { ...agent(3000), radius: 130 },
     // 도로: 보스 윌슨 요원 체력 800
     agent(300), agent(250), agent(200), agent(800),
+    // 대교: 1웨이브 쉬움 3명, 2웨이브 쉬움 3명 + 보통 1명(기획대로), 3웨이브 쉬움 5명, 보스 존슨 요원 체력 900(보통)
+    agent(200, 'easy'), agent(250, 'mixed'), agent(200, 'easy'), agent(900),
   ];
   return { waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
 }
@@ -166,9 +186,11 @@ export const CEILING_X = ARENA_WIDTH / 2 + 260; // R-10이 천장을 부수고 �
 export const CRACK_TIME = 1.2;  // 천장이 흔들리다 부서지기까지
 const LAND_TIME = 0.7;          // R-10이 떨어져 내려앉는 시간
 const TURRET_MUZZLE = 44;
-const SKY_ARRIVE = 1.0;         // 하늘·도로: 경고 뒤 적이 오기 시작할 때까지
+const SKY_ARRIVE = 1.0;         // 하늘·도로·대교: 경고 뒤 적이 오기 시작할 때까지
 const DRIVE_TIME = 1.4;         // 도로: 요원의 차가 뒤에서 달려와 자리 잡는 시간
 const CAR_OFF = 240;            // 도로: 요원의 차가 출발하는 화면 밖 거리
+const CHUTE_TIME = 1.6;         // 대교: 요원이 낙하산을 타고 내려와 차 지붕에 내려앉는 시간
+const CHUTE_FROM_Y = -40;       // 대교: 낙하산이 나타나는 높이(화면 위 끝, 위에서 보니 덮개가 보이게)
 const TURRET_SHELL_LIFE = 4;
 
 const ISB = SLOTS.find((s) => s.team === 'isb');
@@ -271,6 +293,7 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
   if (WAVES[start].stage === 'corridor') setupCorridor(match);
   if (WAVES[start].stage === 'sky') setupSky(match, { heal: false });
   if (WAVES[start].stage === 'road') setupRoad(match, { heal: false });
+  if (WAVES[start].stage === 'bridge') setupBridge(match, { heal: false });
   Object.assign(match.story, { wave: start - 1, phase: 'clear', timer: CLEAR_TIME / 2 });
   // skip: 스테이지 건너뛰기·시작 스테이지 고르기로 그 스테이지 처음부터(체력 가득)
   const stage = STAGES[WAVES[start].stage];
@@ -291,7 +314,7 @@ export function waveInfo(index, settings, allies = 0) {
 
 /** 웨이브에 나오는 적 이름: '요원 2명', '건쉽 3대', '스미스 요원'… extra는 AI 동료 때문에 더 나오는 쉬움 적 수 */
 export function waveWho(wave, extra = 0) {
-  const names = { smith: BOSS_NAME, r10: R10_NAME, deathstar: DEATHSTAR_NAME, wilson: WILSON_NAME };
+  const names = { smith: BOSS_NAME, r10: R10_NAME, deathstar: DEATHSTAR_NAME, wilson: WILSON_NAME, johnson: JOHNSON_NAME };
   if (wave.boss) return names[wave.boss];
   const sky = wave.stage === 'sky';
   const unit = sky ? `${GUNSHIP_NAME} ${wave.count}대` : `요원 ${wave.count}명`;
@@ -310,7 +333,7 @@ function spawnWave(match, inputs, index) {
   const wave = WAVES[index];
   const cfg = story.settings.waves[index];
   const center = wave.from === 'ceiling' ? CEILING_X : wave.from === 'elevator' ? ELEVATOR.x
-    : wave.from === 'sky' || wave.from === 'car' ? ARENA_WIDTH / 2 : story.carrier?.x ?? ARENA_WIDTH / 2;
+    : ['sky', 'car', 'chute'].includes(wave.from) ? ARENA_WIDTH / 2 : story.carrier?.x ?? ARENA_WIDTH / 2;
   const sky = wave.from === 'sky', deathstar = wave.boss === 'deathstar';
   // AI 동료 수만큼 쉬움 돌격소총 요원이 웨이브 끝에 덧붙는다(보스전 제외)
   const total = wave.count + extraAgents(index, story.allies);
@@ -323,15 +346,16 @@ function spawnWave(match, inputs, index) {
     const kind = extra ? EXTRA_AGENT.weapon : cfg.weapons?.[i] ?? spec.weapon ?? wave.weapon;
     const weapon = kind === 'random' ? pick(story.rng, STORY_WEAPONS) : kind;
     const id = wave.boss ? 'BOSS' : `E${story.nextId++}`;
-    const smith = wave.boss === 'smith', r10 = wave.boss === 'r10', wilson = wave.boss === 'wilson';
+    const smith = wave.boss === 'smith', r10 = wave.boss === 'r10', wilson = wave.boss === 'wilson', johnson = wave.boss === 'johnson';
     const p = createPlayer({ ...ISB, id }, {
       ai: true, x, weapon,
       // 스미스 요원은 권총을 든 요원 1 그림을 크게, R-10은 드론 그림을 크게 그린다. 하늘에서는 요원 대신 건쉽·데스스타.
       characterId: deathstar ? 'deathstar' : sky ? 'gunship' : smith ? 'isb-agent-1' : r10 ? 'r10' : wilson ? 'wilson'
-        : pick(story.rng, AI_CHARACTERS),
-      name: deathstar ? DEATHSTAR_NAME : sky ? GUNSHIP_NAME : smith ? BOSS_NAME : r10 ? R10_NAME : wilson ? WILSON_NAME : undefined,
+        : johnson ? 'johnson' : pick(story.rng, AI_CHARACTERS),
+      name: deathstar ? DEATHSTAR_NAME : sky ? GUNSHIP_NAME : smith ? BOSS_NAME : r10 ? R10_NAME : wilson ? WILSON_NAME
+        : johnson ? JOHNSON_NAME : undefined,
       // 스미스 요원만 보조무기·수류탄을 쓴다(R-10은 레이저 캐논 전용)
-      primaryOnly: !smith, boss: !!wave.boss, scale: smith || wilson ? 1.2 : r10 ? 1.6 : undefined,
+      primaryOnly: !smith, boss: !!wave.boss, scale: smith || wilson || johnson ? 1.2 : r10 ? 1.6 : undefined,
       secondary: smith ? (cfg.secondary === 'random' ? pick(story.rng, SECONDARY_IDS) : cfg.secondary) : undefined,
       maxHp: cfg.hp, radius: cfg.radius, bulletSpeedScale: cfg.bulletSpeed / 100,
       damageScale: cfg.damage / 100, speedScale: cfg.speed / 100,
@@ -356,11 +380,21 @@ function spawnWave(match, inputs, index) {
       // 도로: 요원을 태운 차가 뒤(왼쪽 화면 밖)에서 차례로 달려와 자기 자리에 붙는다
       p.entering = { kind: 'drive', t: -i * DROP_GAP, duration: DRIVE_TIME, fromX: -CAR_OFF, toX: x };
       p.x = p.previousX = -CAR_OFF;
+    } else if (wave.from === 'chute') {
+      // 대교: 낙하산을 메고 화면 위 밖에서 차례로 내려와 다리 위에 멈춘 자기 차(carX) 지붕에 내려앉는다
+      p.entering = { kind: 'chute', t: -i * DROP_GAP, duration: CHUTE_TIME, fromY: CHUTE_FROM_Y };
+      p.y = CHUTE_FROM_Y;
+      p.carX = x;
     }
+    // 존슨 요원은 일반 사격 대신 조준선 저격을 story.js가 쏜다(updateJohnsonSniper)
+    if (johnson) { p.scripted = true; story.sniper = null; }
+    // 쓰러질 때 하는 한마디(기획서의 요원마다 대사)
+    if (spec.line) p.lastWords = spec.line;
     match.players.push(p);
     inputs[id] = createInput(p);
     addStats(match, p);
     const difficulty = extra ? EXTRA_AGENT.difficulty : cfg.difficulty === 'mixed' ? spec.difficulty ?? 'normal' : cfg.difficulty;
+    if (wave.normalKata && difficulty === 'normal') p.kataGoal = wave.normalKata;
     story.brains.push(createAI(id, difficulty, Math.floor(story.rng() * 2 ** 32)));
     story.roster.push(p);
   }
@@ -459,6 +493,104 @@ function setupRoad(match, { heal = true } = {}) {
 }
 
 /**
+ * 5스테이지 대교 준비: 눈 내리는 밤의 대교. 지구방위팀 전원이 다리 위에 멈춘 자기 차(carX) 앞에 서고, 엄폐물은 팀 진영 두 개
+ * (가운데는 다리가 벌어지는 자리라 없음). 전투기 대신 배(SHIP)가 나오고, 배가 오기 SHIP.openTime초 전부터 다리 가운데가 벌어진다.
+ * 대교 가는 길(drive)에서 깎인 체력은 그대로 이어진다(heal: false). 이어하기·건너뛰기는 저장한 체력·가득.
+ */
+function setupBridge(match, { heal = true } = {}) {
+  const story = match.story;
+  story.stage = 'bridge';
+  Object.assign(story, {
+    elevator: null, turrets: null, ceiling: null, carrier: null, jet: null, missile: null, bridge: { open: 0 }, sniper: null,
+  });
+  match.players = match.players.filter((p) => p.team !== 'isb');
+  story.brains = [];
+  match.projectiles = [];
+  match.jet = null;
+  match.jetTimer = between(match.rng, SHIP.firstDelay);
+  const list = heroes(match);
+  const xs = heroXs(list.length);
+  list.forEach((p, i) => {
+    if (p.ground) Object.assign(p, p.ground);
+    delete p.ground;
+    Object.assign(p, {
+      plane: false, item: 'grenade', slot: 'primary', hurt: 0, dash: null,
+      ...(heal ? { hp: p.maxHp, alive: true } : {}),
+      x: xs[i], previousX: xs[i], y: RAIL_Y.earth, carX: xs[i],
+      cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,
+      battery: WEAPONS[p.primary].battery?.shots ?? 0,
+    });
+  });
+  match.covers = createCovers(list).filter((c) => c.id !== 'center');
+}
+
+/** 대교 가운데: 배가 지나가는 동안(곧 올 때부터) 벌어지고, 지나가면 닫힌다. open은 0(닫힘)~1(활짝). */
+function moveBridge(match, dt) {
+  const b = match.story.bridge;
+  const want = match.jet?.kind === 'ship' || match.jetTimer <= SHIP.openTime ? 1 : 0;
+  const step = dt / SHIP.openTime;
+  b.open = want ? Math.min(1, b.open + step) : Math.max(0, b.open - step);
+}
+
+/**
+ * 존슨 요원의 저격: 보스전에서 싸우는 동안 WEAPONS.jsniper.interval초마다 쏜다. 쏘기 volley.aim초 전에 가장 가까운 주인공 쪽으로
+ * 빨간 조준선 volley.count개(체력이 절반 아래면 volley.rage개)를 volley.spread도 간격 부채꼴로 긋고, 그동안 존슨 요원은 멈춰 선다.
+ * 시간이 되면 조준선을 따라 한꺼번에 쏜다(엄폐물에 막힘). 피해·탄속은 보스전 설정의 피해(%)·탄속(%)을 따른다.
+ */
+function updateJohnsonSniper(match, dt, events) {
+  const story = match.story;
+  const boss = match.players.find((p) => p.characterId === 'johnson' && p.alive && !p.entering);
+  if (!boss || story.phase !== 'fight') {
+    if (story.sniper) story.sniper.lines = null;
+    if (boss) boss.rooted = false;
+    return;
+  }
+  const w = WEAPONS.jsniper;
+  const s = (story.sniper ??= { timer: w.interval, lines: null, rage: false });
+  if (!s.rage && boss.hp <= boss.maxHp / 2) {
+    s.rage = true;
+    story.banner = banner(`${JOHNSON_NAME} 분노!`, `저격총이 ${w.volley.rage}발로!`);
+    events.push({ type: 'alarm', boss: true });
+  }
+  s.timer -= dt;
+  if (!s.lines && s.timer <= w.volley.aim) {
+    let target = null, best = Infinity;
+    for (const p of heroes(match)) {
+      const d = Math.hypot(p.x - boss.x, p.y - boss.y);
+      if (p.alive && d < best) { best = d; target = p; }
+    }
+    if (target) {
+      const n = Math.max(1, Math.round(s.rage ? w.volley.rage : w.volley.count));
+      const aim = Math.atan2(target.y - boss.y, target.x - boss.x);
+      const angles = Array.from({ length: n }, (_, i) => aim + ((i - (n - 1) / 2) * w.volley.spread * Math.PI) / 180);
+      s.lines = { x: boss.x, y: boss.y, angles, t: 0 };
+      events.push({ type: 'sniper-aim', count: n });
+    }
+  }
+  if (s.lines) s.lines.t += dt;
+  boss.rooted = !!s.lines; // 조준하는 동안은 멈춰 선다
+  if (s.timer > 0) return;
+  s.timer += w.interval;
+  const lines = s.lines;
+  s.lines = null;
+  boss.rooted = false;
+  if (!lines) return;
+  const speed = w.speed * (boss.bulletSpeedScale ?? 1);
+  const damage = Math.round(w.damage * (boss.damageScale ?? 1));
+  for (const a of lines.angles) {
+    const x = lines.x + Math.cos(a) * MUZZLE_OFFSET, y = lines.y + Math.sin(a) * MUZZLE_OFFSET;
+    match.projectiles.push({
+      id: match.nextProjectileId++, ownerId: boss.id, team: 'isb', weapon: w.id,
+      x, y, previousX: x, previousY: y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+      life: RULES.bulletLife, damage, connected: false,
+    });
+  }
+  const stats = match.stats?.[boss.id];
+  if (stats) (stats.weapons[w.id] ??= { shots: 0, hits: 0, damage: 0, coverDamage: 0 }).shots += lines.angles.length;
+  events.push({ type: 'fire', playerId: boss.id, weapon: w.id });
+}
+
+/**
  * 스테이지 클리어(계단 컷씬 중 화면이 어두워졌을 때): 체력 100% 회복(2인 협동에서 쓰러진 동료도 일어남), 경기장을 복도로 바꾼다.
  * 쓰러진 스미스 요원은 치우고(결과 화면용으로 roster에는 남는다), 컷씬이 끝나면 카운트다운 뒤 복도 1웨이브 요원이 엘리베이터로 온다.
  */
@@ -498,11 +630,12 @@ function callNext(story, next, events) {
     events.push({ type: 'alarm', boss: true }, { type: 'rumble' });
     story.ceiling = { x: CEILING_X, y: RAIL_Y.isb, t: 0 };
     story.banner = banner('경고!', '천장이 무너진다!');
-  } else if (from === 'sky' || from === 'car') {
+  } else if (from === 'sky' || from === 'car' || from === 'chute') {
     events.push({ type: 'alarm', boss: !!boss });
     story.timer = 0;
     if (from === 'car') story.banner = banner('경고!', boss ? `${WILSON_NAME}의 차가 따라붙는다!` : 'ISB 추격 차량 접근!');
-    if (boss) story.banner = banner('경고!', `거대 비행선 ${DEATHSTAR_NAME} 접근!`);
+    else if (from === 'chute') story.banner = banner('경고!', boss ? `${JOHNSON_NAME}이 내려온다!` : 'ISB 공수 요원 강하!');
+    else if (boss) story.banner = banner('경고!', `거대 비행선 ${DEATHSTAR_NAME} 접근!`);
   } else {
     callCarrier(story, 'heli', events);
     if (boss) story.banner = banner('경고!', '헬리콥터 접근 중');
@@ -583,13 +716,15 @@ function moveEntering(match, dt, events) {
       p.y = e.fromY + (railY - e.fromY) * (1 - (1 - k) ** 2); // 날아와 속도를 줄이며 자리 잡는다
     } else if (e.kind === 'drive') {
       p.x = e.fromX + (e.toX - e.fromX) * (1 - (1 - Math.max(0, k)) ** 2); // 달려와 속도를 줄이며 자리 잡는다
+    } else if (e.kind === 'chute') {
+      p.y = e.fromY + (railY - e.fromY) * (1 - (1 - k) ** 2); // 낙하산이라 내려앉을 때 천천히
     }
     if (k >= 1) {
       p.y = railY;
       if (e.toX !== undefined) p.x = e.toX;
       p.previousX = p.x;
       p.entering = null;
-      if (e.kind === 'fall') events.push({ type: 'land', x: p.x, y: p.y });
+      if (e.kind === 'fall' || e.kind === 'chute') events.push({ type: 'land', x: p.x, y: p.y });
     }
   }
 }
@@ -715,6 +850,10 @@ export function updateStory(match, inputs, dt, events) {
   moveEntering(match, dt, events);
   if (story.turrets) updateTurrets(match, dt, events);
   if (story.stage === 'sky') updateDeathstarVolley(match, dt, events);
+  if (story.stage === 'bridge') {
+    moveBridge(match, dt);
+    updateJohnsonSniper(match, dt, events);
+  }
   // 연출 중에는 평소의 전투기가 나오지 않게 미룬다(복도에는 아예 나오지 않음)
   if (story.phase !== 'fight') match.jetTimer = Math.max(match.jetTimer, 2);
 
@@ -741,7 +880,7 @@ export function updateStory(match, inputs, dt, events) {
       const { from } = WAVES[next];
       if (from === 'elevator') {
         if (story.elevator.open < 1) break;
-      } else if (from === 'sky' || from === 'car') {
+      } else if (from === 'sky' || from === 'car' || from === 'chute') {
         story.timer += dt;
         if (story.timer < SKY_ARRIVE) break;
       } else if (from === 'ceiling') {
@@ -781,8 +920,9 @@ export function updateStory(match, inputs, dt, events) {
       story.phase = 'fight';
       if (story.carrier) story.carrier.state = 'out';
       if (story.elevator) story.elevator.target = 0;
-      // R-10이 내려앉으면 도발 장면
+      // R-10이 내려앉으면 도발 장면, 존슨 요원이 내려앉으면 "내가 처리하지… 멍청이들…" 장면
       if (WAVES[story.wave].boss === 'r10') startTaunt(match);
+      if (WAVES[story.wave].boss === 'johnson') startJohnsonTaunt(match);
       break;
     default:
       break;
@@ -805,7 +945,7 @@ export function checkpoint(match) {
   const [hero, partner] = humanHeroes(match);
   let wave = currentWave(story);
   if (match.cutscene) {
-    if (WAVES[story.wave].boss === 'wilson') return null; // 이미 스토리를 깼다
+    if (WAVES[story.wave].boss === 'johnson') return null; // 이미 스토리를 깼다
     wave = story.wave + 1;
   } else if (match.killcam?.waveEnd || (story.phase === 'fight' && enemies(match).every((p) => !p.alive))) {
     wave = story.wave + 1;
@@ -884,6 +1024,10 @@ export function startCutscene(match) {
     startWilsonCutscene(match);
     return;
   }
+  if (WAVES[match.story.wave].boss === 'johnson') {
+    startJohnsonCutscene(match);
+    return;
+  }
   const boss = match.players.find((p) => p.boss);
   const hero = heroOf(match, killerOf(match, boss)); // 2인 협동이면 보스를 쓰러뜨린 쪽이 컷씬의 주인공
   match.phase = 'cutscene';
@@ -938,8 +1082,11 @@ function dodgeOffset(c, base, dt) {
   return c.dodge;
 }
 
-/** 컷씬 한 틱. 스미스 요원 컷씬이 끝나면 계단 컷씬 뒤 2스테이지(복도)로, R-10 컷씬이 끝나면 결과(지구방위팀 승리)로 넘어간다. */
-export function updateCutscene(match, dt, events) {
+/**
+ * 컷씬 한 틱. 스미스 요원 컷씬이 끝나면 계단 컷씬 뒤 2스테이지(복도)로, R-10 컷씬이 끝나면 라이트닝 컷씬 뒤 하늘로…
+ * 마지막 존슨 요원 컷씬이 끝나면 결과(지구방위팀 승리)로 넘어간다. inputs는 대교 가는 길(drive)의 좌우 이동에만 쓴다.
+ */
+export function updateCutscene(match, dt, events, inputs = {}) {
   if (match.cutscene.kind === 'stairs') {
     updateStairs(match, dt, events);
     return;
@@ -958,6 +1105,14 @@ export function updateCutscene(match, dt, events) {
   }
   if (match.cutscene.kind === 'wilson') {
     updateWilsonCutscene(match, dt, events);
+    return;
+  }
+  if (match.cutscene.kind === 'drive') {
+    updateDrive(match, dt, events, inputs);
+    return;
+  }
+  if (match.cutscene.kind === 'johnson') {
+    updateJohnsonCutscene(match, dt, events);
     return;
   }
   if (match.cutscene.kind === 'r10') {
@@ -1438,11 +1593,11 @@ function updateParachute(match, dt, events) {
 
 /* ───────── 윌슨 요원 엔딩 컷씬(도로 보스) ─────────
  * 윌슨 요원을 쓰러뜨리면(건 카타 뒤): 차 지붕 위에서 비틀거리던 윌슨 요원의 차가 미끄러지며 뒤로 처지고,
- * 빙글 돌다 갓길에 부딪혀 폭발한다. 주인공 "본부, 윌슨 요원 처리. 이번엔 진짜 임무 완료!" → 결과(지구방위팀 승리, 스토리 클리어).
- * 시간표(초): 0~1.2 비틀거림, 1.2~3.4 미끄러지며 뒤로 처짐(회전), 3.4 충돌·연쇄 폭발, 4.4~ 주인공 대사, 7 끝.
+ * 빙글 돌다 갓길에 부딪혀 폭발한다. 주인공 "본부, 윌슨 요원 처리." → 본부 "ISB 잔당이 눈 내리는 대교로!" → 대교 가는 길(drive).
+ * 시간표(초): 0~1.2 비틀거림, 1.2~3.4 미끄러지며 뒤로 처짐(회전), 3.4 충돌·연쇄 폭발, 4.4~ 주인공 대사, 5.6~ 본부 무전, 7.6 끝.
  */
-export const WILSON_CUTSCENE_TIME = 7;
-const WS_SKID = 1.2, WS_CRASH = 3.4, WS_LINE = 4.4;
+export const WILSON_CUTSCENE_TIME = 7.6;
+const WS_SKID = 1.2, WS_CRASH = 3.4, WS_LINE = 4.4, WS_CALL = 5.6;
 
 function startWilsonCutscene(match) {
   const boss = match.players.find((p) => p.boss);
@@ -1482,10 +1637,239 @@ function updateWilsonCutscene(match, dt, events) {
       if (k === 0) events.push({ type: 'cover-break', x: car.x, y: car.y });
     }
     car.alpha = Math.max(0, 1 - (t - WS_CRASH) / 0.6);
-    c.caption = t < WS_LINE ? '콰콰쾅!!' : t < WILSON_CUTSCENE_TIME - 0.8
-      ? `주인공: 본부, ${WILSON_NAME} 처리. 이번엔 진짜 임무 완료!` : `${WILSON_NAME}을 물리쳤다! 스토리 클리어!`;
+    if (t >= WS_CALL && !c.called) {
+      c.called = true;
+      events.push({ type: 'radio', wave: match.story.wave });
+    }
+    c.caption = t < WS_LINE ? '콰콰쾅!!' : t < WS_CALL ? `주인공: 본부, ${WILSON_NAME} 처리!`
+      : '본부(무전): 아직이다! ISB 잔당이 눈 내리는 대교로 모이고 있다!';
   }
-  if (t >= WILSON_CUTSCENE_TIME) {
+  if (t >= WILSON_CUTSCENE_TIME) startDrive(match, events);
+}
+
+/* ───────── 대교 가는 길(도로 → 대교) ─────────
+ * 윌슨 요원 엔딩 컷씬 뒤: 스테이지를 깼으니 체력 100% 회복(쓰러진 동료도 일어남). 지구방위팀 전원이 자기 차를 몰고 눈 내리는 길을
+ * 달린다(위에서 내려다봄, 차는 화면 위쪽으로 달리고 길이 아래로 흘러감). 사람 주인공은 좌우 이동으로 핸들을 꺾어 길 위의
+ * 구멍과 눈더미를 피하고, AI 동료는 스스로 피한다. 구멍에 빠지면 체력 DRIVE.damage가 깎이고(1 아래로는 안 깎임, 이 체력으로 대교에서
+ * 싸운다), 눈더미에 부딪히면 잠깐 느려진다. DRIVE.time초쯤 달리면 대교 입구가 보이고, 들어서면 어두워지며 5스테이지 대교로 바뀐다.
+ * 시간표: 0~DRIVE_INTRO 출발(대사, 구멍 없음) → 길(장애물) → 대교 입구 도착 → 어두워짐 → 대교 → 밝아짐 → 카운트다운.
+ */
+export const DRIVE_ROAD = { left: 300, right: 1300 }; // 길 양쪽 끝(그 밖은 가로등·눈 쌓인 갓길)
+export const DRIVE_Y = 760;      // 차가 달리는 높이(화면 아래쪽)
+export const DRIVE_CAR = { w: 84, l: 150 }; // 위에서 본 차(세로로 김)
+const DRIVE_INTRO = 2.4;          // 출발 뒤 첫 장애물이 오기까지(초)
+const DRIVE_ENTER = 420;          // 대교 입구를 지나 이만큼 더 달리면 어두워진다
+const DRIVE_FADE = 0.7, DRIVE_LIGHT = 0.7, DRIVE_HOLD = 1.6;
+const DRIVE_LOOK = 620;           // AI 동료가 앞을 살피는 거리
+const DRIVE_LANES = 16;           // AI 동료가 견주어 보는 가로 자리 수
+const DRIVE_HOLE = [26, 40];      // 구멍 반지름
+const DRIVE_DRIFT = { rx: 70, ry: 30 }; // 눈더미 크기(반지름)
+const DRIVE_GAP = 300;            // 장애물끼리 앞뒤로 떨어진 최소 거리
+
+/** 대교 가는 길 길이(대교 입구까지 달리는 거리) */
+export const driveLength = () => DRIVE.time * DRIVE.speed;
+
+function startDrive(match, events) {
+  const story = match.story;
+  match.players = match.players.filter((p) => p.team !== 'isb');
+  story.brains = [];
+  match.projectiles = [];
+  match.jet = null;
+  story.banner = null;
+  const list = heroes(match);
+  // 스테이지를 깼으니 체력 100% 회복(대교 가는 길의 구멍에서 깎인 체력은 대교로 이어진다)
+  for (const p of list) Object.assign(p, { hp: p.maxHp, alive: true, hurt: 0, dash: null });
+  events.push(...humanHeroes(match).map((h) => ({ type: 'heal', playerId: h.id })));
+  const length = driveLength();
+  const rng = story.rng;
+  const obstacles = [];
+  const from = DRIVE_INTRO * DRIVE.speed, to = length - 500;
+  // 장애물은 길을 따라 고르게(앞뒤로 DRIVE_GAP 넘게 떨어뜨려) 놓아, 두 장애물 사이에 갇혀 못 빠져나가는 곳이 없게 한다
+  const holes = Math.round(((to - from) / 1000) * DRIVE.holes), drifts = Math.round(((to - from) / 1000) * DRIVE.drifts);
+  const kinds = [...Array(holes).fill('hole'), ...Array(drifts).fill('drift')];
+  for (let i = kinds.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [kinds[i], kinds[j]] = [kinds[j], kinds[i]];
+  }
+  const spacing = (to - from) / Math.max(1, kinds.length);
+  kinds.forEach((kind, i) => {
+    const d = from + (i + 0.5) * spacing + (rng() - 0.5) * Math.max(0, spacing - DRIVE_GAP);
+    const x = DRIVE_ROAD.left + 60 + rng() * (DRIVE_ROAD.right - DRIVE_ROAD.left - 120);
+    obstacles.push(kind === 'hole' ? { kind, d, x, r: DRIVE_HOLE[0] + rng() * (DRIVE_HOLE[1] - DRIVE_HOLE[0]) } : { kind, d, x, ...DRIVE_DRIFT });
+  });
+  const gap = Math.min(220, (DRIVE_ROAD.right - DRIVE_ROAD.left - 200) / Math.max(1, list.length - 1));
+  match.cutscene = {
+    kind: 'drive', t: 0, dist: 0, length, obstacles, slow: 0, fade: 0, switched: false, arrived: false, holes: 0,
+    cars: list.map((p, i) => {
+      const x = (DRIVE_ROAD.left + DRIVE_ROAD.right) / 2 + (i - (list.length - 1) / 2) * gap;
+      return { id: p.id, x, home: x, steer: 0, safe: 0, bump: 0, skid: 0, ai: !!p.ai };
+    }),
+    caption: `주인공: ${WILSON_NAME} 처리 완료! 이제 눈 내리는 대교로 간다!`,
+  };
+}
+
+/** 차 car가 장애물 o에 닿았는지(위에서 본 차 사각형과 구멍 원·눈더미 타원을 사각형으로 어림). margin만큼 넉넉히 볼 수 있다. */
+function driveTouch(c, car, o, margin = 0) {
+  const dy = Math.abs(o.d - c.dist), dx = Math.abs(o.x - car.x);
+  const rx = o.kind === 'hole' ? o.r * 0.8 : o.rx * 0.85, ry = o.kind === 'hole' ? o.r * 0.8 : o.ry;
+  return dx < DRIVE_CAR.w / 2 + rx + margin && dy < DRIVE_CAR.l / 2 + ry + margin;
+}
+
+/**
+ * AI 동료의 핸들: 길을 가로로 여러 자리(DRIVE_LANES)로 나눠, 앞으로 DRIVE_LOOK 안에 오는 장애물과 겹치는 자리는 피하고
+ * (가까운 장애물일수록 크게 피함) 지금 자리에서 가까운 곳을 골라 그쪽으로 핸들을 꺾는다. 그 자리까지 옆으로 가는 동안
+ * 장애물에 닿게 되면(그때 장애물이 올 자리를 따져 봄) 그 자리는 고르지 않는다.
+ */
+function driveSteerAI(c, car) {
+  // 아직 다 지나가지 않은 장애물(차 꽁무니보다 앞에 걸친 것)만 본다
+  const ahead = c.obstacles.filter((o) => o.d - c.dist > -(DRIVE_CAR.l / 2 + (o.ry ?? o.r) + 14) && o.d - c.dist < DRIVE_LOOK);
+  const covers = (o, x) => Math.abs(o.x - x) < DRIVE_CAR.w / 2 + (o.r ?? o.rx) + 26;
+  // 옆으로 x까지 가는 길에 닿는 장애물이 있는지(여유를 조금 두고)
+  const sweepHits = (x) => {
+    for (let px = car.x; Math.abs(px - car.x) <= Math.abs(x - car.x); px += Math.sign(x - car.x) * 10 || 10) {
+      const lead = (DRIVE.speed * Math.abs(px - car.x)) / DRIVE.steer;
+      const at = { x: px };
+      if (ahead.some((o) => driveTouch({ dist: c.dist + lead }, at, o, 14))) return true;
+      if (px === x) break;
+    }
+    return false;
+  };
+  let best = null;
+  for (let i = 0; i <= DRIVE_LANES; i++) {
+    const x = DRIVE_ROAD.left + DRIVE_CAR.w / 2 + ((DRIVE_ROAD.right - DRIVE_ROAD.left - DRIVE_CAR.w) * i) / DRIVE_LANES;
+    // 가까울수록·원래 자리일수록 좋고, 길 끝은 피할 곳이 한쪽뿐이라 꺼린다
+    const edge = Math.min(x - DRIVE_ROAD.left, DRIVE_ROAD.right - x);
+    let cost = Math.abs(x - car.x) * 0.02 + Math.abs(x - car.home) * 0.01 + Math.max(0, 200 - edge) * 0.4;
+    for (const o of ahead) if (covers(o, x)) cost += 1000 * (1 - Math.max(0, o.d - c.dist) / (DRIVE_LOOK * 1.2));
+    if (best && cost >= best.cost) continue;
+    if (Math.abs(x - car.x) > 8 && sweepHits(x)) continue;
+    best = { x, cost };
+  }
+  const dx = (best?.x ?? car.x) - car.x;
+  return Math.abs(dx) < 8 ? 0 : Math.max(-1, Math.min(1, dx / 40));
+}
+
+function updateDrive(match, dt, events, inputs) {
+  const c = match.cutscene;
+  const t = (c.t += dt);
+  const story = match.story;
+  if (!c.switched) {
+    // 출발할 때는 천천히 속도를 올리고, 눈더미에 부딪히면 잠깐 느려진다
+    c.slow = Math.max(0, c.slow - dt);
+    const speed = DRIVE.speed * Math.min(1, 0.35 + t / 1.2) * (c.slow > 0 ? 0.55 : 1);
+    c.dist += speed * dt;
+    for (const car of c.cars) {
+      const p = match.players.find((q) => q.id === car.id);
+      car.safe = Math.max(0, car.safe - dt);
+      car.bump = Math.max(0, car.bump - dt);
+      car.skid = Math.max(0, car.skid - dt);
+      const axis = c.arrived ? Math.sign(car.home - car.x) * (Math.abs(car.home - car.x) > 8 ? 0.5 : 0)
+        : car.ai ? driveSteerAI(c, car) : Math.max(-1, Math.min(1, inputs?.[car.id]?.moveAxis ?? 0));
+      car.steer = axis;
+      car.x = Math.min(DRIVE_ROAD.right - DRIVE_CAR.w / 2, Math.max(DRIVE_ROAD.left + DRIVE_CAR.w / 2, car.x + axis * DRIVE.steer * dt));
+      if (car.safe > 0 || !p) continue;
+      const o = c.obstacles.find((q) => driveTouch(c, car, q));
+      if (!o) continue;
+      car.safe = DRIVE.safe;
+      if (o.kind === 'hole') {
+        // 구멍: 덜컹! 체력이 깎인다(대교 가는 길에서는 쓰러지지 않는다)
+        const dealt = Math.min(DRIVE.damage, p.hp - 1);
+        p.hp -= dealt;
+        p.hurt = 0.3;
+        car.bump = 0.35;
+        if (!car.ai) c.holes++;
+        if (match.stats?.[p.id]) match.stats[p.id].taken += dealt;
+        events.push({ type: 'bump', playerId: p.id, x: car.x, y: DRIVE_Y }, { type: 'hit', x: car.x, y: DRIVE_Y - 40, damage: dealt });
+      } else {
+        // 눈더미: 퍽! 눈보라가 일며 잠깐 느려지고 차가 미끄러진다
+        c.slow = 0.6;
+        car.skid = 0.5;
+        events.push({ type: 'drift', playerId: p.id, x: car.x, y: DRIVE_Y });
+      }
+    }
+    if (t < DRIVE_INTRO) c.caption = `주인공: ${WILSON_NAME} 처리 완료! 이제 눈 내리는 대교로 간다!`;
+    else if (!c.arrived) c.caption = c.dist < c.length * 0.35 ? '좌우로 핸들을 꺾어 길 위의 구멍을 피하라!' : `대교까지 ${Math.max(0, Math.ceil((c.length - c.dist) / 10))}m`;
+    if (!c.arrived && c.dist >= c.length) {
+      c.arrived = true;
+      events.push({ type: 'alarm', boss: false });
+    }
+    if (c.arrived) {
+      c.caption = '눈 내리는 대교 도착!';
+      c.fade = Math.min(1, Math.max(0, (c.dist - c.length - DRIVE_ENTER) / (DRIVE.speed * DRIVE_FADE)));
+      if (c.fade >= 1) {
+        // 어두운 동안 대교로 바뀐다: 차를 세우고 내려 선다(체력은 그대로)
+        c.switched = true;
+        c.switchAt = t;
+        setupBridge(match, { heal: false });
+        events.push({ type: 'stage', stage: 'bridge' });
+      }
+    }
+    return;
+  }
+  c.fade = 1 - Math.min(1, (t - c.switchAt) / DRIVE_LIGHT);
+  c.caption = `${STAGES.bridge.num}스테이지 · 눈 내리는 ${STAGES.bridge.name}`;
+  if (t - c.switchAt >= DRIVE_LIGHT + DRIVE_HOLD) {
+    match.cutscene = null;
+    const hurt = c.holes ? `구멍 ${c.holes}번 · 체력은 그대로` : '구멍을 모두 피했다!';
+    story.banner = banner(`${STAGES.bridge.num}스테이지 · ${STAGES.bridge.name}`, `${hurt} · 다리가 열리면 배의 대포 주의`);
+    match.phase = 'countdown';
+    match.countdown = COUNTDOWN;
+  }
+}
+
+/* ───────── 존슨 요원 엔딩 컷씬(대교 보스) ─────────
+ * 존슨 요원을 쓰러뜨리면(건 카타 뒤): 비틀거리던 존슨 요원이 얼어붙은 다리 위에서 미끄러져 빙글 돌며 가까운 난간 쪽으로 밀려가고,
+ * 난간 너머 강으로 떨어진다(풍덩!). 주인공 "본부, 존슨 요원 처리. 이번엔 정말 임무 완료!" → 결과(지구방위팀 승리, 스토리 클리어).
+ * 시간표(초): 0~1.2 비틀거림, 1.2~3.2 얼음에 미끄러짐, 3.2~3.9 강으로 떨어짐, 3.9 풍덩, 4.6~ 주인공 대사, 7.5 끝.
+ */
+export const JOHNSON_CUTSCENE_TIME = 7.5;
+const JS_SLIP = 1.2, JS_FALL = 3.2, JS_SPLASH = 3.9, JS_LINE = 4.6;
+
+function startJohnsonCutscene(match) {
+  const boss = match.players.find((p) => p.boss);
+  const hero = heroOf(match, killerOf(match, boss));
+  match.phase = 'cutscene';
+  match.projectiles = [];
+  match.jet = null;
+  match.story.banner = null;
+  match.story.sniper = null;
+  const edge = boss.x < ARENA_WIDTH / 2 ? 24 : ARENA_WIDTH - 24; // 가까운 난간 쪽으로 미끄러진다
+  match.cutscene = {
+    kind: 'johnson', t: 0, heroId: hero.id, bossId: boss.id, splashed: false,
+    hero: { x: hero.x, y: hero.y, aim: Math.atan2(boss.y - hero.y, boss.x - hero.x), lunge: 0, weapon: hero.primary },
+    johnson: { x: boss.x, y: boss.y, fromX: boss.x, edge, angle: 0, alpha: 1, base: boss.scale, scale: boss.scale },
+    caption: `${JOHNSON_NAME}: 크윽… 내 조준이… 빗나가다니…`,
+  };
+}
+
+function updateJohnsonCutscene(match, dt, events) {
+  const c = match.cutscene;
+  const t = (c.t += dt);
+  const j = c.johnson;
+  if (t < JS_SLIP) {
+    j.angle = Math.sin(t * 16) * 0.12; // 비틀거림
+  } else if (t < JS_FALL) {
+    // 얼음에 미끄러지며 빙글 돌아 난간 쪽으로
+    const k = ease(clamp01((t - JS_SLIP) / (JS_FALL - JS_SLIP)));
+    j.x = j.fromX + (j.edge - j.fromX) * k;
+    j.angle = Math.sign(j.edge - j.fromX) * k * Math.PI * 3;
+    c.caption = '미끄덩—!! 얼어붙은 다리에서 미끄러진다!';
+  } else {
+    // 난간 너머 강으로 떨어지며 작아진다
+    const k = clamp01((t - JS_FALL) / (JS_SPLASH - JS_FALL));
+    j.scale = j.base * (1 - 0.8 * k);
+    j.alpha = 1 - k;
+    if (t < JS_SPLASH) c.caption = `${JOHNSON_NAME}: 으아아아…!`;
+  }
+  if (t >= JS_SPLASH && !c.splashed) {
+    c.splashed = true;
+    events.push({ type: 'splash', x: j.x, y: j.y + 30 });
+  }
+  if (t >= JS_SPLASH) {
+    c.caption = t < JS_LINE ? '풍덩!!' : t < JOHNSON_CUTSCENE_TIME - 0.8
+      ? `주인공: 본부, ${JOHNSON_NAME} 처리. 이번엔 정말 임무 완료!` : `${JOHNSON_NAME}을 물리쳤다! 스토리 클리어!`;
+  }
+  if (t >= JOHNSON_CUTSCENE_TIME) {
     match.cutscene.done = true;
     match.phase = 'result';
     match.winner = 'earth';
@@ -1502,6 +1886,7 @@ function updateWilsonCutscene(match, dt, events) {
  *   복도 1웨이브: 요원이 무전으로 "요원들은 복도로 와라!"
  *   복도 2웨이브: 첫 요원은 "나 이제 승급인데!!!", 마지막 요원 뒤 주인공이 "에잇크."
  *   복도 3웨이브: 주인공 "이 정도냐? 들어와—" (쿠쿵!) "…이게 뭐야?" → 천장이 부서지며 R-10
+ *   대교 1웨이브: 요원마다 기획서의 한마디, 마지막 요원은 무전으로 공수 요원 추가 투입 요청 / 3웨이브: 존슨 요원에게 지원 요청
  * 장면은 shots 목록: { until(초), focus('victim'|'hero'|null), zoom, caption, mode, bubble }. 앞에서부터 until까지 그 장면.
  * R-10이 내려앉을 때의 도발 장면(startTaunt)도 같은 방식으로 보여 준다.
  */
@@ -1542,6 +1927,14 @@ function killcamShots(end, line) {
       return [kill,
         { until: 2.4, focus: null, zoom: 1, caption: '(치지직…) 낯선 무전이 끼어든다…', mode: 'smith', portrait: 'wilson' },
         { until: 4.4, focus: null, zoom: 1, caption: `${WILSON_NAME}(무전): 추격대가 당했나… 내 RPG 두 자루로 끝내 주지.`, mode: 'smith', portrait: 'wilson' }];
+    case 'bridge-radio':
+      return [kill,
+        { until: 2.4, focus: 'victim', zoom: 2.1, caption: '(치지직…) 요원이 무전기를 꺼낸다', mode: 'radio', bubble: '치지직…' },
+        { until: 4.0, focus: 'victim', zoom: 2.1, caption: '요원(무전): 대교에 공수 요원 추가 투입! 낙하산 준비!', mode: 'radio', bubble: '추가 투입!' }];
+    case 'johnson-call':
+      return [kill,
+        { until: 2.4, focus: 'victim', zoom: 2.1, caption: '(치지직…) 요원이 무전기를 꺼낸다', mode: 'radio', bubble: '치지직…' },
+        { until: 4.0, focus: 'victim', zoom: 2.1, caption: `요원(무전): ${JOHNSON_NAME}님… 저격 지원을…!`, mode: 'radio', bubble: '지원을…!' }];
     case 'eikk':
       return [kill, { until: 3.2, focus: 'hero', zoom: 1.8, caption: '주인공: 에잇크.', mode: 'sigh' }];
     case 'rumble':
@@ -1558,8 +1951,8 @@ function killcamShots(end, line) {
 export function startKillcam(match, victim, waveEnd) {
   const story = match.story;
   const wave = WAVES[story.wave];
-  const line = !waveEnd && wave.killLine ? wave.killLine
-    : LAST_WORDS[Math.floor(story.rng() * LAST_WORDS.length) % LAST_WORDS.length];
+  const line = victim.lastWords ?? (!waveEnd && wave.killLine ? wave.killLine
+    : LAST_WORDS[Math.floor(story.rng() * LAST_WORDS.length) % LAST_WORDS.length]);
   const hero = heroOf(match, killerOf(match, victim)); // 2인 협동이면 쓰러뜨린 쪽 주인공을 비춘다
   const shots = killcamShots(waveEnd ? wave.end : null, line);
   match.phase = 'killcam';
@@ -1584,6 +1977,25 @@ function startTaunt(match) {
   };
 }
 
+/**
+ * 존슨 요원이 낙하산으로 다리 위에 내려앉으면: 경기가 잠깐 멈추고 존슨 요원을 확대해 "내가 처리하지… 멍청이들…" 하고,
+ * 빨간 조준선 세 줄을 그으며 저격총을 쏜다(연출, 피해 없음). 끝나면 보스전.
+ */
+function startJohnsonTaunt(match) {
+  const boss = match.players.find((p) => p.boss);
+  const hero = heroOf(match);
+  const shots = [
+    { until: 1.5, focus: 'victim', zoom: 1.6, caption: `${JOHNSON_NAME}: 내가 처리하지…`, mode: 'johnson', bubble: '내가 처리하지…' },
+    { until: 3.0, focus: 'victim', zoom: 1.6, caption: `${JOHNSON_NAME}: …멍청이들.`, mode: 'johnson', bubble: '멍청이들…' },
+    { until: 4.3, focus: null, zoom: 1, caption: '탕! 탕! 탕! 저격총 3발 — 빨간 선을 피해라!', mode: 'johnson-shot' },
+  ];
+  match.phase = 'killcam';
+  match.killcam = {
+    t: 0, duration: shots.at(-1).until, shots, shot: shots[0], victimId: boss.id,
+    victim: { x: boss.x, y: boss.y }, hero: { x: hero.x, y: hero.y }, waveEnd: false, wave: match.story.wave, cues: new Set(),
+  };
+}
+
 /** 킬캠 한 틱. 장면이 바뀔 때 효과음 이벤트를 내고, 끝나면 경기로 돌아간다. */
 export function updateKillcam(match, dt, events) {
   const k = match.killcam;
@@ -1602,6 +2014,8 @@ export function updateKillcam(match, dt, events) {
   if (k.shot.mode === 'rumble') cue('rumble');
   if (k.shot.mode === 'what') cue('what');
   if (k.shot.mode === 'taunt') cue('taunt');
+  if (k.shot.mode === 'johnson') cue('smith-voice');
+  if (k.shot.mode === 'johnson-shot') cue('johnson-shot');
   if (k.t >= k.duration) {
     match.killcam = null;
     match.phase = 'playing';

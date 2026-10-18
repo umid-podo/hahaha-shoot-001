@@ -98,6 +98,8 @@ const SHOT = {
   gunship: { filter: 1100, decay: 0.12, thump: 140, volume: 0.8 },
   flak: { filter: 450, q: 0.4, decay: 0.4, thump: 100, volume: 1.3 },
   dsmissile: { filter: 380, q: 0.4, decay: 0.6, thump: 80, volume: 1.4 },
+  // 대교: 존슨 요원의 저격총(여러 발이 한꺼번에, 날카롭고 큼)
+  jsniper: { filter: 2600, q: 1.3, decay: 0.45, thump: 240, volume: 1.7 },
 };
 
 /** 레이저: 높은 음에서 빠르게 떨어지는 톱니파 '피융' */
@@ -177,6 +179,12 @@ export function playEvents(events) {
     if (e.type === 'overheat') [700, 500, 300].forEach((f, i) => tone(f, 0.08, 'sawtooth', i * 0.07)); // 과열 경고
     if (e.type === 'jet-fire') gunshot(SHOT.jet); // 미사일 발사음
     if (e.type === 'tank-fire') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 130, volume: 1.4 }); tone(70, 0.2, 'square', 0.02); } // 탱크 포성
+    if (e.type === 'ship-fire') { gunshot({ filter: 350, q: 0.5, decay: 0.6, thump: 100, volume: 1.5 }); tone(55, 0.3, 'square', 0.02); } // 배 대포
+    if (e.type === 'sniper-aim') [1760, 1760].forEach((f, i) => tone(f, 0.05, 'square', i * 0.12)); // 조준선: 삑삑
+    if (e.type === 'johnson-shot') gunshot(SHOT.jsniper);
+    if (e.type === 'bump') { gunshot({ filter: 260, q: 0.4, decay: 0.3, thump: 90, volume: 1.2 }); tone(80, 0.15, 'square'); } // 구멍: 덜컹
+    if (e.type === 'drift') gunshot({ filter: 3000, q: 0.3, decay: 0.35, thump: 0, volume: 0.7 }); // 눈더미: 퍽(눈보라)
+    if (e.type === 'splash') { gunshot({ filter: 900, q: 0.3, decay: 0.9, thump: 60, volume: 1.4 }); slide(500, 120, 0.6, 'sine', 0.6); } // 풍덩
     if (e.type === 'jump') slide(900, 250, 0.6, 'triangle', 0.6); // 뛰어내림
     if (e.type === 'chute') { gunshot({ filter: 1800, q: 0.6, decay: 0.25, thump: 0, volume: 0.8 }); slide(300, 180, 0.4, 'sine', 0.5); } // 낙하산 펴짐(펄럭)
     if (e.type === 'swap') { tone(1200, 0.03, 'square'); tone(900, 0.04, 'square', 0.05); } // 철컥

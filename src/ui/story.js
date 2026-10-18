@@ -17,7 +17,7 @@ function el(tag, className, text) {
 const FROM = {
   start: '처음부터 옥상에', heli: '헬리콥터에서 내려옴', gunship: '전투기가 헬리콥터를 격추한 뒤 건쉽에서 내려옴',
   elevator: '엘리베이터에서 나옴', ceiling: '천장을 부수고 나타남', sky: '하늘 위에서 날아옴',
-  car: '차를 타고 뒤에서 따라붙음',
+  car: '차를 타고 뒤에서 따라붙음', chute: '낙하산을 메고 다리 위 차에 내려앉음',
 };
 const DIFFICULTY_NAME = Object.fromEntries(DIFFICULTY_IDS.map((id) => [id, DIFFICULTY[id].name]));
 
@@ -29,11 +29,16 @@ function waveNote(wave) {
     const w = WEAPONS.dualrpg;
     return `${from} · ${w.name}(쌍권총처럼 ${w.burst}점사, 터지는 로켓·폭발 ${w.splash.damage}, 유도 없음) · 보조무기·수류탄 없음`;
   }
+  if (wave.boss === 'johnson') {
+    const w = WEAPONS.jsniper;
+    return `${from} · ${w.name}(${w.interval}초마다 빨간 조준선을 따라 ${w.volley.count}발, 체력 절반 아래면 ${w.volley.rage}발) · 보조무기·수류탄 없음`;
+  }
   if (wave.boss === 'deathstar') return `${from} · 거대 비행선 · ${WEAPONS.flak.name}(부채꼴 ${WEAPONS.flak.pellets}발)`;
   if (wave.stage === 'sky') return `${from} · ${WEAPONS.gunship.name}(${WEAPONS.gunship.burst}점사)`;
   const levels = wave.agents?.some((a) => a.difficulty)
     ? ` · 기획 난이도 ${wave.agents.map((a) => DIFFICULTY_NAME[a.difficulty ?? 'normal']).join('·')}` : '';
-  return wave.boss ? `${from} · 주무기 + 보조무기 + 수류탄` : `${from} · 주무기만(보조무기·수류탄 없음)${levels}`;
+  const kata = wave.normalKata ? ` · 보통 요원은 건 카타 ${wave.normalKata}번` : '';
+  return wave.boss ? `${from} · 주무기 + 보조무기 + 수류탄` : `${from} · 주무기만(보조무기·수류탄 없음)${levels}${kata}`;
 }
 
 const RANDOM_NAME = `무작위(${STORY_WEAPONS.map((w) => WEAPONS[w].name).join('·')})`;

@@ -1,4 +1,4 @@
-import { WEAPONS, CHARACTERS, JET, TANK, COVER, RULES, TURRET, SKY } from './config.js';
+import { WEAPONS, CHARACTERS, JET, TANK, SHIP, DRIVE, COVER, RULES, TURRET, SKY } from './config.js';
 
 /**
  * 밸런스 메뉴에서 조정하는 수치 목록. 값은 config.js의 객체(WEAPONS·CHARACTERS·JET·COVER·RULES)를 그 자리에서 바꾸므로
@@ -12,6 +12,8 @@ const ROOT = {
   cover: COVER,
   jet: JET,
   tank: TANK,
+  ship: SHIP,
+  drive: DRIVE,
   turret: TURRET,
   sky: SKY,
 };
@@ -132,6 +134,35 @@ export const SECTIONS = [
       param('탱크', '포탄 속도(초당)', ['tank', 'missile', 'speed'], { min: 50, max: 3000, step: 10 }),
       param('탱크', '포탄 폭발 피해', ['tank', 'missile', 'splash', 'damage'], { max: 1000 }),
       param('탱크', '포탄 폭발 반경', ['tank', 'missile', 'splash', 'radius'], { max: 800, step: 5 }),
+    ],
+  },
+  {
+    title: '대교(스토리 5스테이지) · 대교 가는 길 · 배 · 존슨 요원',
+    params: [
+      param('대교 가는 길', '달리는 시간(대교까지)', ['drive', 'time'], { min: 3, max: 120, step: 1, unit: SEC }),
+      param('대교 가는 길', '달리는 속도(초당)', ['drive', 'speed'], { min: 100, max: 3000, step: 10 }),
+      param('대교 가는 길', '핸들 속도(초당)', ['drive', 'steer'], { min: 50, max: 3000, step: 10 }),
+      param('대교 가는 길', '구멍 피해', ['drive', 'damage'], { max: 1000 }),
+      param('대교 가는 길', '구멍 수(길 1000마다)', ['drive', 'holes'], { max: 3, step: 0.1 }),
+      param('대교 가는 길', '눈더미 수(길 1000마다)', ['drive', 'drifts'], { max: 3, step: 0.1 }),
+      param('대교 가는 길', '부딪힌 뒤 무적', ['drive', 'safe'], { max: 5, step: 0.1, unit: SEC }),
+      ...gun('jsniper', [
+        ['한 번에 쏘는 발 수', ['volley', 'count'], { min: 1, max: 9 }],
+        ['체력 절반 아래 발 수', ['volley', 'rage'], { min: 1, max: 15 }],
+        ['발 사이 각도(도)', ['volley', 'spread'], { max: 45, step: 1 }],
+        ['빨간 조준선이 보이는 시간', ['volley', 'aim'], { min: 0.1, max: 5, step: 0.05, unit: SEC }],
+      ]),
+      param('배', '지나가는 속도(초당)', ['ship', 'speed'], { min: 20, max: 1500, step: 10 }),
+      param('배', '다리가 벌어지는 시간', ['ship', 'openTime'], { min: 0.2, max: 10, step: 0.1, unit: SEC }),
+      param('배', '첫 등장 최소', ['ship', 'firstDelay', 0], { max: 120, step: 0.5, unit: SEC }),
+      param('배', '첫 등장 최대', ['ship', 'firstDelay', 1], { max: 120, step: 0.5, unit: SEC }),
+      param('배', '재등장 최소', ['ship', 'delay', 0], { max: 120, step: 0.5, unit: SEC }),
+      param('배', '재등장 최대', ['ship', 'delay', 1], { max: 120, step: 0.5, unit: SEC }),
+      param('배', '대포 간격', ['ship', 'missile', 'interval'], { min: 0.1, max: 10, step: 0.1, unit: SEC }),
+      param('배', '대포 명중 피해', ['ship', 'missile', 'damage'], { max: 1000 }),
+      param('배', '대포알 속도(초당)', ['ship', 'missile', 'speed'], { min: 50, max: 3000, step: 10 }),
+      param('배', '대포 폭발 피해', ['ship', 'missile', 'splash', 'damage'], { max: 1000 }),
+      param('배', '대포 폭발 반경', ['ship', 'missile', 'splash', 'radius'], { max: 800, step: 5 }),
     ],
   },
   {

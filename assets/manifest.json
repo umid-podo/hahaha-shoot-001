@@ -150,6 +150,20 @@
       "frames": 1
     },
     {
+      "id": "johnson",
+      "name": "존슨 요원",
+      "path": "characters/isb-agent-1.png",
+      "width": 1254,
+      "height": 1254,
+      "format": "png",
+      "hasAlphaChannel": true,
+      "source": "요원 1 그림을 그대로 씀(저격총은 코드로 덧그림)",
+      "kind": "static-character",
+      "bodyAnchor": [0.48, 0.64],
+      "anchorStatus": "initial visual estimate",
+      "frames": 1
+    },
+    {
       "id": "r10",
       "name": "R-10",
       "path": "characters/r10.svg",
