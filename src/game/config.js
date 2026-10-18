@@ -42,6 +42,12 @@ export const WEAPONS = {
     id: 'dualrpg', name: '쌍 RPG', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1,
     splash: { damage: 8, radius: 90 },
   },
+  // 존슨 요원(대교 보스) 전용 저격총: interval초마다 빨간 조준선(volley.aim초 동안 보임)을 따라 volley.count발을 부채꼴로 한꺼번에 쏜다.
+  // 체력이 절반 아래로 내려가면 volley.rage발. 일반 사격 대신 story.js가 쏜다(조준선이 보인 뒤 발사).
+  jsniper: {
+    id: 'jsniper', name: '존슨 저격총', interval: 1.5, damage: 30, speed: 2000, burst: 1,
+    volley: { count: 3, rage: 5, spread: 7, aim: 0.8 },
+  },
   rpg: {
     id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release',
     splash: { damage: 10, radius: 120 }, homing: { turnRate: 0.8 },
@@ -155,6 +161,11 @@ export const CHARACTERS = [
     id: 'wilson', name: '윌슨 요원', hidden: true, weapon: 'dualrpg', maxHp: 800, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2,
     image: 'assets/characters/isb-agent-2.png',
   },
+  // 스토리 모드 5스테이지(대교)의 보스: 저격총을 든 존슨 요원(빨간 조준선 3발·체력 절반 아래면 5발). 그림은 요원 1에 저격총을 덧그린다.
+  {
+    id: 'johnson', name: '존슨 요원', hidden: true, weapon: 'jsniper', maxHp: 900, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2,
+    image: 'assets/characters/isb-agent-1.png',
+  },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 2번 누르면 온이름 대신 나타난다. 모든 피해에 +5.
   {
     id: 'arc-trooper', name: '아크 트루퍼', hidden: true, unlockFrom: 'earth-arrow', unlockTaps: 2, bonusDamage: 5,
@@ -212,6 +223,31 @@ export const TANK = {
     splash: { damage: 10, radius: 130 },
   },
 };
+
+/**
+ * 배: 스토리 5스테이지(대교)에서 전투기 대신 나온다. 다리 가운데가 벌어지면(openTime초 동안 열림) 그 틈의 강을 따라 가로로 지나가며,
+ * 화면 안에 있는 동안 missile.interval마다 위(ISB)·아래(지구방위) 양쪽으로 대포를 한 발씩 쏜다(전투기 미사일과 같은 규칙).
+ * 대포알은 맞으면(명중) damage(20), 폭발 범위에 닿으면 splash.damage(8). 배가 지나가면 다리가 다시 닫힌다.
+ */
+export const SHIP = {
+  y: ARENA_HEIGHT / 2,
+  speed: 200,
+  firstDelay: [5, 8],
+  delay: [8, 14],
+  length: 460,
+  openTime: 1.5,
+  missile: {
+    interval: 1.2, damage: 20, speed: 700, offset: 70,
+    splash: { damage: 8, radius: 120 },
+  },
+};
+
+/**
+ * 대교로 가는 길(윌슨 요원을 물리친 뒤): 눈 내리는 길을 자동차로 달리며 구멍을 피한다. time초 동안 달리면 대교에 도착한다.
+ * 구멍에 빠지면 체력 damage가 깎이고(1 아래로는 안 깎임) 잠깐(safe초) 다시 빠지지 않는다. 눈더미에 부딪히면 잠깐 느려진다.
+ * steer는 좌우로 움직이는 속도(초당), speed는 길이 흘러가는 속도(초당), holes·drifts는 길 1000마다 놓이는 구멍·눈더미 수.
+ */
+export const DRIVE = { time: 20, speed: 700, steer: 560, damage: 20, safe: 0.8, holes: 2.4, drifts: 0.6 };
 
 /**
  * 엄폐물: 모든 탄환(아군·적·전투기)을 막는 고정 사각형. 가운데 1개 + 팀 진영마다 1개(점대칭 배치).

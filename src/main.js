@@ -44,7 +44,7 @@ let ai = null;
 // 키보드·터치·컨트롤러로 조작하는 사람 플레이어(싱글 플레이에서는 AI 자리 제외)
 let humans = [];
 
-// cutscene: 스토리 모드 엔딩 컷씬(입력은 받지 않지만 시간은 흐른다)
+// cutscene: 스토리 모드 엔딩 컷씬(입력은 받지 않지만 시간은 흐른다. 대교 가는 길만 좌우 이동으로 차를 몬다)
 // killcam: 스토리 모드에서 요원을 쓰러뜨릴 때의 짧은 처치 컷씬, gunkata: 쓰러뜨린 요원·보스와의 건 카타(1·2·3·4 버튼만)
 const active = () => match && ['playing', 'countdown', 'cutscene', 'killcam', 'gunkata'].includes(match.phase);
 
@@ -294,6 +294,7 @@ function frame(now) {
           screens.announce({
             sky: '3스테이지 하늘. 라이트닝을 타고 공중전! 체력이 모두 회복되었습니다.',
             road: '4스테이지 도로. 달리는 차 위에서 싸웁니다. 탱크를 조심하세요! 체력이 모두 회복되었습니다.',
+            bridge: '5스테이지 눈 내리는 대교. 다리가 벌어지면 배가 대포를 쏩니다. 체력은 대교 가는 길에서 남은 만큼입니다.',
           }[e.stage] ?? '2스테이지 복도. 체력이 모두 회복되었습니다.');
         }
         if (e.type === 'gunkata') screens.announce('건 카타 모드! 빛나는 버튼 1, 2, 3, 4를 0.5초 안에 누르세요.');

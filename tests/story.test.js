@@ -7,10 +7,10 @@ import { step, spawnProjectile } from '../src/game/update.js';
 import { updateAI, nearestTarget } from '../src/game/ai.js';
 import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
-  LAST_WORDS, DEATHSTAR_NAME, LIGHTNING_TIME, DEATHSTAR_CUTSCENE_TIME, MAX_ALLIES, allyPicks, extraAgents, normalizeAllyPicks, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
+  LAST_WORDS, DEATHSTAR_NAME, JOHNSON_NAME, DRIVE_Y, driveLength, LIGHTNING_TIME, DEATHSTAR_CUTSCENE_TIME, MAX_ALLIES, allyPicks, extraAgents, normalizeAllyPicks, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { glowingKey, GOAL, DAMAGE, WARN_TIME, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
-import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER } from '../src/game/config.js';
+import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER, SHIP, DRIVE } from '../src/game/config.js';
 
 function story(settings, seed = 7) {
   const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, settings, seed);
@@ -213,7 +213,7 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
     assert.equal(enemies(match).length, n);
     killAll(match, inputs);
   }
-  // 도로 보스전: 쌍 RPG를 든 윌슨 요원(체력 800) → 건 카타 → 엔딩 컷씬(차가 미끄러져 폭발) → 승리
+  // 도로 보스전: 쌍 RPG를 든 윌슨 요원(체력 800) → 건 카타 → 엔딩 컷씬(차가 미끄러져 폭발) → 대교 가는 길 → 5스테이지 대교
   untilFight(match, inputs);
   const [wilson] = enemies(match);
   assert.equal(wilson.name, '윌슨 요원');
@@ -226,12 +226,38 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
   assert.equal(match.gunkata.goal, 10);
   playKata(match, inputs);
   assert.equal(match.cutscene.kind, 'wilson');
-  assert.equal(checkpoint(match), null, '이미 스토리를 깸');
+  assert.equal(checkpoint(match).label, '대교 1웨이브');
   const boom = runOut(match, inputs, ['cutscene']);
   assert.ok(boom.filter((e) => e.type === 'explode').length >= 4, '윌슨 요원의 차 폭발');
+  assert.ok(boom.some((e) => e.type === 'stage' && e.stage === 'bridge'), '대교 가는 길을 지나 대교로');
+  assert.equal(match.phase, 'countdown');
+  assert.equal(match.story.stage, 'bridge');
+  runOut(match, inputs, ['countdown']);
+  // 대교: 낙하산 요원 3·4·5명 → 보스전 존슨 요원(체력 900, 도발 장면) → 건 카타 → 엔딩 컷씬(강으로 풍덩) → 승리
+  for (const n of [3, 4, 5]) {
+    untilFight(match, inputs);
+    assert.equal(enemies(match).length, n);
+    killAll(match, inputs);
+  }
+  untilFight(match, inputs);
+  assert.equal(match.phase, 'killcam', '존슨 요원 도발 장면');
+  runOut(match, inputs, ['killcam']);
+  const [johnson] = enemies(match);
+  assert.equal(johnson.name, '존슨 요원');
+  assert.equal(johnson.maxHp, 900);
+  assert.equal(match.story.brains.find((b) => b.playerId === johnson.id).diff.name, '보통');
+  johnson.hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'gunkata');
+  assert.equal(match.gunkata.goal, 10);
+  playKata(match, inputs);
+  assert.equal(match.cutscene.kind, 'johnson');
+  assert.equal(checkpoint(match), null, '이미 스토리를 깸');
+  const end = runOut(match, inputs, ['cutscene']);
+  assert.ok(end.some((e) => e.type === 'splash'), '존슨 요원이 강으로 풍덩');
   assert.equal(match.phase, 'result');
   assert.equal(match.winner, 'earth');
-  assert.equal(match.story.roster.length, 7 + 1 + 2 + 4 + 1 + 2 + 3 + 4 + 1 + 2 + 3 + 4 + 1, '결과 화면용: 나온 적 전원');
+  assert.equal(match.story.roster.length, 7 + 1 + 2 + 4 + 1 + 2 + 3 + 4 + 1 + 2 + 3 + 4 + 1 + 3 + 4 + 5 + 1, '결과 화면용: 나온 적 전원');
 });
 
 test('무작위 무기는 RPG·저격총·아킴보 석궁을 뺀 무기 중 하나', () => {
@@ -281,8 +307,8 @@ test('내려오는 중인 요원은 맞지 않고 움직이지 않으며, AI도 
 
 test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이동 속도·히트박스, 보스 보조무기', () => {
   const settings = defaultStory();
-  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 3000, 300, 250, 200, 800]);
-  assert.deepEqual(settings.waves.map((w) => w.difficulty), ['normal', 'normal', 'normal', 'normal', 'normal', 'mixed', 'easy', 'normal', 'easy', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal']);
+  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 3000, 300, 250, 200, 800, 200, 250, 200, 900]);
+  assert.deepEqual(settings.waves.map((w) => w.difficulty), ['normal', 'normal', 'normal', 'normal', 'normal', 'mixed', 'easy', 'normal', 'easy', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'easy', 'mixed', 'easy', 'normal']);
   settings.waves[0] = { ...settings.waves[0], hp: 1234, difficulty: 'hard', damage: 200, bulletSpeed: 150, speed: 50, radius: 45 };
   settings.waves[3].secondary = 'shotgun';
   const { match, inputs } = story(settings);
@@ -304,8 +330,8 @@ test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이�
   assert.equal(fixed.waves[0].damage, 100);
   assert.equal(fixed.waves[3].secondary, 'random');
   assert.equal(fixed.waves[5].difficulty, 'hard');
-  assert.equal(fixed.waves.length, 16, '예전(옥상만) 저장값도 복도·하늘·도로 기본값으로 채움');
-  assert.equal(WAVES.length, 16);
+  assert.equal(fixed.waves.length, 20, '예전(옥상만) 저장값도 복도·하늘·도로·대교 기본값으로 채움');
+  assert.equal(WAVES.length, 20);
 });
 
 test('요원·보스가 올 때마다 경고음(alarm): 전투 시작, 헬리콥터, 보스 건쉽', () => {
@@ -769,6 +795,7 @@ test('요원별 주무기: 모든 요원(R-10 빼고)의 주무기를 정할 수
     ['rifle'], ['random', 'random'], ['random', 'random', 'random'], ['pistol'],
     ['random'], ['rifle', 'rifle'], ['dual', 'pistol', 'pistol', 'rifle'], [], [], [], [], [],
     ['rifle', 'rifle'], ['random', 'random', 'random'], ['random', 'random', 'random', 'random'], [],
+    ['random', 'random', 'random'], ['random', 'random', 'random', 'random'], ['random', 'random', 'random', 'random', 'random'], [],
   ]);
   assert.deepEqual(AGENT_WEAPON_CHOICES, ['random', 'rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow']);
 
@@ -1046,7 +1073,7 @@ test('AI 동료 수만큼 일반 웨이브마다 쉬움 돌격소총 요원이 �
   untilFight(match, inputs);
   assert.equal(enemies(match).length, 1);
   assert.equal(enemies(match)[0].name, BOSS_NAME);
-  assert.deepEqual(WAVES.map((_, i) => extraAgents(i, 2)), [2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0]);
+  assert.deepEqual(WAVES.map((_, i) => extraAgents(i, 2)), [2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 0]);
 });
 
 test('AI 동료: 적을 조준해 싸우고, 사람이 모두 쓰러지면 동료가 남아도 패배, 건 카타는 사람이 함', () => {
@@ -1366,14 +1393,15 @@ test('도로 탱크: 전투기 대신 탱크가 가운데 차선을 지나가며
   assert.equal(roof.jet.kind, undefined);
 });
 
-test('스테이지 건너뛰기·시작 스테이지: 다음 스테이지 처음부터 체력 가득, 도로가 마지막', async () => {
+test('스테이지 건너뛰기·시작 스테이지: 다음 스테이지 처음부터 체력 가득, 대교가 마지막', async () => {
   const { STAGE_ORDER, stageStart, nextStageOf } = await import('../src/game/story.js');
-  assert.deepEqual(STAGE_ORDER, ['rooftop', 'corridor', 'sky', 'road']);
-  assert.deepEqual(STAGE_ORDER.map(stageStart), [0, 4, 8, 12]);
+  assert.deepEqual(STAGE_ORDER, ['rooftop', 'corridor', 'sky', 'road', 'bridge']);
+  assert.deepEqual(STAGE_ORDER.map(stageStart), [0, 4, 8, 12, 16]);
   assert.equal(nextStageOf('rooftop'), 'corridor');
   assert.equal(nextStageOf('corridor'), 'sky');
   assert.equal(nextStageOf('sky'), 'road');
-  assert.equal(nextStageOf('road'), null);
+  assert.equal(nextStageOf('road'), 'bridge');
+  assert.equal(nextStageOf('bridge'), null);
   const m = createStoryMatch({ characterId: 'earth-arrow', weapon: 'dual' }, undefined, 3, { wave: 8, hp: 99999, skip: true });
   assert.equal(m.story.stage, 'sky');
   assert.equal(m.players[0].hp, m.players[0].maxHp);
@@ -1418,4 +1446,215 @@ test('데스스타 3갈래 미사일: 몇 초마다 가장 가까운 라이트�
   assert.equal(five.match.projectiles.filter((b) => b.weapon === 'dsmissile').length, 5);
   resetAll();
   assert.equal(WEAPONS.dsmissile.volley.count, 3);
+});
+
+/* ───────── 5스테이지 대교 ───────── */
+
+/** 도로 보스전(윌슨 요원)을 깨고 대교 가는 길(drive) 컷씬이 시작될 때까지 */
+function toDrive(allies = 0) {
+  const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 5, { wave: 15, hp: 99999 }, null, allies);
+  runOut(match, {}, ['countdown']);
+  const inputs = createInputs(match.players);
+  match.jetTimer = Infinity;
+  untilFight(match, inputs);
+  enemies(match)[0].hp = 0;
+  step(match, inputs);
+  playKata(match, inputs);
+  while (match.cutscene?.kind === 'wilson') step(match, inputs);
+  return { match, inputs };
+}
+
+/** 대교 웨이브 wave부터(건너뛰기, 체력 가득) 시작해 카운트다운까지 끝낸다. 배는 나오지 않게 한다. */
+function bridge(wave = 16, allies = 0) {
+  const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 5, { wave, hp: 99999, skip: wave === 16 }, null, allies);
+  runOut(match, {}, ['countdown']);
+  const inputs = createInputs(match.players);
+  match.jetTimer = Infinity;
+  return { match, inputs };
+}
+
+test('대교 가는 길: 윌슨 요원 뒤 체력 회복, 차를 몰고 구멍을 피함(빠지면 체력 깎임), 대교 입구에 들어서면 5스테이지 대교', () => {
+  const { match, inputs } = toDrive(1);
+  const c = match.cutscene;
+  assert.equal(c.kind, 'drive');
+  const [P1, A1] = match.players;
+  assert.equal(P1.hp, P1.maxHp, '스테이지를 깨서 체력 100% 회복');
+  assert.equal(c.cars.length, 2, '주인공 + AI 동료');
+  assert.ok(c.obstacles.some((o) => o.kind === 'hole') && c.obstacles.some((o) => o.kind === 'drift'));
+  assert.equal(checkpoint(match).label, '대교 1웨이브');
+  // 좌우 이동 입력으로 핸들을 꺾는다
+  const x0 = c.cars[0].x;
+  inputs.P1.moveAxis = -1;
+  for (let t = 0; t < 0.3; t += TICK) step(match, inputs);
+  assert.ok(c.cars[0].x < x0 - 100, '왼쪽으로');
+  inputs.P1.moveAxis = 0;
+  // 구멍 하나를 사람 차 바로 앞에 놓으면 빠져서 체력이 깎인다
+  c.obstacles.unshift({ kind: 'hole', d: c.dist + 60, x: c.cars[0].x, r: 30 });
+  const events = [];
+  for (let t = 0; t < 0.5; t += TICK) events.push(...step(match, inputs));
+  assert.ok(events.some((e) => e.type === 'bump' && e.playerId === 'P1'));
+  assert.equal(P1.hp, P1.maxHp - DRIVE.damage);
+  assert.equal(c.holes, 1);
+  // AI 동료는 스스로 피한다
+  const hp = A1.hp;
+  for (let i = 0; i < 6000 && !c.switched; i++) step(match, inputs);
+  assert.equal(A1.hp, hp, 'AI 동료는 구멍을 피함');
+  assert.ok(c.dist >= driveLength());
+  assert.equal(match.story.stage, 'bridge');
+  assert.ok(P1.hp < P1.maxHp, '대교 가는 길에서 깎인 체력은 그대로');
+  runOut(match, inputs, ['cutscene']);
+  assert.equal(match.phase, 'countdown');
+  assert.equal(match.story.banner.text, '5스테이지 · 대교');
+});
+
+test('대교 가는 길: 구멍에 계속 빠져도 쓰러지지 않음(체력 1까지)', () => {
+  const { match, inputs } = toDrive();
+  const [P1] = match.players;
+  P1.hp = 30;
+  const c = match.cutscene;
+  for (let k = 0; k < 4; k++) {
+    c.obstacles.unshift({ kind: 'hole', d: c.dist + 40, x: c.cars[0].x, r: 30 });
+    for (let t = 0; t < DRIVE.safe + 0.2; t += TICK) step(match, inputs);
+  }
+  assert.equal(P1.hp, 1);
+  assert.ok(P1.alive);
+});
+
+test('대교: 요원은 낙하산을 메고 다리 위 차에 내려앉음(오는 동안 안 맞음), 1웨이브 쉬움 3명은 쓰러질 때마다 저마다 한마디', () => {
+  const { match, inputs } = bridge();
+  assert.equal(match.story.stage, 'bridge');
+  assert.ok(!match.covers.some((c) => c.id === 'center'), '가운데는 다리가 벌어지는 자리');
+  assert.equal(match.players[0].carX, match.players[0].x, '주인공도 자기 차 앞에');
+  const events = [];
+  let seen = false;
+  for (let i = 0; i < 2000 && match.story.phase !== 'fight'; i++) {
+    events.push(...step(match, inputs));
+    const coming = enemies(match).find((p) => p.entering && p.entering.t > 0);
+    if (coming) {
+      seen = true;
+      assert.equal(coming.entering.kind, 'chute');
+      assert.ok(coming.y < RAIL_Y.isb + 1e-6);
+    }
+  }
+  assert.ok(seen);
+  assert.ok(events.some((e) => e.type === 'land'));
+  const agents = enemies(match);
+  assert.equal(agents.length, 3);
+  assert.ok(agents.every((p) => p.carX === p.x && p.y === RAIL_Y.isb));
+  assert.deepEqual(agents.map((p) => match.story.brains.find((b) => b.playerId === p.id).diff.name), ['쉬움', '쉬움', '쉬움']);
+  assert.ok(agents.every((p) => STORY_WEAPONS.includes(p.primary)), '기본 무기는 무작위(설정에서 바꿈)');
+  const lines = [];
+  for (const agent of agents) {
+    agent.hp = 0;
+    step(match, inputs);
+    playKata(match, inputs);
+    assert.equal(match.phase, 'killcam');
+    lines.push(match.killcam.shot.caption);
+    runOut(match, inputs, ['killcam']);
+  }
+  assert.deepEqual(lines, WAVES[16].agents.map((a) => `요원: ${a.line}`));
+  assert.equal(new Set(lines).size, 3);
+});
+
+test('대교 2웨이브: 4명이 4대의 차에 내려앉고(쉬움 3·보통 1), 보통 요원을 쓰러뜨리면 건 카타 5번', () => {
+  const { match, inputs } = bridge(17);
+  untilFight(match, inputs);
+  const agents = enemies(match);
+  assert.equal(agents.length, 4);
+  const diff = (p) => match.story.brains.find((b) => b.playerId === p.id).diff.name;
+  assert.deepEqual(agents.map(diff), ['쉬움', '쉬움', '쉬움', '보통']);
+  agents[0].hp = 0;
+  step(match, inputs);
+  assert.equal(match.gunkata.goal, 3, '쉬움 요원은 3번');
+  playKata(match, inputs);
+  runOut(match, inputs, ['killcam']);
+  agents[3].hp = 0;
+  step(match, inputs);
+  assert.equal(match.gunkata.goal, 5, '보통 요원은 5번');
+  // 3웨이브는 쉬움 5명
+  playKata(match, inputs);
+  runOut(match, inputs, ['killcam']);
+  killAll(match, inputs);
+  untilFight(match, inputs);
+  assert.equal(enemies(match).length, 5);
+  assert.ok(enemies(match).every((p) => diff(p) === '쉬움'));
+});
+
+test('대교 배: 다리 가운데가 벌어지고 배가 지나가며 위아래로 대포(명중 20·폭발 8), 지나가면 다리가 닫힘', () => {
+  const { match, inputs } = bridge(17);
+  untilFight(match, inputs);
+  for (const p of match.players) { p.hp = p.maxHp = 99999; }
+  match.jetTimer = SHIP.openTime + 0.5;
+  assert.equal(match.story.bridge.open, 0);
+  const events = [];
+  for (let t = 0; t < 4 && !events.some((e) => e.type === 'ship-fire'); t += TICK) events.push(...step(match, inputs));
+  assert.equal(match.story.bridge.open, 1, '배가 오기 전에 활짝');
+  assert.equal(match.jet.kind, 'ship');
+  assert.equal(match.jet.y, SHIP.y);
+  const balls = match.projectiles.filter((b) => b.weapon === 'ship');
+  assert.equal(balls.length, 2);
+  assert.ok(balls.every((b) => b.team === 'jet' && b.damage === 20 && b.splash.damage === 8));
+  assert.deepEqual(balls.map((b) => Math.sign(b.vy)).sort(), [-1, 1]);
+  match.jet.x = 99999; // 화면 밖으로
+  for (let t = 0; t < SHIP.openTime + 0.2; t += TICK) step(match, inputs);
+  assert.equal(match.jet, null);
+  assert.equal(match.story.bridge.open, 0, '지나가면 닫힘');
+});
+
+test('존슨 요원: 내려앉으면 "내가 처리하지… 멍청이들…" 장면, 1.5초마다 빨간 조준선 3발(멈춰 서서 겨눔), 체력 절반 아래면 5발', () => {
+  const { match, inputs } = bridge(19);
+  const events = untilFight(match, inputs);
+  assert.ok(events.some((e) => e.type === 'land'));
+  assert.equal(match.phase, 'killcam');
+  const captions = new Set();
+  const cut = [];
+  while (match.phase === 'killcam') { cut.push(...step(match, inputs)); captions.add(match.killcam?.shot.caption); }
+  assert.ok([...captions].some((t) => t?.includes('내가 처리하지')));
+  assert.ok([...captions].some((t) => t?.includes('멍청이들')));
+  assert.ok(cut.some((e) => e.type === 'johnson-shot'));
+  const [johnson] = enemies(match);
+  assert.equal(johnson.name, JOHNSON_NAME);
+  assert.ok(johnson.scripted && johnson.primaryOnly);
+  const [P1] = match.players;
+  P1.hp = P1.maxHp = 99999;
+  // 일반 사격은 하지 않는다
+  inputs[johnson.id] = { ...inputs[johnson.id], aim: Math.PI / 2, aiming: true };
+  const fired = [];
+  let lines = null;
+  for (let t = 0; t < WEAPONS.jsniper.interval + 0.05; t += TICK) {
+    fired.push(...step(match, inputs));
+    if (match.story.sniper?.lines && !lines) lines = { ...match.story.sniper.lines, x0: johnson.x };
+    if (match.story.sniper?.lines) assert.ok(johnson.rooted, '조준하는 동안 멈춰 섬');
+  }
+  assert.ok(lines, '쏘기 전에 빨간 조준선');
+  assert.equal(lines.angles.length, 3);
+  assert.ok(fired.some((e) => e.type === 'sniper-aim'));
+  const shots = match.projectiles.filter((b) => b.weapon === 'jsniper');
+  assert.equal(shots.length, 3, '조준선을 따라 3발');
+  assert.ok(shots.every((b) => b.damage === WEAPONS.jsniper.damage));
+  assert.equal(fired.filter((e) => e.type === 'fire' && e.playerId === johnson.id).length, 1, '1.5초에 한 번');
+  // 체력 절반 아래: 5발
+  johnson.hp = Math.floor(johnson.maxHp / 2);
+  const rage = [];
+  for (let t = 0; t < WEAPONS.jsniper.interval; t += TICK) rage.push(...step(match, inputs));
+  assert.equal(match.story.banner.text, `${JOHNSON_NAME} 분노!`);
+  assert.equal(match.projectiles.filter((b) => b.weapon === 'jsniper' && b.life > 1.9).length, 5);
+});
+
+test('존슨 요원 엔딩: 건 카타 10번 뒤 얼음에 미끄러져 강으로 풍덩, 스토리 클리어(저장 불가)', () => {
+  const { match, inputs } = bridge(19);
+  untilFight(match, inputs);
+  runOut(match, inputs, ['killcam']);
+  enemies(match)[0].hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'gunkata');
+  assert.match(match.gunkata.caption, /존슨 요원/);
+  playKata(match, inputs);
+  assert.equal(match.cutscene.kind, 'johnson');
+  assert.equal(checkpoint(match), null);
+  const events = runOut(match, inputs, ['cutscene']);
+  assert.ok(events.some((e) => e.type === 'splash'));
+  assert.equal(match.cutscene.johnson.alpha, 0);
+  assert.equal(match.phase, 'result');
+  assert.equal(match.winner, 'earth');
 });

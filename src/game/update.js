@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, BULLET_RADIUS,
-  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, COVER,
+  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, SHIP, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
@@ -77,17 +77,19 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
   return projectile;
 }
 
-/** 지금 경기의 전투기 설정: 스토리 4스테이지(도로)는 탱크(TANK), 그 밖에는 전투기(JET) */
-const jetConfig = (match) => (match.story?.stage === 'road' ? TANK : JET);
+/** 전투기 종류(kind)별 설정: 탱크(4스테이지 도로)·배(5스테이지 대교)·전투기 */
+const JET_KINDS = { tank: TANK, ship: SHIP };
+const configOf = (kind) => JET_KINDS[kind] ?? JET;
+/** 지금 경기에 나올 전투기 종류: 스토리 4스테이지(도로)는 탱크, 5스테이지(대교)는 배, 그 밖에는 전투기(undefined) */
+const jetKind = (match) => ({ road: 'tank', bridge: 'ship' })[match.story?.stage];
 
 /**
- * 전투기 미사일(탱크 포탄): 위(ISB 쪽)·아래(지구방위 쪽)로 똑바로 한 발씩. 팀이 'jet'이라 양 팀 모두 맞고,
- * overCovers는 엄폐물을 넘어간다는 뜻이다. 탱크는 쏜 쪽·무기가 'tank'(결과 화면에 '탱크')다.
+ * 전투기 미사일(탱크 포탄·배 대포알): 위(ISB 쪽)·아래(지구방위 쪽)로 똑바로 한 발씩. 팀이 'jet'이라 양 팀 모두 맞고,
+ * overCovers는 엄폐물을 넘어간다는 뜻이다. 탱크·배는 쏜 쪽·무기가 'tank'·'ship'(결과 화면에 '탱크'·'배')이다.
  */
 function fireJet(match, jet, events) {
-  const tank = jet.kind === 'tank';
-  const { missile } = tank ? TANK : JET;
-  const source = tank ? 'tank' : 'jet';
+  const { missile } = configOf(jet.kind);
+  const source = jet.kind ?? 'jet';
   for (const [dy, targetTeam] of [[-1, 'isb'], [1, 'earth']]) {
     const y = jet.y + dy * missile.offset;
     match.projectiles.push({
@@ -98,17 +100,17 @@ function fireJet(match, jet, events) {
       splash: missile.splash, endY: RAIL_Y[targetTeam], overCovers: true,
     });
   }
-  events.push({ type: tank ? 'tank-fire' : 'jet-fire', x: jet.x, y: jet.y });
+  events.push({ type: `${source}-fire`, x: jet.x, y: jet.y });
 }
 
 /**
- * 전투기(도로에서는 탱크)를 움직이고 화면 안에서는 주기적으로 쏜다. 화면을 벗어나면 다음 등장까지 무작위로 기다린다.
- * 탱크는 도로 가운데 차선을 달리며(kind 'tank'), 포탑을 쏠 쪽으로 돌린다.
+ * 전투기(도로에서는 탱크, 대교에서는 배)를 움직이고 화면 안에서는 주기적으로 쏜다. 화면을 벗어나면 다음 등장까지 무작위로 기다린다.
+ * 탱크는 도로 가운데 차선을, 배는 벌어진 다리 틈의 강을 따라 지나간다(kind 'tank'·'ship').
  */
 function updateJet(match, dt, events) {
   const { jet } = match;
   if (jet) {
-    const cfg = jet.kind === 'tank' ? TANK : JET;
+    const cfg = configOf(jet.kind);
     jet.previousX = jet.x;
     jet.x += jet.dir * cfg.speed * dt;
     const edge = cfg.length / 2 + OUT_MARGIN;
@@ -126,10 +128,11 @@ function updateJet(match, dt, events) {
   }
   match.jetTimer -= dt;
   if (match.jetTimer > 0) return;
-  const cfg = jetConfig(match);
+  const kind = jetKind(match);
+  const cfg = configOf(kind);
   const dir = match.rng() < 0.5 ? 1 : -1;
   const x = dir > 0 ? -cfg.length / 2 : ARENA_WIDTH + cfg.length / 2;
-  match.jet = { x, previousX: x, y: cfg.y, dir, fireTimer: cfg.missile.interval, ...(cfg === TANK ? { kind: 'tank' } : {}) };
+  match.jet = { x, previousX: x, y: cfg.y, dir, fireTimer: cfg.missile.interval, ...(kind ? { kind } : {}) };
 }
 
 /** 유도탄: 가장 가까운 살아있는 적 쪽으로 turnRate 한도 안에서 꺾는다. 속력은 그대로. */
@@ -469,9 +472,9 @@ export function step(match, inputs, dt = TICK) {
     if (match.countdown <= 0) match.phase = 'playing';
     return events;
   }
-  // 스토리 모드 엔딩 컷씬: 입력은 받지 않고 연출만 진행한다
+  // 스토리 모드 엔딩 컷씬: 연출만 진행한다(대교 가는 길만 좌우 이동 입력을 받는다)
   if (match.phase === 'cutscene') {
-    updateCutscene(match, dt, events);
+    updateCutscene(match, dt, events, inputs);
     return events;
   }
   // 스토리 모드 건 카타(스미스 요원): 1·2·3·4 버튼 대응만 받는다
@@ -516,7 +519,10 @@ export function step(match, inputs, dt = TICK) {
       p.wasAiming = false;
       continue;
     }
-    p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * p.speed * dt));
+    // rooted: 스토리 연출로 잠깐 멈춰 선 적(조준선을 긋는 존슨 요원)
+    if (!p.rooted) p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * p.speed * dt));
+    // 스토리가 대신 쏘는 적(존슨 요원의 조준선 저격)은 움직이기만 한다
+    if (p.scripted) { input.item = false; p.wasAiming = false; continue; }
     if (input.item) {
       input.item = false;
       if (!p.primaryOnly) throwGrenade(match, p, events);
