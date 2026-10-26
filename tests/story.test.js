@@ -9,8 +9,9 @@ import {
   createStoryMatch, defaultStory, normalizeStory, WAVES, STORY_WEAPONS, BOSS_NAME, R10_NAME, CUTSCENE_TIME, R10_CUTSCENE_TIME,
   LAST_WORDS, DEATHSTAR_NAME, JOHNSON_NAME, DRIVE_Y, driveLength, LIGHTNING_TIME, DEATHSTAR_CUTSCENE_TIME, MAX_ALLIES, allyPicks, extraAgents, normalizeAllyPicks, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
-import { glowingKey, GOAL, DAMAGE, WARN_TIME, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
-import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER, SHIP, DRIVE } from '../src/game/config.js';
+import { glowingKey, GOAL, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
+import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER, SHIP, DRIVE, KATA } from '../src/game/config.js';
+const WARN_TIME = KATA.warn, DAMAGE = KATA.damage;
 
 function story(settings, seed = 7) {
   const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, settings, seed);
@@ -1731,4 +1732,26 @@ test('건 카타 수련장: 훈련용 전투 로봇과 끝없이 건 카타, 체
   assert.equal(match.phase, 'gunkata');
   assert.equal(match.gunkata.training.streak, 0);
   assert.equal(match.gunkata.training.best, 12);
+});
+
+test('건 카타 시간 조절: 밸런스의 버튼 시간제한·쉬는 시간·피해를 따름', async () => {
+  const { PARAMS, setValue, resetAll } = await import('../src/game/balance.js');
+  const { createTrainingMatch } = await import('../src/game/gunkata.js');
+  const byId = (id) => PARAMS.find((p) => p.id === id);
+  setValue(byId('kata.warn'), 1.5);
+  setValue(byId('kata.gap.0'), 2);
+  setValue(byId('kata.gap.1'), 2);
+  const match = createTrainingMatch({ characterId: 'earth-pizza' }, 3);
+  const inputs = createInputs(match.players);
+  // 첫 공격(소개 뒤)까지 기다렸다가, 1.4초가 지나도 아직 누를 수 있다
+  while (!glowingKey(match.gunkata)) step(match, inputs);
+  for (let t = 0; t < 1.4; t += TICK) step(match, inputs);
+  assert.ok(glowingKey(match.gunkata), '시간제한 1.5초');
+  inputs[match.gunkata.heroId].kata = glowingKey(match.gunkata);
+  step(match, inputs);
+  while (match.gunkata.attack) step(match, inputs);
+  assert.ok(Math.abs(match.gunkata.gap - 2 * 0.97) < 1e-9, '쉬는 시간 2초(수련장은 연속 1번이라 3% 짧게)');
+  resetAll();
+  assert.equal(KATA.warn, 0.5);
+  assert.deepEqual(KATA.gap, [0.55, 1.1]);
 });

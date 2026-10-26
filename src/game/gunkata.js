@@ -1,12 +1,13 @@
 import { BOSS_NAME, R10_NAME, WILSON_NAME, JOHNSON_NAME, startCutscene, startKillcam } from './story.js';
 import { createRng, createPlayer, createMatchWith, SLOTS } from './state.js';
-import { TICK } from './config.js';
+import { TICK, KATA } from './config.js';
 
 /**
  * 건 카타 모드(스토리 모드). 요원을 쓰러뜨릴 때마다(스미스 요원·R-10·윌슨 요원 포함, 하늘의 건쉽·데스스타 제외) 이 모드로 들어간다.
  * 화면이 옆에서 본 시점으로 바뀌어 주인공(왼쪽)과 쓰러뜨린 적(오른쪽)이 마주 보고, 조작은 1·2·3·4 버튼만 남는다.
- * 적이 무작위로 공격하는데, 공격하기 WARN_TIME(0.5초) 전부터 눌러야 할 버튼이 빛난다.
- * 빛나는 동안 맞는 버튼을 누르면 대응(주인공의 반격), 못 누르거나 다른 버튼을 누르면 체력 DAMAGE(100)가 깎인다.
+ * 적이 무작위로 공격하는데, 공격하기 KATA.warn초(기본 0.5초) 전부터 눌러야 할 버튼이 빛난다.
+ * 빛나는 동안 맞는 버튼을 누르면 대응(주인공의 반격), 못 누르거나 다른 버튼을 누르면 체력 KATA.damage(기본 100)가 깎인다.
+ * 공격 사이 쉬는 시간은 KATA.gap. 세 값 모두 밸런스 조정의 '건 카타' 칸(config.js KATA)에서 바꾼다.
  * 일반 요원은 GOAL.agent(3)번(대교 2웨이브의 보통 요원처럼 foe.kataGoal이 있으면 그 횟수), 보스는 GOAL.boss(10)번 대응하면 끝나고 원래 장면으로 이어진다:
  *   일반 요원 → 처치 컷씬(킬캠: 마지막 한마디·웨이브 마무리 장면), 스미스 요원 → 엔딩 컷씬(발차기), R-10 → RPG 엔딩 컷씬.
  * 공격(요원·스미스 요원 / R-10):
@@ -32,12 +33,9 @@ export const DRONE_MOVES = {
 export const KATA_KEYS = [1, 2, 3, 4];
 /** 끝내려면 대응해야 하는 횟수: 일반 요원 3번, 보스 10번 */
 export const GOAL = { agent: 3, boss: 10 };
-export const DAMAGE = 100;
-export const WARN_TIME = 0.5;   // 버튼이 빛나는(눌러야 하는) 시간 = 공격까지 남은 시간
 export const RESOLVE_TIME = 0.9; // 반격·피격 장면
 export const INTRO_TIME = { agent: 1.3, boss: 2.2 };
 export const OUTRO_TIME = { agent: 0.8, boss: 1.4 };
-const GAP = [0.55, 1.1];        // 공격 사이 쉬는 시간
 
 export const movesOf = (kata) => (kata?.drone ? DRONE_MOVES : KATA_MOVES);
 
@@ -190,7 +188,7 @@ export function updateGunKata(match, inputs, dt, events) {
       events.push(a.kind === 4 ? { type: 'kick', x: 0, y: 0 } : { type: 'fire', playerId: hero.id, weapon: 'pistol' });
       return;
     }
-    if (press || a.t >= WARN_TIME - 1e-9) {
+    if (press || a.t >= KATA.warn - 1e-9) {
       // 못 눌렀거나 다른 버튼: 적의 공격이 맞는다
       Object.assign(a, { state: 'hit', t: 0, press, wrong: !!press });
       k.misses++;
@@ -201,17 +199,18 @@ export function updateGunKata(match, inputs, dt, events) {
         events.push({ type: 'fire', playerId: foe.id, weapon: 'pistol' }, { type: 'kata-hit', key: a.kind, damage: 0 });
         return;
       }
-      hero.hp = Math.max(0, hero.hp - DAMAGE);
+      const damage = KATA.damage;
+      hero.hp = Math.max(0, hero.hp - damage);
       hero.hurt = 0.3;
       const stats = match.stats?.[hero.id];
       if (stats) {
-        stats.taken += DAMAGE;
-        stats.takenFrom[foe.id] = (stats.takenFrom[foe.id] ?? 0) + DAMAGE;
+        stats.taken += damage;
+        stats.takenFrom[foe.id] = (stats.takenFrom[foe.id] ?? 0) + damage;
       }
-      k.caption = press ? `틀린 버튼! -${DAMAGE}` : `늦었다! -${DAMAGE}`;
+      k.caption = press ? `틀린 버튼! -${damage}` : `늦었다! -${damage}`;
       const weapon = k.drone ? 'laser' : 'pistol';
       events.push(a.kind === 4 ? { type: 'kick', x: 0, y: 0 } : { type: 'fire', playerId: foe.id, weapon });
-      events.push({ type: 'kata-hit', key: a.kind, damage: DAMAGE });
+      events.push({ type: 'kata-hit', key: a.kind, damage });
       if (hero.hp <= 0) heroDown(match, k, hero, foe, events);
     }
     return;
@@ -219,7 +218,7 @@ export function updateGunKata(match, inputs, dt, events) {
   // 반격·피격 장면이 끝나면 다음 공격
   if (a.t >= RESOLVE_TIME) {
     k.attack = null;
-    k.gap = GAP[0] + k.rng() * (GAP[1] - GAP[0]);
+    k.gap = KATA.gap[0] + k.rng() * (KATA.gap[1] - KATA.gap[0]);
     if (k.training) k.gap *= Math.max(0.5, 1 - k.training.streak * TRAINING_RUSH);
     if (k.done >= k.goal && !k.training) {
       k.finish = 0;

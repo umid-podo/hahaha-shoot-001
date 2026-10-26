@@ -1,4 +1,4 @@
-import { WEAPONS, CHARACTERS, JET, TANK, SHIP, DRIVE, COVER, RULES, TURRET, SKY } from './config.js';
+import { WEAPONS, CHARACTERS, JET, TANK, SHIP, DRIVE, COVER, RULES, TURRET, SKY, KATA } from './config.js';
 
 /**
  * 밸런스 메뉴에서 조정하는 수치 목록. 값은 config.js의 객체(WEAPONS·CHARACTERS·JET·COVER·RULES)를 그 자리에서 바꾸므로
@@ -15,6 +15,7 @@ const ROOT = {
   ship: SHIP,
   drive: DRIVE,
   turret: TURRET,
+  kata: KATA,
   sky: SKY,
 };
 
@@ -163,6 +164,15 @@ export const SECTIONS = [
       param('배', '대포알 속도(초당)', ['ship', 'missile', 'speed'], { min: 50, max: 3000, step: 10 }),
       param('배', '대포 폭발 피해', ['ship', 'missile', 'splash', 'damage'], { max: 1000 }),
       param('배', '대포 폭발 반경', ['ship', 'missile', 'splash', 'radius'], { max: 800, step: 5 }),
+    ],
+  },
+  {
+    title: '건 카타',
+    params: [
+      param('건 카타', '버튼 누르는 시간제한', ['kata', 'warn'], { min: 0.1, max: 5, step: 0.05, unit: SEC }),
+      param('건 카타', '공격 사이 간격 최소', ['kata', 'gap', 0], { min: 0, max: 10, step: 0.05, unit: SEC }),
+      param('건 카타', '공격 사이 간격 최대', ['kata', 'gap', 1], { min: 0, max: 10, step: 0.05, unit: SEC }),
+      param('건 카타', '못 막았을 때 깎이는 체력', ['kata', 'damage'], { max: 1000, step: 10 }),
     ],
   },
   {
