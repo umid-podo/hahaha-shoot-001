@@ -202,10 +202,16 @@ function holder(path) {
 }
 export function getValue(p) { return holder(p.path)[p.path.at(-1)]; }
 
-/** 이 모듈을 처음 불러올 때(=config.js 기본값)의 값 */
+/** 이 모듈을 처음 불러올 때(=config.js 기본값)의 값. '원래 기본값' */
 const DEFAULTS = Object.fromEntries(PARAMS.map((p) => [p.id, getValue(p)]));
-export const defaultValue = (p) => DEFAULTS[p.id];
-export const isChanged = (p) => getValue(p) !== DEFAULTS[p.id];
+/** '내 기본값': 밸런스 메뉴에서 '지금 수치를 내 기본값으로 저장'한 값 { id: value }(원래 기본값과 다른 것만). 노란 표시·'모두 기본값으로'의 기준 */
+let custom = {};
+/** 기준이 되는 기본값: 내 기본값이 있으면 그것, 없으면 원래 기본값 */
+export const defaultValue = (p) => custom[p.id] ?? DEFAULTS[p.id];
+export const factoryValue = (p) => DEFAULTS[p.id];
+export const isChanged = (p) => getValue(p) !== defaultValue(p);
+/** 기본값(내 기본값 기준)과 다른 수치 개수 */
+export const changedCount = () => PARAMS.filter(isChanged).length;
 
 /** 범위 밖은 자르고, 점사 수처럼 정수 칸(step 1 이상)은 반올림한다. 숫자가 아니면 null. */
 export function normalize(p, value) {
@@ -228,14 +234,41 @@ export function setValue(p, value) {
   return v;
 }
 
+/** 모든 수치를 기본값(내 기본값이 있으면 그것)으로 되돌린다. */
 export function resetAll() {
+  for (const p of PARAMS) holder(p.path)[p.path.at(-1)] = defaultValue(p);
+}
+
+/** 원래 기본값으로: 내 기본값을 지우고 모든 수치를 config.js 값으로 되돌린다. */
+export function factoryReset() {
+  custom = {};
   for (const p of PARAMS) holder(p.path)[p.path.at(-1)] = DEFAULTS[p.id];
 }
 
-/** 기본값과 다른 수치만 { id: value } */
+/** 원래 기본값과 다른 수치만 { id: value } — 저장해 두었다가 다음에 applyOverrides로 되살린다 */
 export function overrides() {
-  return Object.fromEntries(PARAMS.filter(isChanged).map((p) => [p.id, getValue(p)]));
+  return Object.fromEntries(PARAMS.filter((p) => getValue(p) !== DEFAULTS[p.id]).map((p) => [p.id, getValue(p)]));
 }
+
+/** 지금 수치를 내 기본값으로 삼는다. 저장할 { id: value }(원래 기본값과 다른 것만)를 돌려준다. */
+export function saveAsDefaults() {
+  custom = overrides();
+  return { ...custom };
+}
+
+/** 저장해 둔 내 기본값 { id: value }를 불러온다. 모르는 id·잘못된 값은 무시한다. */
+export function applyCustomDefaults(values) {
+  custom = {};
+  if (!values || typeof values !== 'object') return;
+  for (const [id, value] of Object.entries(values)) {
+    const p = BY_ID[id];
+    const v = p && normalize(p, value);
+    if (v !== null && v !== undefined) custom[id] = v;
+  }
+}
+
+/** 내 기본값을 저장해 두었는지 */
+export const hasCustomDefaults = () => Object.keys(custom).length > 0;
 
 /** 저장해 둔 { id: value }를 적용한다. 모르는 id·잘못된 값은 무시한다. */
 export function applyOverrides(values) {
@@ -253,7 +286,7 @@ export function summaryText() {
     let group = null;
     for (const p of section.params) {
       if (p.group !== group) { group = p.group; lines.push(`- ${group}`); }
-      const mark = isChanged(p) ? `  ← 기본 ${DEFAULTS[p.id]}` : '';
+      const mark = isChanged(p) ? `  ← 기본 ${defaultValue(p)}` : '';
       lines.push(`  ${p.label}: ${getValue(p)}${p.unit}${mark}`);
     }
   }

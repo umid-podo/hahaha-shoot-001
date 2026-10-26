@@ -30,6 +30,24 @@ export function loadBalance() {
   }
 }
 
+const BALANCE_DEFAULTS_KEY = 'haha2.balancedefaults.v1';
+
+/** 밸런스 메뉴의 '내 기본값' { 수치 id: 값 }. 없거나 읽을 수 없으면 빈 객체. */
+export function loadBalanceDefaults() {
+  try {
+    return JSON.parse(localStorage.getItem(BALANCE_DEFAULTS_KEY)) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveBalanceDefaults(values) {
+  try {
+    if (values) localStorage.setItem(BALANCE_DEFAULTS_KEY, JSON.stringify(values));
+    else localStorage.removeItem(BALANCE_DEFAULTS_KEY);
+  } catch { /* 저장 불가 환경은 무시 */ }
+}
+
 export function saveBalance(values) {
   try {
     if (Object.keys(values).length) localStorage.setItem(BALANCE_KEY, JSON.stringify(values));
