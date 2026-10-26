@@ -1,4 +1,4 @@
-import { TICK, COUNTDOWN, TEAM_NAME } from './game/config.js';
+import { TICK, COUNTDOWN, TEAM_NAME, KATA } from './game/config.js';
 import { SLOTS, createMatch, createInputs, cancelInputs, defaultLoadout } from './game/state.js';
 import { step } from './game/update.js';
 import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
@@ -314,7 +314,7 @@ function frame(now) {
             bridge: '5스테이지 눈 내리는 대교. 다리가 벌어지면 배가 대포를 쏩니다. 체력은 대교 가는 길에서 남은 만큼입니다.',
           }[e.stage] ?? '2스테이지 복도. 체력이 모두 회복되었습니다.');
         }
-        if (e.type === 'gunkata') screens.announce('건 카타 모드! 빛나는 버튼 1, 2, 3, 4를 0.5초 안에 누르세요.');
+        if (e.type === 'gunkata') screens.announce(`건 카타 모드! 빛나는 버튼 1, 2, 3, 4를 ${KATA.warn}초 안에 누르세요.`);
         if (e.type === 'kata-warn') screens.announce(`${e.key}번`);
         if (e.type !== 'down') continue;
         const p = match.players.find((pl) => pl.id === e.playerId);

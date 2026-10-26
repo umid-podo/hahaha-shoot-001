@@ -1,13 +1,13 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS, COVER, TICK, CHARACTERS, TANK, SHIP,
+  MAX_HP, WEAPONS, COVER, TICK, CHARACTERS, TANK, SHIP, KATA,
 } from '../game/config.js';
 import {
   WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel,
   DRIVE_ROAD, DRIVE_Y, DRIVE_CAR,
 } from '../game/story.js';
 import {
-  movesOf, foeName, DAMAGE as KATA_DAMAGE, WARN_TIME as KATA_WARN, RESOLVE_TIME as KATA_RESOLVE,
+  movesOf, foeName, RESOLVE_TIME as KATA_RESOLVE,
 } from '../game/gunkata.js';
 
 const INK = '#30353E';
@@ -2548,7 +2548,7 @@ export function createRenderer(canvas, wrap, assets) {
     // 드론은 바닥 위에 떠 있다(둥실)
     const hover = drone ? 190 + (reducedMotion ? 0 : Math.sin(time * 4) * 10) : 0;
     const a = k.attack;
-    const u = a?.state === 'warn' ? kClamp(a.t / KATA_WARN) : 0;
+    const u = a?.state === 'warn' ? kClamp(a.t / KATA.warn) : 0;
     const r = a && a.state !== 'warn' ? kClamp(a.t / KATA_RESOLVE) : 0;
     const back = kEase((r - 0.6) / 0.4); // 장면 끝에 제자리로
     const ok = a?.state === 'counter', hit = a?.state === 'hit';
@@ -2645,7 +2645,7 @@ export function createRenderer(canvas, wrap, assets) {
     // 피격: 적의 공격이 주인공에게(드론은 붉은 레이저)
     if (hit && a.kind !== 4) fx.push(() => kataTracer(sm.x, sm.y, H.x, H.y, r / 0.25, drone));
     if (drone && a?.kind === 3 && a.state === 'warn') star(sm.x, sm.y, 14 + 24 * u, '#FF2A2A'); // 레이저 충전
-    if (hit && r < 0.6) kataWord(`-${KATA_DAMAGE}`, H.x + 60, H.y - 200 - r * 80, 64, '#FF3B30', 1 - r / 0.6);
+    if (hit && r < 0.6 && !k.training) kataWord(`-${KATA.damage}`, H.x + 60, H.y - 200 - r * 80, 64, '#FF3B30', 1 - r / 0.6);
     if (ok && r < 0.7) kataWord(['', '격추!', '공중제비!', '쳐내기!', '막았다!'][a.kind], S.x, S.y - 230 - r * 60, 56, '#7CF29A', 1 - r / 0.7);
     for (const f of fx) f();
   }
@@ -2654,7 +2654,7 @@ export function createRenderer(canvas, wrap, assets) {
   function drawKataPrompt(k, time, reducedMotion) {
     const a = k.attack;
     if (a?.state !== 'warn') return;
-    const left = 1 - kClamp(a.t / KATA_WARN);
+    const left = 1 - kClamp(a.t / KATA.warn);
     const x = ARENA_WIDTH / 2, y = 330;
     const glow = reducedMotion ? 1 : 0.7 + 0.3 * Math.sin(time * 30);
     ctx.save();
