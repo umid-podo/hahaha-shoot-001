@@ -14,10 +14,10 @@ import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
 import { unlock, setMuted, playEvents, updateEngine, updateBattleMusic, restartMusic } from './audio/synth.js';
 import {
-  loadSettings, saveSettings, loadBalance, saveBalance, loadSingle, saveSingle, loadStory, saveStory,
+  loadSettings, saveSettings, loadBalance, saveBalance, loadBalanceDefaults, saveBalanceDefaults, loadSingle, saveSingle, loadStory, saveStory,
   loadStorySave, saveStorySave, clearStorySave,
 } from './storage/settings.js';
-import { applyOverrides, overrides } from './game/balance.js';
+import { applyOverrides, applyCustomDefaults, changedCount } from './game/balance.js';
 
 const MAX_FRAME_MS = 100;
 const MAX_STEPS_PER_FRAME = 6;
@@ -25,6 +25,7 @@ const RESULT_DELAY_MS = 900;
 
 const settings = loadSettings();
 // 밸런스 메뉴에서 바꿔 저장해 둔 수치를 가장 먼저 적용한다.
+applyCustomDefaults(loadBalanceDefaults()); // '내 기본값'(노란 표시·기본값으로의 기준)
 applyOverrides(loadBalance());
 const loadout = defaultLoadout();
 // 스토리 모드 2인 협동의 P2(지구방위팀) 선택. 2인 대결의 P2(ISB팀) 선택과는 따로 둔다.
@@ -246,10 +247,11 @@ const screens = createScreens({
   onToggleMotion: () => toggle('reducedMotion'),
   onBalanceChange(values) {
     saveBalance(values);
-    screens.setBalanceStatus(Object.keys(values).length);
+    screens.setBalanceStatus(changedCount());
   },
+  onBalanceDefaultsChange(values) { saveBalanceDefaults(values); },
 });
-screens.setBalanceStatus(Object.keys(overrides()).length);
+screens.setBalanceStatus(changedCount());
 screens.setContinue(loadStorySave());
 setMuted(settings.muted);
 screens.syncSettings(settings);

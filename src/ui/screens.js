@@ -146,6 +146,7 @@ export function createScreens(handlers) {
   const balance = createBalanceScreens({
     show,
     onChange: handlers.onBalanceChange,
+    onDefaultsChange: handlers.onBalanceDefaultsChange,
     onClose() { handlers.onMenu(); },
   });
   $('#balance-btn').addEventListener('click', balance.open);

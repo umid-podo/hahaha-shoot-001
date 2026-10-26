@@ -1,5 +1,6 @@
 import {
   SECTIONS, PARAMS, getValue, setValue, defaultValue, isChanged, resetAll, overrides, summaryText,
+  changedCount, saveAsDefaults, factoryReset, hasCustomDefaults,
 } from '../game/balance.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -19,14 +20,18 @@ const today = () => new Date().toLocaleString('ko-KR', { dateStyle: 'medium', ti
 /**
  * 밸런스 조정 화면(수치 입력)과 현재 수치 보기 화면(한 화면 요약, 캡처·복사용).
  * handlers.show(name)으로 화면을 바꾸고, 값이 바뀔 때마다 handlers.onChange(overrides)를 부른다.
+ * '내 기본값'이 바뀌면 handlers.onDefaultsChange(values 또는 null(지움))를 부른다.
  */
 export function createBalanceScreens(handlers) {
   const inputs = new Map();
+  const status = (text) => { $('#balance-defaults-status').textContent = text; };
 
   function syncRow(p) {
     const input = inputs.get(p.id);
     input.value = String(getValue(p));
-    input.closest('.param').classList.toggle('changed', isChanged(p));
+    const row = input.closest('.param');
+    row.classList.toggle('changed', isChanged(p));
+    row.querySelector('small').textContent = `기본 ${defaultValue(p)}${p.unit}`;
   }
   const syncAll = () => { for (const p of PARAMS) syncRow(p); };
   const changed = () => handlers.onChange(overrides());
@@ -80,9 +85,8 @@ export function createBalanceScreens(handlers) {
   }
 
   function buildSummary() {
-    const changedCount = PARAMS.filter(isChanged).length;
     $('#summary-meta').textContent =
-      `${today()} 기준 · 전체 ${PARAMS.length}개 중 ${changedCount}개 변경(노란 칸, 괄호 안은 기본값)`;
+      `${today()} 기준 · 전체 ${PARAMS.length}개 중 ${changedCount()}개 변경(노란 칸, 괄호 안은 기본값${hasCustomDefaults() ? ' — 내 기본값 기준' : ''})`;
     const blocks = [];
     for (const section of SECTIONS) {
       for (const [group, params] of byGroup(section.params)) {
@@ -118,6 +122,7 @@ export function createBalanceScreens(handlers) {
   function open() {
     if (!inputs.size) buildForm();
     syncAll();
+    status(hasCustomDefaults() ? "'내 기본값'을 저장해 두었습니다. 노란 칸은 그 값과 다른 칸입니다." : '');
     handlers.show('balance');
   }
 
@@ -134,6 +139,23 @@ export function createBalanceScreens(handlers) {
     resetAll();
     syncAll();
     changed();
+    status(`기본값으로 되돌렸습니다. ${hasCustomDefaults() ? "기준은 '내 기본값'입니다." : '기준은 원래 기본값입니다.'}`);
+  });
+  // 지금 수치를 '내 기본값'으로: 앞으로 노란 표시와 '모두 기본값으로'가 이 값을 기준으로 한다
+  $('#balance-save-defaults-btn').addEventListener('click', () => {
+    handlers.onDefaultsChange(saveAsDefaults());
+    syncAll();
+    changed();
+    status("지금 수치를 '내 기본값'으로 저장했습니다.");
+  });
+  // 원래 기본값으로: '내 기본값'을 지우고 처음 값으로 되돌린다
+  $('#balance-factory-btn').addEventListener('click', () => {
+    if (!window.confirm("'내 기본값'을 지우고 모든 수치를 원래 기본값으로 되돌릴까요?")) return;
+    factoryReset();
+    handlers.onDefaultsChange(null);
+    syncAll();
+    changed();
+    status("'내 기본값'을 지우고 원래 기본값으로 되돌렸습니다.");
   });
   $('#summary-copy-btn').addEventListener('click', async () => {
     const status = $('#summary-copy-status');

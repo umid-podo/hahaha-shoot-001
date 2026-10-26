@@ -1140,3 +1140,28 @@ test('지구방위팀 요원 코드네임 X·V·R·시리우스 K: 그림 속 �
     assert.equal(other.weapon, 'rpg', '다른 무기도 고를 수 있음');
   }
 });
+
+test('밸런스 내 기본값: 지금 수치를 내 기본값으로 저장하면 노란 표시·모두 기본값으로의 기준이 되고, 원래 기본값으로 되돌릴 수 있음', async () => {
+  const b = await import('../src/game/balance.js');
+  const p = b.PARAMS.find((q) => q.id === 'weapons.rifle.damage');
+  const factory = b.getValue(p);
+  b.setValue(p, factory + 5);
+  assert.ok(b.isChanged(p));
+  const saved = b.saveAsDefaults();
+  assert.deepEqual(saved, { 'weapons.rifle.damage': factory + 5 });
+  assert.equal(b.isChanged(p), false, '내 기본값 기준으로는 바뀌지 않음');
+  assert.equal(b.defaultValue(p), factory + 5);
+  b.setValue(p, factory + 9);
+  b.resetAll();
+  assert.equal(b.getValue(p), factory + 5, '모두 기본값으로 = 내 기본값');
+  assert.deepEqual(b.overrides(), { 'weapons.rifle.damage': factory + 5 }, '저장값은 원래 기본값 기준');
+  // 다음에 불러오기
+  b.factoryReset();
+  b.applyCustomDefaults({ 'weapons.rifle.damage': factory + 5, nope: 3 });
+  assert.equal(b.defaultValue(p), factory + 5);
+  assert.ok(b.hasCustomDefaults());
+  b.factoryReset();
+  assert.equal(b.getValue(p), factory);
+  assert.equal(b.defaultValue(p), factory);
+  assert.equal(b.hasCustomDefaults(), false);
+});
