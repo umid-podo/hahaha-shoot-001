@@ -434,19 +434,3 @@ button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; 
 .continue-row .hint { margin: 0; }
 .story-stage { margin: 6px 0 0; grid-column: 1 / -1; font-size: 16px; color: var(--isb); }
 .choices.difficulty.mixed > :first-child { grid-column: 1 / -1; }
-
-/* 스토리 장면 음악(유튜브 플레이어): 보스전·공중전 동안만 화면 왼쪽 위 구석에 작게 보이고, 게임 조작을 가리지 않게 눌리지 않는다.
-   브라우저가 자동 재생을 막으면(.tap) 크게 보이며 눌러서 켤 수 있고, 불러오지 못하면(.error) 이유만 잠깐 보인다.
-   숨길 때도 visibility는 그대로 두어(투명하게만) 브라우저가 플레이어를 멈추지 않게 한다. */
-#story-music { position: fixed; left: 8px; top: 8px; z-index: 100; pointer-events: none; opacity: 0; transition: opacity 0.4s; }
-#story-music.on { opacity: 1; }
-.story-music-player { width: 120px; height: 120px; border-radius: 10px; overflow: hidden; opacity: 0.85; }
-.story-music-player iframe { width: 100%; height: 100%; border: 0; }
-#story-music.tap { left: 50%; top: 12px; transform: translateX(-50%); pointer-events: auto; }
-#story-music.tap .story-music-player { width: 240px; height: 240px; opacity: 1; box-shadow: 0 0 0 4px #FFD45E, 0 8px 24px rgba(0,0,0,0.5); }
-#story-music.error .story-music-player { width: 0; height: 0; }
-.story-music-note { margin: 6px 0 0; padding: 0; font: bold 14px system-ui, sans-serif; color: #fff; text-shadow: 0 1px 3px #000; text-align: center; max-width: 320px; }
-.story-music-note:empty { display: none; }
-#story-music.tap .story-music-note { background: #B3261E; padding: 6px 12px; border-radius: 999px; animation: story-music-pulse 1s infinite alternate; }
-@keyframes story-music-pulse { from { transform: scale(1); } to { transform: scale(1.06); } }
-@media (prefers-reduced-motion: reduce) { #story-music.tap .story-music-note { animation: none; } }

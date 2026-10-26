@@ -13,7 +13,6 @@ import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
 import { unlock, setMuted, playEvents, updateEngine, updateBattleMusic, restartMusic } from './audio/synth.js';
-import { MUSIC, prepareStoryMusic, updateStoryMusic, storyMusicPlaying } from './audio/storymusic.js';
 import {
   loadSettings, saveSettings, loadBalance, saveBalance, loadSingle, saveSingle, loadStory, saveStory,
   loadStorySave, saveStorySave, clearStorySave,
@@ -44,24 +43,16 @@ let renderer = null;
 let ai = null;
 // 키보드·터치·컨트롤러로 조작하는 사람 플레이어(싱글 플레이에서는 AI 자리 제외)
 let humans = [];
-// 경기를 새로 시작할 때마다 하나씩 늘린다(장면 음악을 새 장면마다 처음부터 틀려고)
-let matchSerial = 0;
-
 /**
- * 지금 유튜브 장면 음악을 틀 장면 { key, video }, 아니면 null.
- * 보스전: 보스가 오는 장면부터 싸우는 동안·도발 장면·보스와의 건 카타까지(윌슨 요원·데스스타는 전용 곡, 나머지는 보스전 곡).
- * 공중전: 3스테이지 하늘의 데스스타 전까지(웨이브 사이·카운트다운 포함). 엔딩 컷씬 등 컷씬 중에는 원래 배틀 음악.
- * 일시정지 중에도 장면은 그대로(음악만 멈춤).
+ * 지금 틀 배경음악(music.js SONGS). 스토리 모드의 보스전(보스가 오는 장면부터 싸우는 동안·도발 장면·보스와의 건 카타까지)은
+ * 보스전 곡(윌슨 요원·데스스타는 전용 곡), 공중전(3스테이지 하늘, 데스스타 전까지)은 공중전 곡, 그 밖(컷씬 포함)은 배틀 음악.
  */
-function musicScene() {
+function musicSong() {
   const story = match?.story;
-  if (!story || match.cutscene || match.phase === 'result') return null;
+  if (!story || match.cutscene || match.phase === 'result') return 'battle';
   const boss = WAVES[story.wave].boss;
-  if (boss && ['drop', 'fight'].includes(story.phase)) {
-    return { key: `${matchSerial}:${story.wave}`, video: MUSIC[boss] ?? MUSIC.boss };
-  }
-  if (story.stage === 'sky') return { key: `${matchSerial}:sky`, video: MUSIC.sky };
-  return null;
+  if (boss && ['drop', 'fight'].includes(story.phase)) return boss === 'wilson' || boss === 'deathstar' ? boss : 'boss';
+  return story.stage === 'sky' ? 'sky' : 'battle';
 }
 
 // cutscene: 스토리 모드 엔딩 컷씬(입력은 받지 않지만 시간은 흐른다. 대교 가는 길만 좌우 이동으로 차를 몬다)
@@ -137,8 +128,6 @@ function startMatch() {
   if (!match.story && aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
   renderer.reset();
   restartMusic();
-  matchSerial++;
-  if (match.story) prepareStoryMusic(); // 장면 음악(유튜브)을 미리 불러 둔다
   screens.show('game');
 }
 
@@ -351,9 +340,8 @@ function frame(now) {
   }
   updateEngine(match?.phase === 'playing' ? match.jet : null);
   // 신나는 전투 음악: 카운트다운부터 경기·컷씬 동안. 일시정지·결과·메뉴에서는 작아지며 멈춘다.
-  // 보스전·공중전에는 유튜브 장면 음악(나오는 동안은 배틀 음악을 끔, 못 불러오면 배틀 음악 그대로)
-  updateStoryMusic(musicScene(), { paused: !active(), muted: settings.muted });
-  updateBattleMusic(active() && !storyMusicPlaying());
+  // 보스전·공중전에는 그 장면의 곡(곡이 바뀌면 처음부터)
+  updateBattleMusic(active(), musicSong());
   requestAnimationFrame(frame);
 }
 
