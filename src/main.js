@@ -5,7 +5,7 @@ import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
 import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT, STAGES, stageStart, nextStageOf, WAVES } from './game/story.js';
 import { createControls } from './input/pointer.js';
 import { createKataKeys, KATA_CODES } from './input/kata.js';
-import { glowingKey } from './game/gunkata.js';
+import { glowingKey, createTrainingMatch } from './game/gunkata.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
 import { pollGamepads, applyGamepads, clearGamepads } from './input/gamepad.js';
 import { pollPadMenu } from './input/padmenu.js';
@@ -30,7 +30,7 @@ applyOverrides(loadBalance());
 const loadout = defaultLoadout();
 // 스토리 모드 2인 협동의 P2(지구방위팀) 선택. 2인 대결의 P2(ISB팀) 선택과는 따로 둔다.
 const coopLoadout = { P2: { characterId: COOP_SLOT.characterId, weapon: COOP_SLOT.weapon, secondary: loadout.P2.secondary } };
-// 'versus'(2인 대결) 또는 'single'(싱글 플레이, P2는 AI)
+// 'versus'(2인 대결), 'single'(싱글 플레이, P2는 AI) 또는 'training'(건 카타 수련장)
 let mode = 'versus';
 const single = loadSingle();
 // 스토리 모드 웨이브별 요원 밸런스
@@ -109,12 +109,14 @@ function startMatch() {
   // 스토리 설정에서 고른 시작 스테이지(이어하기·건너뛰기가 아니면): 그 스테이지 처음부터 체력 가득
   const startAt = !resumeFrom && single.storyStart !== 'rooftop' && STAGES[single.storyStart]
     ? { wave: stageStart(single.storyStart), hp: FULL_HP, hp2: FULL_HP, skip: true } : null;
-  match = storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies())
+  // 건 카타 수련장: P1이 고른 캐릭터로 훈련용 전투 로봇과 끝없이 건 카타
+  match = mode === 'training' ? createTrainingMatch(loadout.P1)
+    : storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies())
     : createMatch(mode === 'single' ? singleLoadout() : loadout);
   inputs = createInputs(match.players);
   humans = match.players.filter((p) => !p.ai);
   const aiPlayer = match.players.find((p) => p.ai);
-  ai = aiPlayer && !match.story ? createAI(aiPlayer.id, single.difficulty) : null;
+  ai = aiPlayer && !match.story && !match.training ? createAI(aiPlayer.id, single.difficulty) : null;
   clearKeys();
   clearGamepads();
   const groups = { earth: document.querySelector('#controls-earth'), isb: document.querySelector('#controls-isb') };
@@ -126,7 +128,8 @@ function startMatch() {
   // 스토리 모드 2인 협동의 P2는 지구방위팀이지만 조작 패널은 오른쪽(평소 P2 자리)에 둔다
   controls = createControls(groups, humans, inputs, (p) => (p.team === 'earth' && p.id === 'P2' ? 'isb' : p.team), { wide: solo });
   if (solo) groups.earth.querySelector('.panel-mid').append(pauseBtn);
-  if (!match.story && aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
+  controlsEl.classList.toggle('training', !!match.training);
+  if (!match.story && !match.training && aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
   renderer.reset();
   restartMusic();
   screens.show('game');
@@ -226,6 +229,7 @@ const screens = createScreens({
   onSetup: showSetup,
   onVersus() { mode = 'versus'; showSetup(); },
   onSingle() { mode = 'single'; showSetup(); },
+  onTraining() { mode = 'training'; resumeFrom = null; startMatch(); },
   onSingleChange(value) { saveSingle(value); },
   onStoryChange(value) { saveStory(value); },
   onPick(slotId, key, value) {

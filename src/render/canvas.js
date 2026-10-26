@@ -1538,6 +1538,51 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillText('대교', bx + bw + 16, byy + 1);
   }
 
+  /** 건 카타 수련장 배경(옆에서 봄): 지구방위팀 훈련장. 벽의 과녁·안내판, 매트 바닥, 천장 조명 */
+  function drawKataDojo(time, reducedMotion) {
+    const wall = ctx.createLinearGradient(0, 0, 0, KATA_FLOOR);
+    wall.addColorStop(0, '#26364F');
+    wall.addColorStop(1, '#3B5072');
+    ctx.fillStyle = wall;
+    ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    // 벽 패널 줄
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 4;
+    for (let x = 0; x < ARENA_WIDTH; x += 200) { ctx.beginPath(); ctx.moveTo(x, 230); ctx.lineTo(x, KATA_FLOOR); ctx.stroke(); }
+    // 천장 조명(깜빡이지 않는 줄 조명)
+    for (const x of [300, 800, 1300]) {
+      const glow = ctx.createRadialGradient(x, 240, 0, x, 240, 260);
+      glow.addColorStop(0, 'rgba(255,255,230,0.25)');
+      glow.addColorStop(1, 'rgba(255,255,230,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(x - 260, 230, 520, 400);
+      ctx.fillStyle = '#F4F1E8';
+      ctx.fillRect(x - 90, 226, 180, 10);
+    }
+    // 벽의 과녁 둘
+    for (const [x, y] of [[180, 420], [1420, 420]]) {
+      for (const [r, c] of [[70, '#F4F1E8'], [52, '#D9443A'], [34, '#F4F1E8'], [16, '#D9443A']]) {
+        ctx.fillStyle = c;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // 안내판
+    ctx.fillStyle = '#1E2228';
+    ctx.beginPath(); ctx.roundRect(ARENA_WIDTH / 2 - 210, 290, 420, 70, 12); ctx.fill();
+    ctx.font = 'bold 30px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#FFD45E';
+    ctx.fillText('지구방위팀 훈련장', ARENA_WIDTH / 2, 326);
+    // 매트 바닥
+    ctx.fillStyle = '#2E6B4F';
+    ctx.fillRect(0, KATA_FLOOR, ARENA_WIDTH, ARENA_HEIGHT - KATA_FLOOR);
+    ctx.fillStyle = '#3F8A66';
+    for (let x = 0; x < ARENA_WIDTH; x += 160) ctx.fillRect(x, KATA_FLOOR, 150, 14);
+    ctx.fillStyle = '#F4F1E8';
+    ctx.fillRect(0, KATA_FLOOR, ARENA_WIDTH, 4);
+  }
+
   /** 대교 칼싸움 배경(옆에서 봄): 눈 내리는 밤, 다리 철골과 늘어진 줄, 눈 덮인 상판 */
   function drawKataBridge(time, reducedMotion) {
     const sky = ctx.createLinearGradient(0, 0, 0, KATA_FLOOR);
@@ -2634,15 +2679,21 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, ARENA_WIDTH, 50);
     ctx.fillRect(0, ARENA_HEIGHT - 80, ARENA_WIDTH, 80);
-    kataWord('건 카타', ARENA_WIDTH / 2, 110, 64, '#FFFFFF');
-    const w = 46, gap = 12, x0 = ARENA_WIDTH / 2 - (k.goal * (w + gap) - gap) / 2;
-    for (let i = 0; i < k.goal; i++) {
-      ctx.fillStyle = i < k.done ? '#7CF29A' : 'rgba(255,255,255,0.2)';
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(x0 + i * (w + gap), 160, w, 22, 6); ctx.fill(); ctx.stroke();
+    kataWord(k.training ? '건 카타 수련장' : '건 카타', ARENA_WIDTH / 2, 110, 64, '#FFFFFF');
+    if (k.training) {
+      // 수련장: 끝이 없으니 칸 대신 기록(대응 성공·실수·연속 성공·최고 연속)
+      kataWord(`연속 ${k.training.streak}`, ARENA_WIDTH / 2, 170, 44, k.training.streak >= 10 ? '#FFD45E' : '#7CF29A');
+      kataWord(`대응 ${k.done} · 실수 ${k.misses} · 최고 연속 ${k.training.best}`, ARENA_WIDTH / 2, 215, 26, '#FFFFFF');
+    } else {
+      const w = 46, gap = 12, x0 = ARENA_WIDTH / 2 - (k.goal * (w + gap) - gap) / 2;
+      for (let i = 0; i < k.goal; i++) {
+        ctx.fillStyle = i < k.done ? '#7CF29A' : 'rgba(255,255,255,0.2)';
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(x0 + i * (w + gap), 160, w, 22, 6); ctx.fill(); ctx.stroke();
+      }
+      kataWord(`대응 ${k.done} / ${k.goal}`, ARENA_WIDTH / 2, 210, 30, '#FFFFFF');
     }
-    kataWord(`대응 ${k.done} / ${k.goal}`, ARENA_WIDTH / 2, 210, 30, '#FFFFFF');
     // 주인공 체력
     ctx.font = 'bold 30px system-ui, sans-serif';
     ctx.textAlign = 'left';
@@ -2650,7 +2701,7 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(`${hero.id} ${hero.name}`, 60, 100);
     drawHpBar(ctx, 60, 125, 380, 22, hero.hp, hero.maxHp);
-    ctx.fillText(`${hero.hp} / ${hero.maxHp}`, 60, 175);
+    ctx.fillText(k.training ? '체력 ∞ (무한)' : `${hero.hp} / ${hero.maxHp}`, 60, 175);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#FF8A80';
     ctx.fillText(foeName(match.players.find((p) => p.id === k.foeId)), ARENA_WIDTH - 60, 100);
@@ -2671,7 +2722,8 @@ export function createRenderer(canvas, wrap, assets) {
   function drawGunKata(match, time, reducedMotion) {
     const k = match.gunkata;
     // 옥상(1스테이지)은 밤의 옥상 끝, 복도(2스테이지)는 본부 복도, 도로(4스테이지)는 달리는 트레일러 지붕, 대교(5스테이지)는 눈 내리는 다리
-    if (match.story?.stage === 'corridor') drawKataCorridor(time, reducedMotion);
+    if (match.training) drawKataDojo(time, reducedMotion);
+    else if (match.story?.stage === 'corridor') drawKataCorridor(time, reducedMotion);
     else if (match.story?.stage === 'road') drawKataRoad(time, reducedMotion);
     else if (match.story?.stage === 'bridge') drawKataBridge(time, reducedMotion);
     else drawKataBackground(time, reducedMotion);

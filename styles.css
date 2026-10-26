@@ -224,6 +224,8 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 /* 건 카타: 다른 버튼은 모두 숨기고 가운데에 1·2·3·4만 */
 #kata-keys { display: none; }
 #controls.kata .team-group, #controls.kata #pause-btn { display: none; }
+/* 건 카타 수련장은 끝이 없으니 일시정지(→ 메인 메뉴) 버튼을 남긴다 */
+#controls.kata.training #pause-btn { display: block; }
 #controls.kata { justify-content: center; }
 #controls.kata #kata-keys {
   display: grid;

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- 훈련용 전투 로봇(건 카타 수련장): 오른쪽을 보고 팔 대포를 겨눈다. 발바닥 y=486, 팔 대포 끝 (425, 276) -->
+  <g stroke="#30353E" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+    <!-- 다리 -->
+    <rect x="196" y="370" width="44" height="100" rx="10" fill="#8A93A3"/>
+    <rect x="272" y="370" width="44" height="100" rx="10" fill="#8A93A3"/>
+    <rect x="180" y="458" width="72" height="28" rx="8" fill="#4A4F5A"/>
+    <rect x="262" y="458" width="72" height="28" rx="8" fill="#4A4F5A"/>
+    <!-- 뒤쪽 팔 -->
+    <rect x="150" y="240" width="40" height="110" rx="14" fill="#6B7380"/>
+    <!-- 몸통: 노랑·검정 훈련용 줄무늬 -->
+    <rect x="170" y="210" width="172" height="176" rx="26" fill="#C9D3DF"/>
+    <path d="M178 330 h156 v34 h-156 z" fill="#FFC93C"/>
+    <path d="M196 330 l-18 34 M232 330 l-18 34 M268 330 l-18 34 M304 330 l-18 34 M334 340 l-12 24" stroke-width="10"/>
+    <circle cx="256" cy="268" r="26" fill="#2A2E35"/>
+    <circle cx="256" cy="268" r="12" fill="#5EE6FF" stroke="none"/>
+    <!-- 머리: 둥근 투구와 가로 눈 -->
+    <rect x="192" y="96" width="140" height="112" rx="34" fill="#C9D3DF"/>
+    <rect x="222" y="132" width="104" height="34" rx="14" fill="#1E2228"/>
+    <rect x="276" y="140" width="40" height="18" rx="8" fill="#FF3B30" stroke="none"/>
+    <line x1="262" y1="96" x2="262" y2="62"/>
+    <circle cx="262" cy="56" r="10" fill="#FF3B30"/>
+    <!-- 앞쪽 팔과 팔 대포 -->
+    <rect x="292" y="236" width="70" height="44" rx="16" fill="#8A93A3"/>
+    <rect x="352" y="250" width="66" height="52" rx="10" fill="#4A4F5A"/>
+    <rect x="410" y="262" width="22" height="28" rx="4" fill="#2A2E35"/>
+  </g>
+</svg>

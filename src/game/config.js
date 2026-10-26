@@ -166,6 +166,11 @@ export const CHARACTERS = [
     id: 'johnson', name: '존슨 요원', hidden: true, weapon: 'jsniper', maxHp: 900, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2,
     image: 'assets/characters/isb-agent-1.png',
   },
+  // 건 카타 수련장의 상대: 훈련용 전투 로봇(선택 화면에는 나오지 않음)
+  {
+    id: 'training-bot', name: '훈련용 전투 로봇', hidden: true, maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED,
+    image: 'assets/characters/training-bot.svg',
+  },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 2번 누르면 온이름 대신 나타난다. 모든 피해에 +5.
   {
     id: 'arc-trooper', name: '아크 트루퍼', hidden: true, unlockFrom: 'earth-arrow', unlockTaps: 2, bonusDamage: 5,

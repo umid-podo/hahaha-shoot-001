@@ -139,6 +139,7 @@ export function createScreens(handlers) {
 
   $('#setup-btn').addEventListener('click', handlers.onVersus);
   $('#single-btn').addEventListener('click', handlers.onSingle);
+  $('#training-btn').addEventListener('click', handlers.onTraining);
   $('#single-start-btn').addEventListener('click', handlers.onStart);
   const singleSetup = createSingleSetup(handlers.onSingleChange);
   const storySetup = createStorySetup(handlers.onStoryChange);
@@ -182,6 +183,7 @@ export function createScreens(handlers) {
       $('#load-status').hidden = true;
       $('#setup-btn').disabled = false;
       $('#single-btn').disabled = false;
+      $('#training-btn').disabled = false;
     },
     /** 일시정지 화면. 스토리 모드면 '저장하기'를, 다음 스테이지가 있으면 skipLabel로 '건너뛰기' 버튼을 보인다. */
     showPause(story, skipLabel = null) {

@@ -164,6 +164,19 @@
       "frames": 1
     },
     {
+      "id": "training-bot",
+      "name": "훈련용 전투 로봇",
+      "path": "characters/training-bot.svg",
+      "width": 512,
+      "height": 512,
+      "format": "svg",
+      "source": "hand-written SVG",
+      "kind": "static-character",
+      "bodyAnchor": [0.5, 0.6],
+      "anchorStatus": "initial visual estimate",
+      "frames": 1
+    },
+    {
       "id": "r10",
       "name": "R-10",
       "path": "characters/r10.svg",
