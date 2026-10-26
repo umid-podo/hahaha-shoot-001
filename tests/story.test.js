@@ -307,7 +307,7 @@ test('내려오는 중인 요원은 맞지 않고 움직이지 않으며, AI도 
 
 test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이동 속도·히트박스, 보스 보조무기', () => {
   const settings = defaultStory();
-  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 3000, 300, 250, 200, 800, 200, 250, 200, 900]);
+  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 10000, 300, 250, 200, 800, 200, 250, 200, 900]);
   assert.deepEqual(settings.waves.map((w) => w.difficulty), ['normal', 'normal', 'normal', 'normal', 'normal', 'mixed', 'easy', 'normal', 'easy', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'easy', 'mixed', 'easy', 'normal']);
   settings.waves[0] = { ...settings.waves[0], hp: 1234, difficulty: 'hard', damage: 200, bulletSpeed: 150, speed: 50, radius: 45 };
   settings.waves[3].secondary = 'shotgun';
@@ -1657,4 +1657,43 @@ test('존슨 요원 엔딩: 건 카타 10번 뒤 얼음에 미끄러져 강으�
   assert.equal(match.cutscene.johnson.alpha, 0);
   assert.equal(match.phase, 'result');
   assert.equal(match.winner, 'earth');
+});
+
+test('건 카타 끄기: 요원은 바로 처치 컷씬, 보스는 바로 엔딩 컷씬, 설정은 저장값에 남음', () => {
+  const settings = { ...defaultStory(), gunkata: false };
+  const { match, inputs } = story(settings);
+  assert.equal(match.story.settings.gunkata, false);
+  enemies(match)[0].hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'killcam', '건 카타 없이 처치 컷씬');
+  runOut(match, inputs, ['killcam']);
+  for (let w = 1; w < 3; w++) { untilFight(match, inputs); killAll(match, inputs); }
+  untilFight(match, inputs);
+  enemies(match)[0].hp = 0;
+  step(match, inputs);
+  assert.equal(match.phase, 'cutscene', '스미스 요원도 바로 엔딩 컷씬');
+  assert.equal(match.cutscene.kind, 'smith');
+  assert.equal(normalizeStory({ gunkata: false }).gunkata, false);
+  assert.equal(normalizeStory({ gunkata: 'x' }).gunkata, true, '기본은 켜기');
+  assert.equal(defaultStory().gunkata, true);
+});
+
+test('데스스타 체력 10000(예전 기본값 3000으로 저장돼 있어도 10000), 내 기본값을 바탕으로 저장값을 덮음', () => {
+  assert.equal(defaultStory().waves[11].hp, 10000);
+  const old = defaultStory();
+  old.waves[11].hp = 3000;
+  assert.equal(normalizeStory(old).waves[11].hp, 10000);
+  const changed = defaultStory();
+  changed.waves[11].hp = 5000;
+  assert.equal(normalizeStory(changed).waves[11].hp, 5000);
+  // 내 기본값: 저장값에 없는 칸은 내 기본값을 쓴다
+  const mine = defaultStory();
+  mine.gunkata = false;
+  mine.waves[0].hp = 777;
+  const s = normalizeStory({ waves: [{ difficulty: 'hard' }] }, mine);
+  assert.equal(s.gunkata, false);
+  assert.equal(s.waves[0].hp, 777);
+  assert.equal(s.waves[0].difficulty, 'hard');
+  const { match } = sky(11);
+  assert.equal(enemies(match)[0].maxHp, 10000);
 });

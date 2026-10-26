@@ -123,27 +123,36 @@ export function defaultStory() {
   const waves = [
     agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
     agent(500), agent(300, 'mixed'), agent(200, 'easy'), { ...agent(600), radius: 48 },
-    // 하늘: 건쉽(히트박스 46), 데스스타(히트박스 130)
+    // 하늘: 건쉽(히트박스 46), 데스스타(체력 10000, 히트박스 130)
     { ...agent(250, 'easy'), radius: 46 }, { ...agent(300), radius: 46 }, { ...agent(350), radius: 46 },
-    { ...agent(3000), radius: 130 },
+    { ...agent(10000), radius: 130 },
     // 도로: 보스 윌슨 요원 체력 800
     agent(300), agent(250), agent(200), agent(800),
     // 대교: 1웨이브 쉬움 3명, 2웨이브 쉬움 3명 + 보통 1명(기획대로), 3웨이브 쉬움 5명, 보스 존슨 요원 체력 900(보통)
     agent(200, 'easy'), agent(250, 'mixed'), agent(200, 'easy'), agent(900),
   ];
-  return { waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
+  // gunkata: 요원·보스를 쓰러뜨릴 때 건 카타 모드를 하는지(끄면 바로 처치 컷씬·엔딩 컷씬)
+  return { gunkata: true, waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
 }
 
-/** 저장된 값을 기본값 위에 덮고, 범위·선택지 밖의 값은 기본값으로 되돌린다. */
-export function normalizeStory(saved) {
-  const story = defaultStory();
+/** 예전 기본값: 저장값이 이 값이면 바뀐 새 기본값을 쓴다(웨이브 번호 → { 칸: 예전 기본값 }). 데스스타 체력 3000 → 10000 */
+const OLD_DEFAULTS = { 11: { hp: 3000 } };
+
+/**
+ * 저장된 값을 기본값 위에 덮고, 범위·선택지 밖의 값은 기본값으로 되돌린다.
+ * base: 덮을 바탕(기본은 defaultStory(), '내 기본값'을 저장해 두었으면 그것).
+ */
+export function normalizeStory(saved, base = null) {
+  const story = base ? normalizeStory(base) : defaultStory();
+  if (typeof saved?.gunkata === 'boolean') story.gunkata = saved.gunkata;
   const waves = Array.isArray(saved?.waves) ? saved.waves : [];
   story.waves.forEach((def, i) => {
     const w = waves[i] ?? {};
-    const mixable = def.difficulty === 'mixed';
+    const mixable = defaultStory().waves[i].difficulty === 'mixed';
     for (const key of Object.keys(STORY_FIELDS)) {
       const f = STORY_FIELDS[key];
       const v = Number(w[key]);
+      if (v === OLD_DEFAULTS[i]?.[key]) continue;
       if (w[key] !== undefined && w[key] !== '' && Number.isFinite(v)) def[key] = Math.min(f.max, Math.max(f.min, Math.round(v)));
     }
     if (DIFFICULTY[w.difficulty] || (mixable && w.difficulty === 'mixed')) def.difficulty = w.difficulty;
@@ -157,7 +166,7 @@ export function normalizeStory(saved) {
 
 /** 스토리 설정 화면의 숫자 칸(웨이브마다 같은 칸). */
 export const STORY_FIELDS = {
-  hp: { label: '체력', min: 1, max: 9999, step: 10, unit: '' },
+  hp: { label: '체력', min: 1, max: 99999, step: 10, unit: '' },
   damage: { label: '피해', min: 0, max: 1000, step: 10, unit: '%' },
   bulletSpeed: { label: '탄속', min: 25, max: 300, step: 5, unit: '%' },
   speed: { label: '이동 속도', min: 20, max: 300, step: 5, unit: '%' },

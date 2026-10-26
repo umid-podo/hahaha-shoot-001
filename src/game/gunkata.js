@@ -48,8 +48,11 @@ export const movesOf = (kata) => (kata?.drone ? DRONE_MOVES : KATA_MOVES);
 export function needsGunKata(match) {
   const boss = match.story && match.players.find((p) => p.boss && !p.alive);
   // 하늘(공중전)의 데스스타는 건 카타 없이 바로 엔딩 컷씬. 스미스 요원·R-10·윌슨 요원은 웨이브 번호로 센다.
-  return !!boss && match.story.stage !== 'sky' && !match.story.kataDone?.includes(match.story.wave);
+  return !!boss && kataOn(match) && match.story.stage !== 'sky' && !match.story.kataDone?.includes(match.story.wave);
 }
+
+/** 스토리 설정에서 건 카타 모드를 켜 두었는지(끄면 쓰러뜨린 요원은 바로 처치 컷씬, 보스는 바로 엔딩 컷씬) */
+export const kataOn = (match) => match.story?.settings?.gunkata !== false;
 
 /** 화면에 쓸 적 이름(일반 요원 이름 뒤의 ' (AI)'는 뺀다) */
 export const foeName = (foe) => foe.name.replace(/ \(AI\)$/, '');

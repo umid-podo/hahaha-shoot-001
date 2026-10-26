@@ -1,4 +1,4 @@
-import { defaultStory, normalizeStory, normalizeStorySave, normalizeAllyPicks } from '../game/story.js';
+import { defaultStory, normalizeStory, normalizeStorySave, normalizeAllyPicks, STAGE_ORDER } from '../game/story.js';
 
 const KEY = 'haha2.settings.v1';
 
@@ -68,7 +68,7 @@ export function loadSingle() {
     if (single.storyPlayers !== 2) single.storyPlayers = 1;
     if (![0, 1, 2, 3].includes(single.storyAllies)) single.storyAllies = 0;
     single.storyAllyPicks = normalizeAllyPicks(single.storyAllyPicks);
-    if (!['rooftop', 'corridor', 'sky'].includes(single.storyStart)) single.storyStart = 'rooftop';
+    if (!STAGE_ORDER.includes(single.storyStart)) single.storyStart = 'rooftop';
     return single;
   } catch {
     return defaults;
@@ -81,10 +81,10 @@ export function saveSingle(single) {
 
 const STORY_KEY = 'haha2.story.v1';
 
-/** 스토리 모드 웨이브별 요원 밸런스(defaultStory() 모양). */
+/** 스토리 모드 웨이브별 요원 밸런스(defaultStory() 모양). 저장값이 없으면 '내 기본값'(없으면 원래 기본값). */
 export function loadStory() {
   try {
-    return normalizeStory(JSON.parse(localStorage.getItem(STORY_KEY)));
+    return normalizeStory(JSON.parse(localStorage.getItem(STORY_KEY)), loadStoryDefaults());
   } catch {
     return defaultStory();
   }
@@ -114,4 +114,24 @@ export function saveStorySave(save) {
 
 export function clearStorySave() {
   try { localStorage.removeItem(STORY_SAVE_KEY); } catch { /* 저장 불가 환경은 무시 */ }
+}
+
+const STORY_DEFAULTS_KEY = 'haha2.storydefaults.v1';
+
+/** '내 기본값'으로 저장해 둔 스토리 설정(없으면 null). 스토리 설정 화면의 노란 표시·'기본값으로' 버튼이 이 값을 기준으로 한다. */
+export function loadStoryDefaults() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORY_DEFAULTS_KEY));
+    return saved ? normalizeStory(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoryDefaults(story) {
+  try { localStorage.setItem(STORY_DEFAULTS_KEY, JSON.stringify(story)); } catch { /* 저장 불가 환경은 무시 */ }
+}
+
+export function clearStoryDefaults() {
+  try { localStorage.removeItem(STORY_DEFAULTS_KEY); } catch { /* 저장 불가 환경은 무시 */ }
 }

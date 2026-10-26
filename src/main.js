@@ -2,7 +2,7 @@ import { TICK, COUNTDOWN, TEAM_NAME } from './game/config.js';
 import { SLOTS, createMatch, createInputs, cancelInputs, defaultLoadout } from './game/state.js';
 import { step } from './game/update.js';
 import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
-import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT, STAGES, stageStart, nextStageOf } from './game/story.js';
+import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT, STAGES, stageStart, nextStageOf, WAVES } from './game/story.js';
 import { createControls } from './input/pointer.js';
 import { createKataKeys, KATA_CODES } from './input/kata.js';
 import { glowingKey } from './game/gunkata.js';
@@ -13,6 +13,7 @@ import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createScreens } from './ui/screens.js';
 import { unlock, setMuted, playEvents, updateEngine, updateBattleMusic, restartMusic } from './audio/synth.js';
+import { MUSIC, prepareStoryMusic, updateStoryMusic, storyMusicPlaying } from './audio/storymusic.js';
 import {
   loadSettings, saveSettings, loadBalance, saveBalance, loadSingle, saveSingle, loadStory, saveStory,
   loadStorySave, saveStorySave, clearStorySave,
@@ -43,6 +44,25 @@ let renderer = null;
 let ai = null;
 // 키보드·터치·컨트롤러로 조작하는 사람 플레이어(싱글 플레이에서는 AI 자리 제외)
 let humans = [];
+// 경기를 새로 시작할 때마다 하나씩 늘린다(장면 음악을 새 장면마다 처음부터 틀려고)
+let matchSerial = 0;
+
+/**
+ * 지금 유튜브 장면 음악을 틀 장면 { key, video }, 아니면 null.
+ * 보스전: 보스가 오는 장면부터 싸우는 동안·도발 장면·보스와의 건 카타까지(윌슨 요원·데스스타는 전용 곡, 나머지는 보스전 곡).
+ * 공중전: 3스테이지 하늘의 데스스타 전까지(웨이브 사이·카운트다운 포함). 엔딩 컷씬 등 컷씬 중에는 원래 배틀 음악.
+ * 일시정지 중에도 장면은 그대로(음악만 멈춤).
+ */
+function musicScene() {
+  const story = match?.story;
+  if (!story || match.cutscene || match.phase === 'result') return null;
+  const boss = WAVES[story.wave].boss;
+  if (boss && ['drop', 'fight'].includes(story.phase)) {
+    return { key: `${matchSerial}:${story.wave}`, video: MUSIC[boss] ?? MUSIC.boss };
+  }
+  if (story.stage === 'sky') return { key: `${matchSerial}:sky`, video: MUSIC.sky };
+  return null;
+}
 
 // cutscene: 스토리 모드 엔딩 컷씬(입력은 받지 않지만 시간은 흐른다. 대교 가는 길만 좌우 이동으로 차를 몬다)
 // killcam: 스토리 모드에서 요원을 쓰러뜨릴 때의 짧은 처치 컷씬, gunkata: 쓰러뜨린 요원·보스와의 건 카타(1·2·3·4 버튼만)
@@ -117,6 +137,8 @@ function startMatch() {
   if (!match.story && aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
   renderer.reset();
   restartMusic();
+  matchSerial++;
+  if (match.story) prepareStoryMusic(); // 장면 음악(유튜브)을 미리 불러 둔다
   screens.show('game');
 }
 
@@ -329,7 +351,9 @@ function frame(now) {
   }
   updateEngine(match?.phase === 'playing' ? match.jet : null);
   // 신나는 전투 음악: 카운트다운부터 경기·컷씬 동안. 일시정지·결과·메뉴에서는 작아지며 멈춘다.
-  updateBattleMusic(active());
+  // 보스전·공중전에는 유튜브 장면 음악(나오는 동안은 배틀 음악을 끔, 못 불러오면 배틀 음악 그대로)
+  updateStoryMusic(musicScene(), { paused: !active(), muted: settings.muted });
+  updateBattleMusic(active() && !storyMusicPlaying());
   requestAnimationFrame(frame);
 }
 
