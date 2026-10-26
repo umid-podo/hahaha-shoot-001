@@ -5,9 +5,9 @@ import {
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
 import {
-  updateStory, holdsResult, startsCutscene, startCutscene, updateCutscene, updateKillcam,
+  updateStory, holdsResult, startsCutscene, startCutscene, updateCutscene, updateKillcam, startKillcam,
 } from './story.js';
-import { needsGunKata, startGunKata, updateGunKata } from './gunkata.js';
+import { needsGunKata, startGunKata, updateGunKata, kataOn } from './gunkata.js';
 
 const OUT_MARGIN = 40;
 const HURT_TIME = 0.2;
@@ -624,7 +624,9 @@ export function step(match, inputs, dt = TICK) {
   if (match.story?.stage === 'sky') {
     for (const p of downed.filter((q) => q.team === 'isb' && !q.boss)) events.push({ type: 'explode', x: p.x, y: p.y, radius: 140 });
   } else if (match.story && earthUp && downedAgent) {
-    startGunKata(match, downedAgent, { kind: 'killcam', waveEnd: !isbUp }, events);
+    // 스토리 설정에서 건 카타를 껐으면 바로 처치 컷씬
+    if (kataOn(match)) startGunKata(match, downedAgent, { kind: 'killcam', waveEnd: !isbUp }, events);
+    else startKillcam(match, downedAgent, !isbUp);
     return events;
   }
   if ((!earthUp || !isbUp) && !(earthUp && holdsResult(match))) {

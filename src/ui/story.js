@@ -4,6 +4,7 @@ import {
   WAVES, STAGES, STORY_FIELDS, STORY_WEAPONS, BOSS_NAME, AGENT_WEAPON_CHOICES, defaultStory, waveWho,
 } from '../game/story.js';
 import { choiceButton } from './widgets.js';
+import { loadStoryDefaults, saveStoryDefaults, clearStoryDefaults } from '../storage/settings.js';
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -56,19 +57,43 @@ export function createStorySetup(onChange) {
 
   // 선택 버튼은 눌린 표시를 스스로 바꾸고, 숫자 칸은 그 칸만 고친다(다시 그리면 컨트롤러로 숫자를 고치던 칸이 풀린다).
   const changed = () => onChange(story);
+  // 기본값: '내 기본값'을 저장해 두었으면 그것, 없으면 원래 기본값. 노란 표시·'기본 ○○' 안내·'기본값으로' 버튼의 기준이다.
+  let custom = loadStoryDefaults();
+  const base = () => custom ?? defaultStory();
+  const status = (text) => { $('#story-defaults-status').textContent = text; };
+  const baseNote = () => (custom ? "기준은 '내 기본값'입니다." : '기준은 원래 기본값입니다.');
+
+  /** 건 카타 모드 켜기·끄기(끄면 쓰러뜨린 요원은 바로 처치 컷씬, 보스는 바로 엔딩 컷씬) */
+  function kataBox() {
+    const box = el('fieldset', 'story-wave story-kata');
+    box.append(el('legend', '', '건 카타 모드'), el('small', '', '요원·보스를 쓰러뜨릴 때 1·2·3·4 버튼으로 맞서는 건 카타. 끄면 바로 처치 컷씬(보스는 엔딩 컷씬)으로 넘어갑니다.'));
+    const row = el('div', 'choices story-kata-choices');
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', '건 카타 모드');
+    const mark = () => row.classList.toggle('changed', story.gunkata !== base().gunkata);
+    row.append(...[[true, '켜기'], [false, '끄기']].map(([on, label]) => choiceButton(label, story.gunkata === on, () => {
+      story.gunkata = on;
+      mark();
+      changed();
+    })));
+    mark();
+    box.append(row);
+    return box;
+  }
 
   function waveBox(wave, i) {
     const cfg = story.waves[i];
-    const def = defaultStory().waves[i];
+    const def = base().waves[i];
     const box = el('fieldset', `story-wave${wave.boss ? ' boss' : ''}`);
     const who = waveWho(wave);
     box.append(el('legend', '', `${wave.title} · ${who}`), el('small', '', waveNote(wave)));
 
     box.append(el('div', 'field-label', '난이도'));
-    const difficulty = el('div', `choices difficulty${def.difficulty === 'mixed' ? ' mixed' : ''}`);
+    const mixable = defaultStory().waves[i].difficulty === 'mixed'; // '기획대로'는 요원마다 난이도가 정해진 웨이브만
+    const difficulty = el('div', `choices difficulty${mixable ? ' mixed' : ''}`);
     difficulty.setAttribute('role', 'group');
     difficulty.setAttribute('aria-label', `${wave.title} 난이도`);
-    const choices = def.difficulty === 'mixed' ? ['mixed', ...DIFFICULTY_IDS] : DIFFICULTY_IDS;
+    const choices = mixable ? ['mixed', ...DIFFICULTY_IDS] : DIFFICULTY_IDS;
     difficulty.append(...choices.map((id) => choiceButton(id === 'mixed' ? mixedName(wave) : DIFFICULTY[id].name, cfg.difficulty === id, () => {
       cfg.difficulty = id;
       changed();
@@ -128,7 +153,7 @@ export function createStorySetup(onChange) {
 
   /** 스테이지마다 제목 + 웨이브 칸 */
   function build() {
-    const nodes = [];
+    const nodes = [kataBox()];
     WAVES.forEach((wave, i) => {
       if (i === 0 || WAVES[i - 1].stage !== wave.stage) {
         const stage = STAGES[wave.stage];
@@ -139,15 +164,37 @@ export function createStorySetup(onChange) {
     $('#story-waves').replaceChildren(...nodes);
   }
 
-  $('#story-reset-btn').addEventListener('click', () => {
-    story.waves = defaultStory().waves;
+  /** 설정 전체를 s로 바꾼다(건 카타·웨이브) */
+  function replaceWith(s) {
+    story.gunkata = s.gunkata;
+    story.waves = s.waves;
     build();
     changed();
+  }
+
+  $('#story-reset-btn').addEventListener('click', () => {
+    replaceWith(base());
+    status(`기본값으로 되돌렸습니다. ${baseNote()}`);
+  });
+  // 지금 설정을 '내 기본값'으로 저장: 앞으로 노란 표시와 '기본값으로' 버튼이 이 값을 기준으로 한다
+  $('#story-save-defaults-btn').addEventListener('click', () => {
+    saveStoryDefaults(story);
+    custom = loadStoryDefaults();
+    build();
+    status("지금 설정을 '내 기본값'으로 저장했습니다.");
+  });
+  // 원래 기본값으로: '내 기본값'을 지우고 처음 값으로 되돌린다
+  $('#story-factory-btn').addEventListener('click', () => {
+    clearStoryDefaults();
+    custom = null;
+    replaceWith(defaultStory());
+    status("'내 기본값'을 지우고 원래 기본값으로 되돌렸습니다.");
   });
 
   return {
     open(state) {
       story = state;
+      status(custom ? "'내 기본값'을 저장해 두었습니다. 노란 칸은 그 값과 다른 칸입니다." : '');
       build();
     },
   };

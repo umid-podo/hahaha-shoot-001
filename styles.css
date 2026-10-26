@@ -435,8 +435,8 @@ button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; 
 .story-stage { margin: 6px 0 0; grid-column: 1 / -1; font-size: 16px; color: var(--isb); }
 .choices.difficulty.mixed > :first-child { grid-column: 1 / -1; }
 
-/* 스토리 보스전 음악(유튜브 플레이어): 보스전 동안만 화면 왼쪽 위 구석에 작게 보인다. 게임 조작을 가리지 않게 눌리지 않는다. */
-#boss-music { position: fixed; left: 8px; top: 8px; width: 120px; height: 120px; z-index: 5; pointer-events: none;
+/* 스토리 장면 음악(유튜브 플레이어): 보스전·공중전 동안만 화면 왼쪽 위 구석에 작게 보인다. 게임 조작을 가리지 않게 눌리지 않는다. */
+#story-music { position: fixed; left: 8px; top: 8px; width: 120px; height: 120px; z-index: 5; pointer-events: none;
   opacity: 0; visibility: hidden; border-radius: 10px; overflow: hidden; transition: opacity 0.4s; }
-#boss-music.on { opacity: 0.85; visibility: visible; }
-#boss-music iframe { width: 100%; height: 100%; border: 0; }
+#story-music.on { opacity: 0.85; visibility: visible; }
+#story-music iframe { width: 100%; height: 100%; border: 0; }

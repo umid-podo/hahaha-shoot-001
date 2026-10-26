@@ -179,7 +179,7 @@ export const CHARACTERS = [
     image: 'assets/characters/gunship.svg',
   },
   {
-    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 3000, radius: 130, speed: 70,
+    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 10000, radius: 130, speed: 70,
     image: 'assets/characters/deathstar.svg',
   },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 3번 누르면 나타난다. 모습은 온이름 + 몸에 빨간 '제작자'. 즉사기 전용.
