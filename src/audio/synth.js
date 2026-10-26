@@ -118,9 +118,9 @@ function laserZap() {
   osc.stop(start + 0.1);
 }
 
-/** 전투 배경음악: 매 프레임 호출. on이면 재생(경기·카운트다운·컷씬), 아니면 줄여서 멈춤. */
-export function updateBattleMusic(on) {
-  updateMusic(ctx, on);
+/** 전투 배경음악: 매 프레임 호출. on이면 재생(경기·카운트다운·컷씬), 아니면 줄여서 멈춤. song은 틀 곡(music.js SONGS). */
+export function updateBattleMusic(on, song = 'battle') {
+  updateMusic(ctx, on, song);
 }
 
 /** 경고 사이렌: 높낮이가 오르내리는 경보음을 cycles번. 그동안 배경음악은 작아진다. */
