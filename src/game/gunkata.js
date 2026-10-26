@@ -1,5 +1,5 @@
 import { BOSS_NAME, R10_NAME, WILSON_NAME, JOHNSON_NAME, startCutscene, startKillcam } from './story.js';
-import { createRng } from './state.js';
+import { createRng, createPlayer, createMatchWith, SLOTS } from './state.js';
 import { TICK } from './config.js';
 
 /**
@@ -54,11 +54,32 @@ export function needsGunKata(match) {
 /** 스토리 설정에서 건 카타 모드를 켜 두었는지(끄면 쓰러뜨린 요원은 바로 처치 컷씬, 보스는 바로 엔딩 컷씬) */
 export const kataOn = (match) => match.story?.settings?.gunkata !== false;
 
+/* ───────── 건 카타 수련장 ─────────
+ * 메인 메뉴의 '건 카타 수련장': 훈련용 전투 로봇과 끝없이 건 카타만 한다. 주인공 체력은 무한(맞아도 깎이지 않음)이라 지지 않고,
+ * 대응 성공·실수·연속 성공(최고 기록)을 센다. 연속 성공이 쌓일수록 공격 사이 쉬는 시간이 짧아진다(최대 절반까지).
+ * 그만두려면 일시정지 → 메인 메뉴.
+ */
+export const TRAINING_BOT = 'training-bot';
+const TRAINING_RUSH = 0.03; // 연속 성공 1번마다 줄어드는 쉬는 시간 비율
+
+/** 수련장 경기: P1(고른 캐릭터)과 훈련용 전투 로봇, 바로 건 카타로 시작한다. */
+export function createTrainingMatch(pick = {}, seed = Date.now()) {
+  const hero = createPlayer(SLOTS[0], pick);
+  const bot = createPlayer({ ...SLOTS[1], id: 'BOT' }, { characterId: TRAINING_BOT, ai: true, name: '훈련용 전투 로봇' });
+  const match = createMatchWith([hero, bot], seed);
+  match.training = true;
+  match.phase = 'gunkata';
+  startGunKata(match, bot, null, [], seed);
+  match.gunkata.training = { streak: 0, best: 0 };
+  return match;
+}
+
 /** 화면에 쓸 적 이름(일반 요원 이름 뒤의 ' (AI)'는 뺀다) */
 export const foeName = (foe) => foe.name.replace(/ \(AI\)$/, '');
 
 /** 적 foe와의 첫 대사 */
 function introLine(foe) {
+  if (foe.characterId === TRAINING_BOT) return `${foe.name}: 삐빅. 건 카타 수련을 시작합니다. 체력은 무한입니다.`;
   if (foe.characterId === 'r10') return `${R10_NAME}: 삐빅! 근접 전투 모드 가동!`;
   if (foe.name === BOSS_NAME) return `${BOSS_NAME}: 총알로는 안 끝난다… 건 카타로 붙자!`;
   if (foe.name === WILSON_NAME) return `${WILSON_NAME}: 로켓이 떨어졌군… 맨손으로 상대해 주마!`;
@@ -160,6 +181,11 @@ export function updateGunKata(match, inputs, dt, events) {
       Object.assign(a, { state: 'counter', t: 0, press });
       k.done++;
       k.caption = `${moves[a.kind].counter}! (${k.done}/${k.goal})`;
+      if (k.training) {
+        k.training.streak++;
+        k.training.best = Math.max(k.training.best, k.training.streak);
+        k.caption = `${moves[a.kind].counter}! (연속 ${k.training.streak})`;
+      }
       events.push({ type: 'kata-counter', key: a.kind, done: k.done });
       events.push(a.kind === 4 ? { type: 'kick', x: 0, y: 0 } : { type: 'fire', playerId: hero.id, weapon: 'pistol' });
       return;
@@ -168,6 +194,13 @@ export function updateGunKata(match, inputs, dt, events) {
       // 못 눌렀거나 다른 버튼: 적의 공격이 맞는다
       Object.assign(a, { state: 'hit', t: 0, press, wrong: !!press });
       k.misses++;
+      if (k.training) {
+        // 수련장: 체력은 깎이지 않고 연속 성공만 끊긴다
+        k.training.streak = 0;
+        k.caption = press ? '틀린 버튼! (수련 중이라 체력은 그대로)' : '늦었다! (수련 중이라 체력은 그대로)';
+        events.push({ type: 'fire', playerId: foe.id, weapon: 'pistol' }, { type: 'kata-hit', key: a.kind, damage: 0 });
+        return;
+      }
       hero.hp = Math.max(0, hero.hp - DAMAGE);
       hero.hurt = 0.3;
       const stats = match.stats?.[hero.id];
@@ -187,7 +220,8 @@ export function updateGunKata(match, inputs, dt, events) {
   if (a.t >= RESOLVE_TIME) {
     k.attack = null;
     k.gap = GAP[0] + k.rng() * (GAP[1] - GAP[0]);
-    if (k.done >= k.goal) {
+    if (k.training) k.gap *= Math.max(0.5, 1 - k.training.streak * TRAINING_RUSH);
+    if (k.done >= k.goal && !k.training) {
       k.finish = 0;
       k.caption = k.boss ? `건 카타 완료! ${foeName(foe)}이 비틀거린다!` : `건 카타 완료! ${foeName(foe)} 쓰러짐!`;
       events.push({ type: 'kata-clear' });

@@ -1697,3 +1697,38 @@ test('데스스타 체력 10000(예전 기본값 3000으로 저장돼 있어도 
   const { match } = sky(11);
   assert.equal(enemies(match)[0].maxHp, 10000);
 });
+
+test('건 카타 수련장: 훈련용 전투 로봇과 끝없이 건 카타, 체력 무한, 연속 성공 기록', async () => {
+  const { createTrainingMatch } = await import('../src/game/gunkata.js');
+  const match = createTrainingMatch({ characterId: 'earth-pizza', weapon: 'rifle' }, 3);
+  const inputs = createInputs(match.players);
+  assert.equal(match.phase, 'gunkata');
+  assert.ok(match.training && match.gunkata.training);
+  const [hero, bot] = match.players;
+  assert.equal(bot.characterId, 'training-bot');
+  assert.equal(bot.name, '훈련용 전투 로봇');
+  // 맞는 버튼으로 계속 대응: 목표(3번)를 넘어도 끝나지 않는다
+  let counters = 0;
+  for (let i = 0; i < 60 * 40 && counters < 12; i++) {
+    const key = glowingKey(match.gunkata);
+    if (key) inputs[match.gunkata.heroId].kata = key;
+    counters += step(match, inputs).filter((e) => e.type === 'kata-counter').length;
+  }
+  assert.equal(counters, 12);
+  assert.equal(match.phase, 'gunkata', '끝나지 않음');
+  assert.equal(match.gunkata.training.streak, 12);
+  assert.equal(match.gunkata.training.best, 12);
+  // 일부러 틀려도 체력은 그대로, 연속 성공만 끊김
+  let misses = 0;
+  for (let i = 0; i < 60 * 40 && misses < 8; i++) {
+    const key = glowingKey(match.gunkata);
+    if (key) inputs[match.gunkata.heroId].kata = (key % 4) + 1;
+    misses += step(match, inputs).filter((e) => e.type === 'kata-hit').length;
+  }
+  assert.equal(misses, 8);
+  assert.equal(hero.hp, hero.maxHp, '체력 무한');
+  assert.ok(hero.alive);
+  assert.equal(match.phase, 'gunkata');
+  assert.equal(match.gunkata.training.streak, 0);
+  assert.equal(match.gunkata.training.best, 12);
+});
