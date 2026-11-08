@@ -27,6 +27,8 @@ export const TICK = 1 / 60;
  * burst는 한 번에 나가는 발 수, burstGap은 점사 사이 간격. splash는 RPG 폭발 범위 피해.
  * homing.turnRate(rad/s)는 가장 가까운 적을 향해 초당 꺾을 수 있는 최대 각도. RPG는 빗나가도 적 레일 선·경기장 끝·수명 끝에서 터진다.
  * battery: battery.shots발을 쏘면 방전되고, 마지막 발사 후 battery.recharge초가 지나면 가득 찬다(R-10 레이저 캐논).
+ * mag·reload: 탄창에 든 총알 수(0이면 무제한)와 탄창을 갈아 끼우는 시간(초). 다 쏘면 그 무기를 든 채 reload초 동안 장전한 뒤 다시 가득 찬다.
+ *   장전 중에 다른 무기로 바꾸면 장전이 끊기고, 다시 들면 처음부터 장전한다. 점사(쌍권총)는 한 발마다 1씩 쓴다.
  * heat: 연속 사격 max초를 채우면 과열되어 cooldown초 동안 쏘지 못한다. 쉬는 동안에는 초당 decay만큼 식는다.
  * ownCooldown: 쿨타임(interval)을 이 무기만 따로 센다(단검·샷건). 쿨타임 중에도 다른 무기는 바로 쏠 수 있다.
  * dash: 쏘는 대신 조준 방향으로 dash.speed(초당)로 돌진해 상대 몸에 닿으면 damage를 준다(단검).
@@ -41,9 +43,9 @@ export const TICK = 1 / 60;
  * 폭발 무기(splash)는 맞히지 못하면 벽(경기장 끝)·수명 끝에서 터진다. 전투기·포탑처럼 목표를 노린 폭탄은 목표 자리(range)에서 터진다.
  */
 export const WEAPONS = {
-  rifle: { id: 'rifle', name: '돌격소총', interval: 0.2, damage: 7, speed: 760, burst: 1 },
-  pistol: { id: 'pistol', name: '권총', interval: 0.5, damage: 20, speed: 720, burst: 1 },
-  dual: { id: 'dual', name: '쌍권총', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1 },
+  rifle: { id: 'rifle', name: '돌격소총', interval: 0.2, damage: 7, speed: 760, burst: 1, mag: 30, reload: 2 },
+  pistol: { id: 'pistol', name: '권총', interval: 0.5, damage: 20, speed: 720, burst: 1, mag: 12, reload: 1.4 },
+  dual: { id: 'dual', name: '쌍권총', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1, mag: 20, reload: 1.6 },
   // 쌍 RPG(윌슨 요원 전용): 쌍권총처럼 2점사로 쏘지만 탄이 작은 로켓이라 맞거나 레일 선에서 터진다(유도 없음, 지나간 길에 연기)
   dualrpg: {
     id: 'dualrpg', name: '쌍 RPG', interval: 0.5, damage: 10, speed: 720, burst: 2, burstGap: 0.1,
@@ -56,17 +58,17 @@ export const WEAPONS = {
     volley: { count: 3, rage: 5, spread: 7, aim: 0.8 },
   },
   rpg: {
-    id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release',
+    id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release', mag: 1, reload: 1,
     splash: { damage: 10, radius: 120 }, homing: { turnRate: 0.8 },
   },
   // 아킴보 석궁(숨겨진 무기): 권총 손잡이가 달린 작은 석궁 두 자루. 연사는 조금 느리지만 탄속이 빠르고 화살 2개가 나란히 날아간다.
   // 무기 선택에서 쌍권총 버튼을 빠르게 2번 누르면 나타난다.
   crossbow: {
-    id: 'crossbow', name: '아킴보 석궁', interval: 0.7, damage: 12, speed: 1500, burst: 1, arrows: 2, arrowGap: 26,
+    id: 'crossbow', name: '아킴보 석궁', interval: 0.7, damage: 12, speed: 1500, burst: 1, arrows: 2, arrowGap: 26, mag: 6, reload: 1.8,
     hidden: true, unlockFrom: 'dual', unlockTaps: 2,
   },
   sniper: {
-    id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release',
+    id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release', mag: 5, reload: 2.4,
     note: '팀 진영에 강철 엄폐물',
   },
   // 제작자 전용 주무기: 커다란 레이저포. 전투 시작 30초 뒤부터 쏠 수 있고, 쏘면 유도되는 거대 레이저가 상대를 즉사시킨다.
@@ -80,7 +82,7 @@ export const WEAPONS = {
     battery: { shots: 15, recharge: 2 },
   },
   // 보조무기
-  smg: { id: 'smg', name: '기관단총', interval: 0.02, damage: 4, speed: 800, burst: 1, heat: { max: 1, cooldown: 2, decay: 1 } },
+  smg: { id: 'smg', name: '기관단총', interval: 0.02, damage: 4, speed: 800, burst: 1, mag: 0, reload: 1.8, heat: { max: 1, cooldown: 2, decay: 1 } },
   // 단검: 조준한 뒤 떼면 조준 방향으로 매우 빠르게 돌진해, 상대 몸에 닿으면 큰 피해. 돌진 뒤 자기 레일로 돌아온다.
   dagger: {
     id: 'dagger', name: '단검', interval: 10, damage: 100, burst: 1, trigger: 'release', ownCooldown: true,
@@ -88,7 +90,7 @@ export const WEAPONS = {
   },
   // 샷건: 조준한 뒤 떼면 부채꼴로 여러 발
   shotgun: {
-    id: 'shotgun', name: '샷건', interval: 10, damage: 40, speed: 900, burst: 1, trigger: 'release', ownCooldown: true,
+    id: 'shotgun', name: '샷건', interval: 10, damage: 40, speed: 900, burst: 1, trigger: 'release', ownCooldown: true, mag: 0, reload: 1.5,
     pellets: 5, spread: 40,
   },
   // 수류탄(아이템): 아이템 버튼으로 지금 조준 방향에 바로 던진다. interval은 던진 뒤의 쿨타임

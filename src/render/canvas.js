@@ -315,6 +315,9 @@ export function createRenderer(canvas, wrap, assets) {
       ratio = elapsedTime < weapon.readyAfter ? elapsedTime / weapon.readyAfter
         : weapon.interval > 0 ? 1 - p.cooldown / weapon.interval : 1;
       color = ratio >= 1 ? '#FFC53D' : '#D9443A';
+    } else if (p.reload && p.reload.weapon === weapon.id) {
+      // 장전 중: 차오르는 하늘색 막대
+      ratio = 1 - p.reload.t / p.reload.total; color = '#4FB3FF';
     } else if (weapon.battery) {
       ratio = p.battery / weapon.battery.shots; color = '#E0312B';
     } else if (weapon.heat && (p.heat > 0 || p.overheat > 0)) {
@@ -2932,6 +2935,16 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.font = 'bold 22px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(weapon.name, wx + 14, wy + 20);
+    // 남은 총알 / 장탄 수(장전 중이면 '장전 중'), 오른쪽 위
+    if (weapon.mag > 0) {
+      const left = Math.min(weapon.mag, p.ammo?.[weapon.id] ?? weapon.mag);
+      const reloading = p.reload?.weapon === weapon.id;
+      ctx.textAlign = 'right';
+      ctx.font = reloading ? 'bold 18px system-ui, sans-serif' : 'bold 22px system-ui, sans-serif';
+      ctx.fillStyle = reloading ? '#4FB3FF' : left <= Math.max(1, Math.ceil(weapon.mag * 0.25)) ? '#FF6A5A' : '#FFFFFF';
+      ctx.fillText(reloading ? '장전 중…' : `${left} / ${weapon.mag}`, wx + 286, wy + 20);
+      ctx.textAlign = 'left';
+    }
     ctx.font = '15px system-ui, sans-serif';
     ctx.fillStyle = '#C9CED6';
     const item = WEAPONS[p.item ?? 'grenade'];

@@ -1,4 +1,8 @@
 import * as THREE from '../vendor/three.module.min.js';
+import { WEAPONS } from '../game/config.js';
+
+/** 그 무기의 장탄 수(없거나 0이면 무제한) */
+const WEAPON_MAG = (id) => (WEAPONS[id]?.mag > 0 ? WEAPONS[id].mag : Infinity);
 
 /**
  * 1인칭 3D 화면의 손에 든 총(뷰모델)과 실제 총알 모양의 탄. 그림 파일 없이 three.js 도형으로 만든다.
@@ -75,6 +79,15 @@ function rail(x0, x1, y, material) {
   g.add(box(x1 - x0, 0.5, 2.1, material, (x0 + x1) / 2, y));
   for (let x = x0 + 0.5; x < x1 - 0.3; x += 1.0) g.add(box(0.5, 0.45, 2.1, material, x, y + 0.45));
   return g;
+}
+
+/** 탄창 묶음: 장전할 때 dir(총 좌표, 아래쪽) 방향으로 빠졌다가 새 탄창이 들어온다. base는 탄창 바닥(받치는 손이 갈 자리) */
+function magazine(g, parts, dir, base) {
+  const m = new THREE.Group();
+  for (const p of parts) m.add(p);
+  g.add(m);
+  const v = new THREE.Vector2(dir[0], dir[1]).normalize();
+  return { obj: m, dir: [v.x, v.y], base };
 }
 
 // ── 손 ──
@@ -175,13 +188,17 @@ function pistolModel({ twoTone = false } = {}) {
     [-2.2, -4.0], [-3.4, -12.6], [-3.9, -13.2], [-9.0, -13.2], [-9.5, -12.6], [-9.8, -3.4], [-10.8, -2.1]];
   const guard = [[3.6, -2.05], [3.5, -3.3], [2.9, -3.8], [0.3, -3.85], [-0.8, -2.9], [-1.0, -2.05]];
   g.add(slab(frame, 2.8, POLY(), { bevel: 0.3, holes: [guard] }));
-  g.add(box(5.9, 0.55, 2.9, POLY2(), -6.5, -13.4)); // 탄창 바닥판
+  // 탄창: 손잡이 안의 몸통(평소엔 손잡이에 가려 안 보임) + 바닥판
+  const mag = magazine(g, [
+    slab([[-3.7, -3.2], [-8.7, -3.2], [-9.2, -13.0], [-4.0, -13.0]], 2.2, mat('#2E3035', { metal: 0.5, rough: 0.5 }), { bevel: 0.1 }),
+    box(5.9, 0.55, 2.9, POLY2(), -6.5, -13.4),
+  ], [-0.2, -1], [-6.5, -13.7]);
   const trigger = box(0.35, 1.5, 0.45, BLACK(), 1.5, -2.9);
   trigger.rotation.z = 0.25;
   g.add(trigger);
   // 손잡이 미끄럼 방지 무늬(오른쪽 면)
   for (let y = -11.5; y < -4.5; y += 1.1) g.add(box(4.2, 0.12, 0.05, BLACK(), -6.4 + (y + 8) * 0.14, y, 1.42));
-  g.userData = { muzzle: [8.8, 0, 0], grip: { x: -6.3, y: -7.4, tilt: 0.2, w: 2.8, d: 5.4 } };
+  g.userData = { muzzle: [8.8, 0, 0], grip: { x: -6.3, y: -7.4, tilt: 0.2, w: 2.8, d: 5.4 }, mag, pivot: [1.4, -3.0] };
   return g;
 }
 
@@ -227,8 +244,10 @@ function rifleModel() {
   // 아래 리시버 · 탄창 삽입구 · 곡선 탄창
   g.add(slab([[-14, -1.6], [4, -1.6], [4, -3.2], [-1, -3.6], [-14, -3.4]], 2.8, STEEL(), { bevel: 0.25 }));
   g.add(slab([[-4.6, -1.6], [2.6, -1.6], [2.7, -5.8], [-4.5, -5.8]], 3.1, STEEL(), { bevel: 0.25 }));
-  g.add(slab([[-4.2, -5.4], [2.3, -5.4], [3.7, -13.8], [4.6, -19.6], [-1.4, -20.4], [-2.5, -14.2]], 2.4, mat('#2E3035', { metal: 0.5, rough: 0.5 }), { bevel: 0.25 }));
-  g.add(slab([[4.6, -19.6], [5.0, -20.6], [-1.6, -21.4], [-1.4, -20.4]], 2.8, POLY(), { bevel: 0.2 }));
+  const mag = magazine(g, [
+    slab([[-4.2, -5.4], [2.3, -5.4], [3.7, -13.8], [4.6, -19.6], [-1.4, -20.4], [-2.5, -14.2]], 2.4, mat('#2E3035', { metal: 0.5, rough: 0.5 }), { bevel: 0.25 }),
+    slab([[4.6, -19.6], [5.0, -20.6], [-1.6, -21.4], [-1.4, -20.4]], 2.8, POLY(), { bevel: 0.2 }),
+  ], [0.15, -1], [1.6, -21.4]);
   // 방아쇠울 · 방아쇠 · 손잡이
   g.add(box(6.6, 0.45, 1.3, STEEL(), -8.2, -5.7));
   g.add(box(0.5, 2.3, 1.3, STEEL(), -4.9, -4.6));
@@ -240,7 +259,7 @@ function rifleModel() {
   g.add(tube(1.5, 1.5, -28, -14, BLUED(), { y: -0.2 }));
   g.add(slab([[-38, 2.2], [-27, 1.6], [-26, -2.6], [-27.5, -6.2], [-38, -9.6], [-39, -9.6], [-39, 2.2]], 3.8, POLY(), { bevel: 0.35 }));
   g.add(box(0.9, 12, 4.0, BLACK(), -39.4, -3.6));
-  g.userData = { muzzle: [40.3, 0, 0], grip: { x: -12.1, y: -8.3, tilt: 0.2, w: 3.0, d: 4.0 }, support: { x: 14.5, r: 2.2 } };
+  g.userData = { muzzle: [40.3, 0, 0], grip: { x: -12.1, y: -8.3, tilt: 0.2, w: 3.0, d: 4.0 }, support: { x: 14.5, r: 2.2 }, mag };
   return g;
 }
 
@@ -264,7 +283,9 @@ function smgModel() {
   const drum = tube(0.9, 0.9, -14.5, -12.5, BLUED(), { y: 2.6 });
   g.add(drum);
   // 곡선 탄창
-  g.add(slab([[1.2, -2.0], [4.8, -2.0], [6.8, -9], [9.8, -15.4], [6.8, -16.6], [3.6, -9.6]], 2.1, mat('#2E3035', { metal: 0.5, rough: 0.5 }), { bevel: 0.2 }));
+  const mag = magazine(g, [
+    slab([[1.2, -2.0], [4.8, -2.0], [6.8, -9], [9.8, -15.4], [6.8, -16.6], [3.6, -9.6]], 2.1, mat('#2E3035', { metal: 0.5, rough: 0.5 }), { bevel: 0.2 }),
+  ], [0.4, -1], [8.3, -16.4]);
   g.add(slab([[-10, -2], [-1, -2], [-1.5, -5.6], [-4.6, -5.8], [-7.4, -14], [-11.6, -13.4], [-10.6, -5.0], [-11.5, -2]], 3.0, POLY(), {
     bevel: 0.35, holes: [[[-2.1, -2.6], [-2.3, -4.9], [-4.9, -5.0], [-5.1, -2.6]]],
   }));
@@ -273,7 +294,7 @@ function smgModel() {
   g.add(trig);
   for (const z of [-1.3, 1.3]) g.add(tube(0.45, 0.45, -30, -15.6, STEEL(), { z, y: -0.6, seg: 10 }));
   g.add(slab([[-31, 3.0], [-29.6, 3.0], [-29.6, -7.0], [-31, -7.0]], 4.6, POLY(), { bevel: 0.4 }));
-  g.userData = { muzzle: [21.2, 0, 0], grip: { x: -8.8, y: -8.8, tilt: 0.3, w: 3.0, d: 4.0 }, support: { x: 12.5, r: 2.4 } };
+  g.userData = { muzzle: [21.2, 0, 0], grip: { x: -8.8, y: -8.8, tilt: 0.3, w: 3.0, d: 4.0 }, support: { x: 12.5, r: 2.4 }, mag };
   return g;
 }
 
@@ -304,7 +325,7 @@ function sniperModel() {
   const trig = box(0.35, 1.6, 0.45, BLACK(), -6.2, -5.6);
   trig.rotation.z = 0.25;
   g.add(trig);
-  g.add(box(5.0, 3.0, 2.6, STEEL(), 1.5, -5.0)); // 탄창
+  const mag = magazine(g, [box(5.0, 3.0, 2.6, STEEL(), 1.5, -5.0)], [0, -1], [1.5, -6.6]); // 탄창
   // 조준경
   g.add(tube(1.45, 1.45, -12, 12, BLUED(), { y: 5.8 }));
   g.add(tube(1.45, 2.7, 12, 18, BLUED(), { y: 5.8, seg: 24 }));
@@ -321,7 +342,7 @@ function sniperModel() {
   for (const x of [-7, 7]) { g.add(tube(1.8, 1.8, x - 0.7, x + 0.7, BLACK(), { y: 5.8 })); g.add(box(1.4, 3.4, 1.6, BLACK(), x, 3.2)); }
   // 접은 양각대
   for (const z of [-0.9, 0.9]) g.add(tube(0.3, 0.3, 16, 38, BLACK(), { y: -1.9, z, seg: 8 }));
-  g.userData = { muzzle: [63.3, 0, 0], grip: { x: -10.4, y: -8.6, tilt: 0.3, w: 3.4, d: 4.2 }, support: { x: 6, r: 3.0 } };
+  g.userData = { muzzle: [63.3, 0, 0], grip: { x: -10.4, y: -8.6, tilt: 0.3, w: 3.4, d: 4.2 }, support: { x: 6, r: 3.0 }, mag };
   return g;
 }
 
@@ -474,21 +495,34 @@ function laserModel() {
 /** 무기 id → 손에 든 모습. hands: 오른손(주) + 왼손(받침) 구성 */
 function build(weapon) {
   const root = new THREE.Group();
+  /**
+   * 손에 든 한 자루: item(손 포함) 안에 spin(총만, 방아쇠 둘레로 돌릴 수 있게) 안에 model.
+   * 손은 item에 붙어 있어 총을 돌려도(쌍권총 장전) 손은 그 자리에 있다.
+   */
   const gun = (model, hands = 'two') => {
-    const g = model;
-    const { grip, support } = g.userData;
-    if (!g.userData.noHands) {
+    const g = new THREE.Group();
+    const spin = new THREE.Group();
+    const [px, py] = model.userData.pivot ?? [0, 0];
+    spin.position.set(px, py, 0);
+    model.position.set(-px, -py, 0);
+    spin.add(model);
+    g.add(spin);
+    g.userData = { ...model.userData, model, spin };
+    const { grip, support } = model.userData;
+    if (!model.userData.noHands) {
       g.add(placeHand(gripHand(grip.w, grip.d, { tilt: grip.tilt }), grip.x, grip.y, grip.tilt));
       if (hands === 'two' && support) {
         const s = supportHand(support.r);
         s.position.set(support.x, support.y ?? 0, 0);
         g.add(s);
+        g.userData.helper = { obj: s, home: s.position.clone() };
       } else if (hands === 'cup') {
         // 권총 두 손 쥐기: 왼손이 오른손을 감싼다(거울 손)
         const left = placeHand(gripHand(grip.w, grip.d, { arm: [-24, -16, 14], tilt: grip.tilt }), grip.x + 0.4, grip.y - 0.8, grip.tilt);
         left.scale.z = -1;
         left.position.z = -0.4;
         g.add(left);
+        g.userData.helper = { obj: left, home: left.position.clone() };
       }
     }
     return g;
@@ -632,6 +666,85 @@ function makeFlash() {
   return g;
 }
 
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const ease = (v) => { const q = clamp01(v); return q * q * (3 - 2 * q); };
+/** 0→1 구간 [a, b]에서의 부드러운 진행도 */
+const span = (k, a, b) => ease((k - a) / (b - a));
+
+/** 장전할 때 총 전체의 움직임(카메라 기준 cm·라디안). 탄창 총은 기울여 탄창 구멍을 보이고, RPG는 총구를 내리고, 석궁은 내린다 */
+function reloadPose(weapon, rl, e) {
+  const out = { x: 0, y: 0, z: 0, pitch: 0, roll: 0 };
+  if (rl === null) return out;
+  if (weapon === 'dual' || weapon === 'dualrpg') {
+    out.y = 2.2 * e; out.roll = -0.25 * e; // 쌍권총: 조금 들어 올려 바깥으로 기울이고 돌린다
+  } else if (weapon === 'rpg') {
+    out.y = -2.5 * e; out.pitch = -0.16 * e; out.x = -2 * e;
+  } else if (weapon === 'crossbow') {
+    out.y = -5 * e; out.pitch = 0.35 * e; out.z = 2 * e;
+  } else {
+    // 탄창 총: 화면 가운데 쪽으로 들어 올리고 기울여 탄창 구멍이 보이게
+    const pistol = weapon === 'pistol';
+    out.y = (pistol ? 4.5 : 4.5) * e; out.x = (pistol ? -2 : -3) * e; out.z = (pistol ? -2 : -6) * e; out.roll = 0.6 * e; out.pitch = 0.18 * e;
+  }
+  return out;
+}
+
+/** 장전 중 부품 움직임: 탄창 빼고 끼우기(받치는 손이 새 탄창을 가져옴), RPG 새 로켓, 쌍권총 돌리기, 석궁 화살 다시 걸기 */
+function applyReload(item, weapon, rl, p) {
+  const u = item.userData;
+  const ammo = Math.min(WEAPON_MAG(weapon), p.ammo?.[weapon] ?? Infinity);
+  // 탄창
+  const spinning = weapon === 'dual' || weapon === 'dualrpg'; // 쌍권총은 탄창을 갈지 않고 돌린다
+  if (u.mag) {
+    let d = 0, visible = true;
+    if (rl !== null && !spinning) {
+      if (rl < 0.38) d = span(rl, 0.1, 0.36) * 26; // 빈 탄창이 빠져 떨어짐
+      else if (rl < 0.45) visible = false;
+      else d = (1 - span(rl, 0.45, 0.75)) * 16; // 새 탄창이 올라와 끼워짐
+    }
+    u.mag.obj.visible = visible;
+    u.mag.obj.position.set(u.mag.dir[0] * d, u.mag.dir[1] * d, 0);
+  }
+  // 받치는 손: 새 탄창(로켓)을 가지러 내려갔다 끼우고 돌아온다
+  if (u.helper) {
+    const h = u.helper;
+    h.obj.position.copy(h.home);
+    if (rl !== null && !spinning && (u.mag || u.warhead)) {
+      const w = span(rl, 0.3, 0.45) * (1 - span(rl, 0.78, 0.95));
+      let tx, ty;
+      if (u.mag) {
+        const d = rl < 0.45 ? 16 : (1 - span(rl, 0.45, 0.75)) * 16;
+        tx = u.mag.base[0] + u.mag.dir[0] * d; ty = u.mag.base[1] + u.mag.dir[1] * d - 1.5;
+      } else {
+        tx = u.warhead.position.x + 52; ty = u.warhead.position.y - 4.5;
+      }
+      h.obj.position.x += (tx - h.home.x) * w;
+      h.obj.position.y += (ty - h.home.y) * w;
+    }
+  }
+  // RPG 로켓: 아래 앞에서 올라와 발사관 앞에 끼워진다
+  if (u.warhead) {
+    if (rl === null) {
+      u.warhead.visible = ammo > 0;
+      u.warhead.position.set(0, 0, 0);
+    } else {
+      u.warhead.visible = rl > 0.18;
+      const k = span(rl, 0.18, 0.75);
+      u.warhead.position.set((1 - k) * 10, -(1 - k) * 34, (1 - k) * -6);
+      u.warhead.rotation.z = (1 - k) * 0.5;
+    }
+  }
+  // 석궁 화살: 뒤에서 미끄러져 걸린다
+  if (u.arrow) {
+    if (rl === null) { u.arrow.visible = ammo > 0 && p.cooldown <= 0; u.arrow.position.x = 0; } else {
+      u.arrow.visible = rl > 0.5;
+      u.arrow.position.x = -(1 - span(rl, 0.5, 0.85)) * 14;
+    }
+  }
+  // 쌍권총: 방아쇠울에 건 손가락으로 권총을 두 바퀴 휙휙 돌린다(그동안 탄이 채워짐)
+  if (u.spin) u.spin.rotation.z = rl !== null && (weapon === 'dual' || weapon === 'dualrpg') ? span(rl, 0.08, 0.9) * Math.PI * 4 : 0;
+}
+
 /**
  * 뷰모델 그리기. world3d가 한 사람 화면(1인칭)을 그린 다음 render()를 불러 그 위에 손과 총을 덧그린다.
  * 사람마다 반동·불꽃 상태를 따로 갖는다(화면 나누기에서 둘이 같은 무기를 들어도 된다).
@@ -739,6 +852,7 @@ export function createViewmodel() {
       const bob = reducedMotion ? 0 : moving ? Math.sin(time * 11) : 0;
       const breathe = reducedMotion ? 0 : Math.sin(time * 1.8);
       const lower = s.swap * s.swap * 14; // 무기를 바꾸면 내렸다 올린다
+      const rl = p.reload && p.reload.weapon === weapon ? clamp01(1 - p.reload.t / p.reload.total) : null; // 장전 진행도
       flashLight.intensity = 0;
       const muzzles = [];
       root.userData.items.forEach((item, i) => {
@@ -752,14 +866,18 @@ export function createViewmodel() {
           (pose.y + Math.abs(bob) * -0.6 + breathe * 0.12 - lower) * far,
           pose.z * far + k * (weapon === 'rpg' ? 3 : 2.4),
         );
+        // 장전 동작(rl: 0→1). 기울임 정도 e는 처음·끝에 부드럽게 들어갔다 나온다
+        const e = rl === null ? 0 : ease(rl / 0.15) * (1 - ease((rl - 0.85) / 0.15));
+        const anim = reloadPose(weapon, rl, e);
+        item.position.y += anim.y * far;
+        item.position.z += anim.z * far;
+        item.position.x += anim.x * mirror * far;
         item.rotation.set(0, 0, 0);
         item.rotateY(Math.PI / 2 + (pose.yaw ?? 0)); // 총구(+X)가 화면 앞(-Z)으로
-        item.rotateZ((pose.pitch ?? 0) + k * (weapon === 'rpg' ? 0.05 : 0.12) + s.swap * 0.6);
-        item.rotateX(pose.roll ?? 0);
+        item.rotateZ((pose.pitch ?? 0) + k * (weapon === 'rpg' ? 0.05 : 0.12) + s.swap * 0.6 + anim.pitch);
+        item.rotateX((pose.roll ?? 0) + anim.roll * mirror);
         item.scale.set(1, 1, mirror);
-        // 장전 상태: RPG 탄두·석궁 화살
-        if (item.userData.warhead) item.userData.warhead.visible = p.cooldown <= 0;
-        if (item.userData.arrow) item.userData.arrow.visible = p.cooldown <= 0;
+        applyReload(item, weapon, rl, p);
         // 단검 돌진: 앞으로 찌른다
         if (weapon === 'dagger' && p.dash) item.position.z -= 8;
         // 총구 불꽃
@@ -768,7 +886,8 @@ export function createViewmodel() {
           const h = list.length > 1 ? j : hand; // 레이저 캐논은 포신 둘을 번갈아
           const flashOn = s.flash[h] > 0;
           item.updateMatrixWorld(true);
-          tmpV.set(mz[0], mz[1], mz[2]).applyMatrix4(item.matrixWorld);
+          const mw = (item.userData.model ?? item).matrixWorld;
+          tmpV.set(mz[0], mz[1], mz[2]).applyMatrix4(mw);
           if (flashOn) {
             const f = flashOf(muzzles.length);
             f.visible = true;
@@ -790,7 +909,7 @@ export function createViewmodel() {
             const b = item.userData.back;
             const f = flashOf(muzzles.length + 4);
             f.visible = true;
-            f.position.copy(new THREE.Vector3(b[0], b[1], b[2]).applyMatrix4(item.matrixWorld));
+            f.position.copy(new THREE.Vector3(b[0], b[1], b[2]).applyMatrix4(mw));
             f.quaternion.copy(item.quaternion);
             f.rotateY(Math.PI);
             f.scale.setScalar(16);
