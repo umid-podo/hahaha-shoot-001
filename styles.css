@@ -198,7 +198,9 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 }
 #game * { touch-action: none; }
 #arena-wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
-#arena { display: block; border-radius: 8px; }
+#arena-wrap > canvas { grid-area: 1 / 1; }
+#arena, #world { display: block; border-radius: 8px; }
+#world { background: #0B1030; }
 #controls {
   display: flex;
   flex-wrap: wrap;

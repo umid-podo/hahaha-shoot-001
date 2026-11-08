@@ -1,22 +1,28 @@
 import { DEADZONE, TEAM_NAME, WEAPONS, SLOT_NAME } from '../game/config.js';
 
-/** 이동 스틱: X 변위만 사용. 데드존 안은 0, 바깥은 ±1까지 선형 보간. */
+/** 축 하나(스틱 한 방향 변위): 데드존 안은 0, 바깥은 ±1까지 선형 보간. */
 export function moveAxisFromDrag(dx, radius) {
   const v = Math.min(1, Math.max(-1, dx / radius));
   const mag = Math.abs(v);
   return mag < DEADZONE ? 0 : Math.sign(v) * (mag - DEADZONE) / (1 - DEADZONE);
 }
 
+/** 이동 스틱(1인칭): 위로 밀면 앞, 아래로 밀면 뒤, 옆으로 밀면 옆걸음. 데드존은 원으로 본다. { fwd, side } */
+export function moveFromDrag(dx, dy, radius) {
+  const len = Math.hypot(dx, dy) / radius;
+  if (len < DEADZONE) return { fwd: 0, side: 0 };
+  const k = Math.min(1, (Math.min(1, len) - DEADZONE) / (1 - DEADZONE)) / len;
+  return { fwd: (-dy / radius) * k, side: (dx / radius) * k };
+}
+
 /**
- * 조준 스틱: 자기 레일에서 상대 레일을 향하는 반원으로 제한한다.
- * 반대쪽 Y 성분은 0으로 자르고, 남은 벡터가 데드존 밖일 때만 armed(조준 중 → 자동 발사).
+ * 시선 스틱(1인칭): 옆으로 민 만큼 고개를 돌리고(turn -1~1, 조금씩 돌리기 쉽게 제곱 곡선), 데드존 밖으로 밀고 있는 동안
+ * armed(발사). 위로 밀면 돌지 않고 정면으로 쏜다. 떼면 쏘는 무기(RPG·저격총)는 밀었다가 놓을 때 한 발.
  */
-export function aimFromDrag(dx, dy, radius, team, previousAim) {
-  const cy = team === 'isb' ? Math.max(0, dy) : Math.min(0, dy);
-  const armed = Math.hypot(dx, cy) / radius >= DEADZONE;
-  if (dx === 0 && cy === 0) return { aim: previousAim, armed, x: 0, y: 0 };
-  const angle = Math.abs(Math.atan2(cy, dx)); // 상단 [0, π], 하단 [-π, 0]
-  return { aim: team === 'isb' ? angle : -angle, armed, x: dx, y: cy };
+export function lookFromDrag(dx, dy, radius) {
+  const armed = Math.hypot(dx, dy) / radius >= DEADZONE;
+  const v = moveAxisFromDrag(dx, radius);
+  return { turn: Math.sign(v) * v * v, armed };
 }
 
 function placeKnob(knob, x, y, radius) {
@@ -90,8 +96,8 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       header.className = 'panel-head';
       header.textContent = `${p.id} · ${p.name}`;
       header.title = TEAM_NAME[team];
-      const move = stickElement('move', `${p.id} 이동키`);
-      const aim = stickElement('aim', `${p.id} 발사키`);
+      const move = stickElement('move', `${p.id} 이동키(앞뒤·옆걸음)`);
+      const aim = stickElement('aim', `${p.id} 시선·발사키(옆으로 밀면 돌기, 밀고 있으면 발사)`);
 
       const actions = document.createElement('div');
       actions.className = 'actions';
@@ -128,20 +134,22 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       groups[side].append(panel);
 
       cancels.push(bindStick(move, {
-        drag(dx, _dy, radius, knob) {
-          frame.touchAxis = moveAxisFromDrag(dx, radius);
-          placeKnob(knob, dx, 0, radius);
+        drag(dx, dy, radius, knob) {
+          const m = moveFromDrag(dx, dy, radius);
+          frame.touchFwd = m.fwd;
+          frame.touchSide = m.side;
+          placeKnob(knob, dx, dy, radius);
         },
-        end() { frame.touchAxis = 0; },
+        end() { frame.touchFwd = 0; frame.touchSide = 0; },
       }));
       cancels.push(bindStick(aim, {
         drag(dx, dy, radius, knob) {
-          const r = aimFromDrag(dx, dy, radius, p.team, frame.aim);
-          frame.aim = r.aim;
+          const r = lookFromDrag(dx, dy, radius);
+          frame.touchTurn = r.turn;
           frame.aiming = r.armed;
-          placeKnob(knob, r.x, r.y, radius);
+          placeKnob(knob, dx, dy, radius);
         },
-        end() { frame.aiming = false; },
+        end() { frame.touchTurn = 0; frame.aiming = false; },
       }));
     }
   }

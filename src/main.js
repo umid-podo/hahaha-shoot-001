@@ -7,10 +7,12 @@ import { createControls } from './input/pointer.js';
 import { createKataKeys, KATA_CODES } from './input/kata.js';
 import { glowingKey, createTrainingMatch } from './game/gunkata.js';
 import { attachKeyboard, applyKeyboard, clearKeys } from './input/keyboard.js';
+import { applyView, attachMouse } from './input/view.js';
 import { pollGamepads, applyGamepads, clearGamepads } from './input/gamepad.js';
 import { pollPadMenu } from './input/padmenu.js';
 import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
+import { createWorld3D } from './render/world3d.js';
 import { createScreens } from './ui/screens.js';
 import { unlock, setMuted, playEvents, updateEngine, updateBattleMusic, restartMusic } from './audio/synth.js';
 import {
@@ -41,6 +43,8 @@ let match = null;
 let inputs = null;
 let controls = null;
 let renderer = null;
+// 1인칭 3D 화면(three.js). renderer(2D 캔버스)는 그 위에 HUD·자막·건 카타를 그린다.
+let world = null;
 let ai = null;
 // 키보드·터치·컨트롤러로 조작하는 사람 플레이어(싱글 플레이에서는 AI 자리 제외)
 let humans = [];
@@ -131,12 +135,14 @@ function startMatch() {
   controlsEl.classList.toggle('training', !!match.training);
   if (!match.story && !match.training && aiPlayer) groups[aiPlayer.team].replaceChildren(aiPanel(aiPlayer.team, `${aiPlayer.id} · ${aiPlayer.name}`, `난이도 ${DIFFICULTY[single.difficulty].name}`));
   renderer.reset();
+  world?.reset();
   restartMusic();
   screens.show('game');
 }
 
 function pause() {
   if (!active()) return;
+  mouse?.release();
   cancelAllInput();
   match.phase = 'paused';
   const next = match.story && nextStageOf(match.story.stage);
@@ -276,8 +282,23 @@ window.addEventListener('keydown', (e) => {
 });
 // 키보드는 사람 플레이어 자리에만 입력한다(싱글 플레이의 AI 자리 키는 무시).
 const humanInputs = () => Object.fromEntries(humans.map((p) => [p.id, inputs[p.id]]));
-const togglePause = () => (match?.phase === 'paused' ? resume() : pause());
+// 포인터 잠금을 Esc로 풀어 일시정지된 직후의 같은 Esc는 다시 풀지 않는다
+const togglePause = () => {
+  if (match?.phase === 'paused' && performance.now() - lockPausedAt < 400) return;
+  return match?.phase === 'paused' ? resume() : pause();
+};
 attachKeyboard(() => (active() ? humanInputs() : null), togglePause);
+// 마우스: 게임 화면을 누르면 포인터를 잠그고 P1의 고개를 돌린다(Esc로 풀면 일시정지)
+const mouse = attachMouse(document.querySelector('#arena'), () => (active() && humans[0] ? inputs[humans[0].id] : null));
+let lockPausedAt = -Infinity;
+// 터치로 조작하는 기기면 마우스 안내를 띄우지 않는다
+let isTouch = false;
+window.addEventListener('pointerdown', (e) => { isTouch = e.pointerType === 'touch'; }, { capture: true });
+document.addEventListener('pointerlockchange', () => {
+  if (mouse.locked() || match?.phase !== 'playing') return;
+  lockPausedAt = performance.now();
+  pause();
+});
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 window.addEventListener('blur', pause);
 
@@ -294,13 +315,16 @@ function frame(now) {
     accumulator += frameMs / 1000;
     let steps = 0;
     while (accumulator >= TICK && steps < MAX_STEPS_PER_FRAME && active()) {
-      applyKeyboard(inputs, humans, TICK);
-      applyGamepads(inputs, humans, TICK);
+      applyKeyboard(inputs, humans);
+      applyGamepads(inputs, humans);
+      // 1인칭: 고개 돌리기·앞뒤·옆걸음을 경기장 이동축으로(대교 가는 길은 좌우 핸들만)
+      applyView(inputs, humans, TICK, { drive: match.cutscene?.kind === 'drive' });
       for (const brain of brains()) updateAI(brain, match, inputs, TICK);
       const events = step(match, inputs, TICK);
       accumulator -= TICK;
       steps++;
-      renderer.addEvents(events);
+      renderer.addEvents(events, match);
+      world?.addEvents(events, match);
       playEvents(events);
       for (const e of events) {
         if (e.type === 'wave') {
@@ -321,6 +345,7 @@ function frame(now) {
         screens.announce(`${TEAM_NAME[p.team]} ${p.id} ${p.name} 쓰러짐`);
       }
       if (match.phase === 'result') {
+        mouse.release();
         cancelAllInput();
         // 스토리를 끝까지 깨면 저장은 지운다(지면 남겨 두어 이어할 수 있다)
         if (match.story && match.winner === 'earth') {
@@ -341,7 +366,13 @@ function frame(now) {
   controlsEl.classList.toggle('kata', !!match?.gunkata);
   kataKeys.sync(match?.phase === 'gunkata' ? glowingKey(match.gunkata) : null);
   if (match) {
-    renderer.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion);
+    if (world) {
+      // 건 카타(옆에서 본 2D 화면) 동안은 3D를 그리지 않는다
+      const views = match.gunkata ? [] : world.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion, humans.map((p) => p.id));
+      renderer.drawOverlay(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion, views, { mouseHint: !mouse.locked() && match.phase === 'playing' && !isTouch });
+    } else {
+      renderer.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion);
+    }
     controls.sync(match.players, match.tick * TICK);
   }
   updateEngine(match?.phase === 'playing' ? match.jet : null);
@@ -356,6 +387,14 @@ async function boot() {
   try {
     const assets = await loadAssets();
     renderer = createRenderer(document.querySelector('#arena'), document.querySelector('#arena-wrap'), assets);
+    // WebGL을 쓸 수 없는 기기는 예전처럼 위에서 내려다본 2D 화면으로 그린다
+    try {
+      world = createWorld3D(document.querySelector('#world'), document.querySelector('#arena-wrap'), assets);
+    } catch (error) {
+      console.warn('3D 화면을 만들 수 없어 2D 화면으로 그립니다.', error);
+      world = null;
+      document.querySelector('#world').hidden = true;
+    }
     screens.setLoaded();
     requestAnimationFrame(frame);
   } catch (error) {

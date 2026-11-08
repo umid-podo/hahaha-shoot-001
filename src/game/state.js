@@ -134,7 +134,7 @@ function steelCovers(players) {
  */
 export function createInput(player) {
   return {
-    moveAxis: 0, moveY: 0, fwd: 0, side: 0, touchFwd: 0, touchSide: 0, turn: 0, touchTurn: 0, touchAxis: 0,
+    moveAxis: 0, moveY: 0, fwd: 0, side: 0, touchFwd: 0, touchSide: 0, turn: 0, touchTurn: 0,
     aim: initialAim(player.team), aiming: false, swap: false, select: null, item: false, kata: 0,
   };
 }
@@ -146,7 +146,7 @@ export function createInputs(players) {
 /** 일시정지·포커스 상실 시 호출. 조준 각도는 유지하고 진행 중인 입력(이동·사격)만 버린다. */
 export function cancelInputs(inputs) {
   for (const f of Object.values(inputs)) {
-    f.moveAxis = 0; f.moveY = 0; f.fwd = 0; f.side = 0; f.touchFwd = 0; f.touchSide = 0; f.turn = 0; f.touchTurn = 0; f.touchAxis = 0;
+    f.moveAxis = 0; f.moveY = 0; f.fwd = 0; f.side = 0; f.touchFwd = 0; f.touchSide = 0; f.turn = 0; f.touchTurn = 0;
     f.aiming = false; f.swap = false; f.select = null; f.item = false; f.kata = 0;
   }
 }

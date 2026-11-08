@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { createMatch, createInputs, cancelInputs } from '../src/game/state.js';
 import { step, spawnProjectile } from '../src/game/update.js';
 import { segmentRectTime } from '../src/game/collision.js';
-import { aimFromDrag, moveAxisFromDrag } from '../src/input/pointer.js';
+import { lookFromDrag, moveFromDrag, moveAxisFromDrag } from '../src/input/pointer.js';
+import { applyView, toWorld } from '../src/input/view.js';
 import {
   MIN_X, MAX_X, RAIL_Y, TICK, MAX_HP, WEAPONS, JET, COVERS, COVER, ARENA_WIDTH, BODY_RADIUS, CHARACTERS, RULES,
   PRIMARY_IDS, MUZZLE_OFFSET, ZONE,
@@ -54,19 +55,36 @@ test('이동을 오래 유지해도 X 경계 유지, Y 불변', () => {
   assert.equal(P2.x, MIN_X); assert.equal(P2.y, RAIL_Y.isb);
 });
 
-test('전 방향 드래그에도 자기 안쪽 반원으로만 조준', () => {
-  for (let deg = 0; deg < 360; deg += 5) {
-    const dx = Math.cos(deg * Math.PI / 180) * 50, dy = Math.sin(deg * Math.PI / 180) * 50;
-    const earth = aimFromDrag(dx, dy, 60, 'earth', UP).aim;
-    const isb = aimFromDrag(dx, dy, 60, 'isb', DOWN).aim;
-    assert.ok(earth >= -Math.PI && earth <= 0, `earth ${deg}`);
-    assert.ok(isb >= 0 && isb <= Math.PI, `isb ${deg}`);
-  }
-  assert.equal(aimFromDrag(0, 50, 60, 'earth', -1).aim, -1, '정반대 드래그는 이전 방향 유지');
-  assert.equal(aimFromDrag(0, 50, 60, 'earth', -1).armed, false);
-  assert.equal(aimFromDrag(3, -3, 60, 'earth', UP).armed, false, '데드존 안은 조준 아님');
+test('터치 1인칭: 이동 스틱은 위=앞·옆=옆걸음, 시선 스틱은 옆으로 밀면 돌고 밀고 있으면 발사', () => {
+  assert.deepEqual(moveFromDrag(3, -3, 60), { fwd: 0, side: 0 }, '데드존');
+  const up = moveFromDrag(0, -200, 60);
+  assert.ok(Math.abs(up.fwd - 1) < 1e-9 && Math.abs(up.side) < 1e-9, '위로 끝까지 = 앞으로');
+  const right = moveFromDrag(60, 0, 60);
+  assert.ok(Math.abs(right.side - 1) < 1e-9, '오른쪽 = 오른쪽 옆걸음');
+  assert.equal(lookFromDrag(3, -3, 60).armed, false, '데드존 안은 발사 아님');
+  const ahead = lookFromDrag(0, -50, 60);
+  assert.ok(ahead.armed && ahead.turn === 0, '위로 밀면 돌지 않고 정면 발사');
+  assert.ok(lookFromDrag(60, 0, 60).turn === 1 && lookFromDrag(-30, 0, 60).turn < 0);
   assert.equal(moveAxisFromDrag(5, 60), 0);
   assert.equal(moveAxisFromDrag(200, 60), 1);
+});
+
+test('1인칭 시점: 앞뒤·옆걸음은 바라보는 방향 기준으로 경기장 이동축이 되고, 고개 돌리기는 aim을 돌림', () => {
+  // 위(-y)를 바라볼 때: 앞 = 위, 오른쪽 옆걸음 = 오른쪽(+x)
+  const [fx, fy] = toWorld(1, 0, UP);
+  assert.ok(Math.abs(fx) < 1e-9 && Math.abs(fy + 1) < 1e-9);
+  const [rx, ry] = toWorld(0, 1, UP);
+  assert.ok(Math.abs(rx - 1) < 1e-9 && Math.abs(ry) < 1e-9);
+  // 아래(+y)를 바라보면 앞 = 아래, 오른쪽 = 왼쪽(-x)
+  const [bx] = toWorld(0, 1, DOWN);
+  assert.ok(Math.abs(bx + 1) < 1e-9);
+  const inputs = { P1: { fwd: 1, side: 0, turn: 1, aim: UP, mouseTurn: 0.1 } };
+  applyView(inputs, [{ id: 'P1' }], 0.5);
+  assert.ok(inputs.P1.aim > UP + 0.1, '오른쪽으로 돎(키 + 마우스)');
+  assert.ok(Math.hypot(inputs.P1.moveAxis, inputs.P1.moveY) > 0.99);
+  const drive = { P1: { fwd: 1, side: -1, turn: 0, aim: UP } };
+  applyView(drive, [{ id: 'P1' }], TICK, { drive: true });
+  assert.deepEqual([drive.P1.moveAxis, drive.P1.moveY], [-1, 0], '운전은 옆걸음이 곧 핸들');
 });
 
 test('조준하면 바로 발사, 유지하는 동안 총기 간격마다 자동 연사, 놓으면 멈춤', () => {
