@@ -1,5 +1,5 @@
 import {
-  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, BULLET_RADIUS,
+  ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, BULLET_RADIUS, ZONE,
   MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, SHIP, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
@@ -11,7 +11,6 @@ import { needsGunKata, startGunKata, updateGunKata, kataOn } from './gunkata.js'
 
 const OUT_MARGIN = 40;
 const HURT_TIME = 0.2;
-const ENEMY_RAIL = { earth: RAIL_Y.isb, isb: RAIL_Y.earth };
 // 0.1초 같은 간격이 1/60초 틱의 부동소수 오차로 한 틱 밀리지 않도록 쓰는 여유
 const EPS = 1e-9;
 
@@ -67,11 +66,12 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
     x, y, previousX: x, previousY: y,
     vx: Math.cos(aim) * speed, vy: Math.sin(aim) * speed,
     life: RULES.bulletLife, damage,
-    splash, homing: weapon.homing, endY: ENEMY_RAIL[player.team],
+    splash, homing: weapon.homing,
     // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용). group이 있으면 그쪽에 기록한다.
     connected: false, group,
-    // 던진 무기는 아무것에도 닿지 않고 목표 레일 선에서 터진다. startY는 포물선 표시용.
-    thrown: !!weapon.thrown, overCovers: !!weapon.thrown, startY: y,
+    // 던진 무기는 아무것에도 닿지 않고 조준 방향으로 RULES.throwRange만큼 날아가 터진다. startX·startY는 날아간 거리(포물선 높이)용.
+    thrown: !!weapon.thrown, overCovers: !!weapon.thrown, startX: x, startY: y,
+    ...(weapon.thrown ? { range: RULES.throwRange } : {}),
   };
   match.projectiles.push(projectile);
   return projectile;
@@ -84,20 +84,29 @@ const configOf = (kind) => JET_KINDS[kind] ?? JET;
 const jetKind = (match) => ({ road: 'tank', bridge: 'ship' })[match.story?.stage];
 
 /**
- * 전투기 미사일(탱크 포탄·배 대포알): 위(ISB 쪽)·아래(지구방위 쪽)로 똑바로 한 발씩. 팀이 'jet'이라 양 팀 모두 맞고,
+ * 전투기 미사일(탱크 포탄·배 대포알): 위(ISB 진영)·아래(지구방위 진영) 쪽으로 한 발씩, 그 진영에서 가장 가까운 살아 있는 플레이어가
+ * 있던 자리를 노려 쏘고 그 자리(range)에서 터진다(없으면 진영 가운데). 팀이 'jet'이라 양 팀 모두 맞고,
  * overCovers는 엄폐물을 넘어간다는 뜻이다. 탱크·배는 쏜 쪽·무기가 'tank'·'ship'(결과 화면에 '탱크'·'배')이다.
  */
 function fireJet(match, jet, events) {
   const { missile } = configOf(jet.kind);
   const source = jet.kind ?? 'jet';
-  for (const [dy, targetTeam] of [[-1, 'isb'], [1, 'earth']]) {
+  for (const [dy, team] of [[-1, 'isb'], [1, 'earth']]) {
     const y = jet.y + dy * missile.offset;
+    let target = null, best = Infinity;
+    for (const p of match.players) {
+      if (!p.alive || p.entering || p.team !== team) continue;
+      const d = Math.hypot(p.x - jet.x, p.y - y);
+      if (d < best) { best = d; target = p; }
+    }
+    const tx = target?.x ?? jet.x, ty = target?.y ?? (ZONE[team].minY + ZONE[team].maxY) / 2;
+    const aim = Math.atan2(ty - y, tx - jet.x);
     match.projectiles.push({
       id: match.nextProjectileId++, ownerId: source, team: 'jet', weapon: source,
-      x: jet.x, y, previousX: jet.x, previousY: y,
-      vx: 0, vy: dy * missile.speed,
+      x: jet.x, y, previousX: jet.x, previousY: y, startX: jet.x, startY: y,
+      vx: Math.cos(aim) * missile.speed, vy: Math.sin(aim) * missile.speed,
       life: RULES.bulletLife, damage: missile.damage, connected: false,
-      splash: missile.splash, endY: RAIL_Y[targetTeam], overCovers: true,
+      splash: missile.splash, range: Math.hypot(tx - jet.x, ty - y), overCovers: true,
     });
   }
   events.push({ type: `${source}-fire`, x: jet.x, y: jet.y });
@@ -154,14 +163,17 @@ function steer(match, b, turnRate, dt) {
 }
 
 /**
- * 아무것도 맞히지 못한 폭발탄(RPG·전투기 미사일)이 경로 끝에 닿았는지. 목표 레일 선(endY)을 넘은 지점,
- * 경기장 밖으로 나간 지점, 수명이 다한 지점 중 먼저인 곳의 좌표를 돌려준다. 아직이면 null.
+ * 아무것도 맞히지 못한 폭발탄(RPG·수류탄·전투기 미사일)이 경로 끝에 닿았는지. 목표 거리(range)만큼 날아간 지점,
+ * 경기장 밖으로 나간 지점(벽), 수명이 다한 지점 중 먼저인 곳의 좌표를 돌려준다. 아직이면 null.
  */
-function rocketEnd(b) {
-  const railY = b.endY;
-  if ((b.previousY - railY) * (b.y - railY) <= 0 && b.previousY !== railY) {
-    const t = (railY - b.previousY) / (b.y - b.previousY);
-    return { x: b.previousX + (b.x - b.previousX) * t, y: railY };
+export function rocketEnd(b) {
+  if (b.range !== undefined) {
+    const sx = b.startX ?? b.previousX, sy = b.startY ?? b.previousY;
+    const before = Math.hypot(b.previousX - sx, b.previousY - sy), after = Math.hypot(b.x - sx, b.y - sy);
+    if (after >= b.range) {
+      const t = after > before ? Math.max(0, Math.min(1, (b.range - before) / (after - before))) : 1;
+      return { x: b.previousX + (b.x - b.previousX) * t, y: b.previousY + (b.y - b.previousY) * t };
+    }
   }
   const out = b.x < 0 || b.x > ARENA_WIDTH || b.y < 0 || b.y > ARENA_HEIGHT;
   if (out || b.life <= 0) {
@@ -374,13 +386,13 @@ function fireInstakill(match, p, weapon, events) {
   damage(match, target, weaponDamage(p, weapon.id).damage, shot, events);
 }
 
-/** 단검 돌진 시작: 조준 방향으로 날아가 상대에 닿거나, 엄폐물·상대 레일·경기장 끝에 닿으면 자기 자리로 돌아온다. */
+/** 단검 돌진 시작: 조준 방향으로 날아가 상대에 닿거나, 엄폐물·경기장 끝에 닿거나 RULES.dashRange만큼 가면 출발한 자리로 돌아온다. */
 function startDash(p, weapon, events) {
   const speed = weapon.dash.speed;
   p.burstLeft = 0;
   p.dash = {
     vx: Math.cos(p.aim) * speed, vy: Math.sin(p.aim) * speed, speed, age: 0,
-    homeX: p.x, returning: false,
+    homeX: p.x, homeY: p.y, returning: false,
     damage: weaponDamage(p, weapon.id).damage,
     shot: { team: p.team, ownerId: p.id, weapon: weapon.id, connected: false },
   };
@@ -388,12 +400,12 @@ function startDash(p, weapon, events) {
   events.push({ type: 'dash', playerId: p.id });
 }
 
-/** 돌진 한 틱: 가는 중에는 가장 먼저 닿는 상대(피해)·엄폐물(막힘)을 찾고, 돌아올 때는 레일의 원래 자리로 곧장 간다. */
+/** 돌진 한 틱: 가는 중에는 가장 먼저 닿는 상대(피해)·엄폐물(막힘)을 찾고, 돌아올 때는 출발한 자리로 곧장 간다. */
 function updateDash(match, p, dt, events) {
   const d = p.dash;
   d.age += dt;
   if (d.returning) {
-    const hx = d.homeX, hy = RAIL_Y[p.team];
+    const hx = d.homeX, hy = d.homeY;
     const dist = Math.hypot(hx - p.x, hy - p.y);
     const move = d.speed * dt;
     if (dist <= move) {
@@ -427,10 +439,9 @@ function updateDash(match, p, dt, events) {
     events.push({ type: 'block', x: p.x, y: p.y });
     d.returning = true;
   }
-  // 상대 레일을 넘거나 경기장 끝·옆 벽에 닿으면 돌아온다
-  const enemyY = ENEMY_RAIL[p.team];
-  const pastRail = (p.y - enemyY) * Math.sign(d.vy) >= 0;
-  if (pastRail || p.x <= MIN_X || p.x >= MAX_X || p.y < 0 || p.y > ARENA_HEIGHT) d.returning = true;
+  // 최대 거리만큼 가거나 경기장 끝·옆 벽에 닿으면 돌아온다
+  const far = Math.hypot(p.x - d.homeX, p.y - d.homeY) >= RULES.dashRange;
+  if (far || p.x <= MIN_X || p.x >= MAX_X || p.y < 0 || p.y > ARENA_HEIGHT) d.returning = true;
 }
 
 /** 탄약 외 제약(배터리·과열·무기별 쿨타임·즉사기 대기) 때문에 지금 쏠 수 없는지. */
@@ -457,6 +468,33 @@ function updateResources(p, firing, dt) {
   } else if (!firing) {
     p.heat = Math.max(0, p.heat - heat.decay * dt);
   }
+}
+
+/** 진영 z(ZONE의 한 팀) 안으로 Y를 자른다. 진영이 없는 팀(전투기 등)은 그대로. */
+export const clampY = (team, y) => (ZONE[team] ? Math.min(ZONE[team].maxY, Math.max(ZONE[team].minY, y)) : y);
+
+/**
+ * 이동 한 틱: 가로(ax)·세로(ay) 축 입력(-1~1, 합이 1을 넘으면 1로)대로 움직인다. 가로는 MIN_X~MAX_X, 세로는 자기 진영(ZONE) 안이고,
+ * 부서지지 않은 엄폐물은 뚫고 지나가지 못한다(몸 반지름만큼 밀어낸다).
+ */
+export function move(match, p, ax, ay, dt) {
+  const len = Math.hypot(ax, ay);
+  if (len > 1) { ax /= len; ay /= len; }
+  if (!ax && !ay) return;
+  let x = Math.min(MAX_X, Math.max(MIN_X, p.x + ax * p.speed * dt));
+  let y = clampY(p.team, p.y + ay * p.speed * dt);
+  for (const c of match.covers ?? []) {
+    if (c.hp <= 0) continue;
+    const hw = c.w / 2 + p.radius * 0.6, hh = c.h / 2 + p.radius * 0.6;
+    const dx = x - c.x, dy = y - c.y;
+    if (Math.abs(dx) >= hw || Math.abs(dy) >= hh) continue;
+    // 덜 파고든 쪽으로 밀어낸다
+    const px = hw - Math.abs(dx), py = hh - Math.abs(dy);
+    if (px < py) x = c.x + Math.sign(dx || ax || 1) * hw;
+    else y = clampY(p.team, c.y + Math.sign(dy || ay || 1) * hh);
+  }
+  p.x = Math.min(MAX_X, Math.max(MIN_X, x));
+  p.y = y;
 }
 
 /**
@@ -496,6 +534,7 @@ export function step(match, inputs, dt = TICK) {
 
   for (const p of match.players) {
     p.previousX = p.x;
+    p.previousY = p.y;
     p.hurt = Math.max(0, p.hurt - dt);
     if (!p.alive || p.entering) continue;
     const input = inputs[p.id];
@@ -520,7 +559,7 @@ export function step(match, inputs, dt = TICK) {
       continue;
     }
     // rooted: 스토리 연출로 잠깐 멈춰 선 적(조준선을 긋는 존슨 요원)
-    if (!p.rooted) p.x = Math.min(MAX_X, Math.max(MIN_X, p.x + input.moveAxis * p.speed * dt));
+    if (!p.rooted) move(match, p, input.moveAxis, input.moveY ?? 0, dt);
     // 스토리가 대신 쏘는 적(존슨 요원의 조준선 저격)은 움직이기만 한다
     if (p.scripted) { input.item = false; p.wasAiming = false; continue; }
     if (input.item) {
@@ -563,7 +602,7 @@ export function step(match, inputs, dt = TICK) {
       // 단검 돌진 중(무적)인 플레이어는 탄이 그냥 지나간다
       if (!p.alive || p.team === b.team || invulnerable(p)) continue;
       const t = segmentCircleTime(
-        b.previousX - p.previousX, b.previousY - p.y, b.x - p.x, b.y - p.y, p.radius + BULLET_RADIUS);
+        b.previousX - p.previousX, b.previousY - (p.previousY ?? p.y), b.x - p.x, b.y - p.y, p.radius + BULLET_RADIUS);
       if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, projectile: b, victim: p };
     }
     if (earliest) contacts.push(earliest);
@@ -596,8 +635,8 @@ export function step(match, inputs, dt = TICK) {
     if (p.alive && p.hp <= 0) {
       downed.push(p);
       p.alive = false;
-      // 돌진 중에 쓰러지면 자기 레일에 쓰러진다
-      if (p.dash) { p.y = RAIL_Y[p.team]; p.dash = null; }
+      // 돌진 중에 쓰러지면 출발한 자리에 쓰러진다
+      if (p.dash) { p.x = p.dash.homeX; p.y = p.dash.homeY; p.dash = null; }
       if (match.stats?.[p.id]) match.stats[p.id].downAt = match.tick * TICK;
       events.push({ type: 'down', playerId: p.id, x: p.x, y: p.y });
     }

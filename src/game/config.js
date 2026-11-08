@@ -1,7 +1,13 @@
 // 논리 단위는 1600×1000 경기장 기준 (docs/02-game-design.md 기본 수치)
 export const ARENA_WIDTH = 1600;
 export const ARENA_HEIGHT = 1000;
+// 팀이 처음 서는 줄(1인칭 3D에서도 시작 자리·연출 기준으로 쓴다). 경기 중에는 자기 진영(ZONE) 안에서 자유롭게 움직인다.
 export const RAIL_Y = { isb: 92, earth: 892 };
+/**
+ * 팀 진영: 플레이어가 움직일 수 있는 앞뒤(Y) 범위. 가로(X)는 MIN_X~MAX_X. 가운데 띠(ZONE 사이)는 양 팀 모두 들어갈 수 없는
+ * 무인 지대로, 가운데 엄폐물·전투기·탱크·배가 지나가는 자리다.
+ */
+export const ZONE = { isb: { minY: 50, maxY: 430 }, earth: { minY: 570, maxY: 950 } };
 export const MIN_X = 80;
 export const MAX_X = 1520;
 export const MAX_SPEED = 300;
@@ -31,7 +37,8 @@ export const TICK = 1 / 60;
  *   쏜 뒤 interval초(쿨타임)가 지나면 다시 쓸 수 있다(제작자 전용).
  *   beamWidth는 레이저 굵기(명중 판정 여유).
  * hidden: 선택 목록에 보이지 않는 숨겨진 무기. unlockFrom 무기 버튼을 빠르게 unlockTaps번 누르면 그 자리에 나타난다.
- * thrown: 던지는 무기. 엄폐물·플레이어 위로 날아가 목표 레일 선에서 터진다(직격 없음, 폭발 피해만).
+ * thrown: 던지는 무기. 엄폐물·플레이어 위로 조준 방향으로 RULES.throwRange만큼 날아가 터진다(직격 없음, 폭발 피해만).
+ * 폭발 무기(splash)는 맞히지 못하면 벽(경기장 끝)·수명 끝에서 터진다. 전투기·포탑처럼 목표를 노린 폭탄은 목표 자리(range)에서 터진다.
  */
 export const WEAPONS = {
   rifle: { id: 'rifle', name: '돌격소총', interval: 0.2, damage: 7, speed: 760, burst: 1 },
@@ -118,9 +125,9 @@ export const SKY = { planeSpeed: 1.3, enemyFlyIn: 1.2, dsFirstVolley: 2.5 };
 /**
  * 밸런스 메뉴에서 조정하는 공통 규칙.
  * swapTime: 경기 중 무기 교체 후 다시 쏠 수 있을 때까지의 시간(초). 교체로 쿨타임을 건너뛰지 못하게 한다.
- * bulletLife: 탄환 수명(초).
+ * bulletLife: 탄환 수명(초). throwRange: 수류탄이 날아가 터지는 거리. dashRange: 단검 돌진이 돌아오기 전까지 가는 최대 거리.
  */
-export const RULES = { swapTime: 0.4, bulletLife: 2 };
+export const RULES = { swapTime: 0.4, bulletLife: 2, throwRange: 600, dashRange: 900 };
 export const WEAPON_IDS = Object.keys(WEAPONS);
 /**
  * 준비 화면에서 고르는 주무기·보조무기(숨겨진 무기 포함, 목록에는 hidden이 아닌 것만 보인다). 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,

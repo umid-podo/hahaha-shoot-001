@@ -513,7 +513,8 @@ test('포탄 피해: 직격 25, 폭발 범위 10', () => {
   match.story.turretFiring = false;
   match.projectiles.push({
     id: 999, ownerId: 'turret', team: 'isb', weapon: 'turret', x: P1.x + 80, y: P1.y - 30, previousX: P1.x + 80, previousY: P1.y - 30,
-    vx: 0, vy: 600, life: 2, damage: TURRET.damage, connected: false, splash: { ...TURRET.splash }, endY: RAIL_Y.earth,
+    vx: 0, vy: 600, life: 2, damage: TURRET.damage, connected: false, splash: { ...TURRET.splash },
+    startX: P1.x + 80, startY: P1.y - 30, range: 30, // 주인공 옆 바닥에서 터진다
   });
   for (let i = 0; i < 10; i++) step(match, inputs);
   assert.equal(hp - P1.hp, TURRET.splash.damage);

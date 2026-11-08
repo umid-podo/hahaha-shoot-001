@@ -7,7 +7,7 @@ import { segmentRectTime } from '../src/game/collision.js';
 import { aimFromDrag, moveAxisFromDrag } from '../src/input/pointer.js';
 import {
   MIN_X, MAX_X, RAIL_Y, TICK, MAX_HP, WEAPONS, JET, COVERS, COVER, ARENA_WIDTH, BODY_RADIUS, CHARACTERS, RULES,
-  PRIMARY_IDS,
+  PRIMARY_IDS, MUZZLE_OFFSET, ZONE,
 } from '../src/game/config.js';
 import {
   PARAMS, getValue, setValue, resetAll, overrides, applyOverrides, isChanged, summaryText,
@@ -423,25 +423,31 @@ test('전투기 미사일은 엄폐물을 넘어 뒤의 플레이어를 직격�
   assert.ok(events.some((e) => e.type === 'explode'), '맞으면 터짐');
 });
 
-test('전투기 미사일은 유도 없이 똑바로 날아가고, 빗나가면 레일에서 터져 주변 폭발 피해', () => {
+test('전투기 미사일은 진영마다 가장 가까운 플레이어가 있던 자리를 노려 유도 없이 날아가고, 빗나가면 그 자리에서 터져 폭발 피해', () => {
   assert.equal(JET.missile.homing, undefined);
   const { match, inputs, P1, P2 } = playing();
   const x = 300;
-  P2.x = P2.previousX = x + 60; // 직선 경로에서 60px 옆: 유도가 없으니 직격은 못 하고 폭발 피해만
-  P1.x = P1.previousX = x + 400; // 폭발 범위 밖
+  P2.x = P2.previousX = x + 200; // ISB 진영: 전투기 오른쪽 위
+  P1.x = P1.previousX = x - 300; // 지구방위 진영: 전투기 왼쪽 아래
   match.jet = { x, previousX: x, y: JET.y, dir: 1, fireTimer: 0 };
   const events = step(match, inputs);
   match.jet = null;
   const up = match.projectiles.find((b) => b.team === 'jet' && b.vy < 0);
-  const launchX = up.x; // 전투기가 이번 틱에 조금 움직인 뒤 쏜 위치
+  const down = match.projectiles.find((b) => b.team === 'jet' && b.vy > 0);
+  const spot = { x: P2.x, y: P2.y };
+  const heading = Math.atan2(up.vy, up.vx);
+  assert.ok(Math.abs(heading - Math.atan2(spot.y - up.y, spot.x - up.x)) < 1e-6, 'P2가 있던 자리를 노림');
+  assert.ok(down.vx < 0, '아래 미사일은 P1 쪽(왼쪽 아래)');
+  // 쏜 뒤 P2가 옆으로 60px 비키면 직격 없이 폭발 피해만, P1은 폭발 범위 밖으로 멀리
+  P2.x = P2.previousX = spot.x + 60;
+  P1.x = P1.previousX = x - 300 + 400;
   events.push(...run(match, inputs, 1));
-  assert.equal(up.x, launchX, '옆으로 휘지 않음');
+  assert.ok(Math.abs(Math.atan2(up.vy, up.vx) - heading) < 1e-9, '휘지 않음');
   assert.equal(P2.hp, MAX_HP - JET.missile.splash.damage, '직격 없이 폭발 피해');
   assert.equal(P1.hp, MAX_HP);
   const booms = events.filter((e) => e.type === 'explode');
   assert.equal(booms.length, 2);
-  assert.ok(booms.every((e) => e.x === launchX), '둘 다 전투기 바로 위아래에서 터짐');
-  assert.ok(booms.some((e) => Math.abs(e.y - RAIL_Y.earth) < 1e-6));
+  assert.ok(booms.some((e) => Math.hypot(e.x - spot.x, e.y - spot.y) < 1e-6), 'P2가 있던 자리에서 터짐');
 });
 
 test('RPG 유도: 비껴 쏴도 가장 가까운 적 쪽으로 휘어 직격', () => {
@@ -468,15 +474,17 @@ test('RPG 유도는 한도가 있어 너무 먼 적은 못 맞힘', () => {
   assert.equal(P2.hp, MAX_HP);
 });
 
-test('빗나간 RPG는 적 레일 선에서 터져 근처 적에게 폭발 피해', () => {
+test('빗나간 RPG는 벽(경기장 끝)에서 터져 근처 적에게 폭발 피해', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'rpg' } });
   P2.x = P2.previousX = 800;
+  P2.y = P2.previousY = 50; // 위쪽 벽 가까이
   const b = spawnProjectile(match, P1, UP);
-  b.x = b.previousX = P2.x + 90; b.y = b.previousY = RAIL_Y.isb + 40; // 판정 원 밖으로 스쳐 지나가는 위치
-  const events = run(match, inputs, 0.2);
+  b.homing = null;
+  b.x = b.previousX = P2.x + 90; b.y = b.previousY = 200; // 판정 원 밖으로 스쳐 지나가는 위치
+  const events = run(match, inputs, 0.4);
   const boom = events.find((e) => e.type === 'explode');
   assert.ok(boom, '빗나가도 폭발');
-  assert.ok(Math.abs(boom.y - RAIL_Y.isb) < 1e-6, '적 레일 선에서');
+  assert.equal(boom.y, 0, '벽에서');
   assert.equal(P2.hp, MAX_HP - WEAPONS.rpg.splash.damage);
   assert.equal(match.projectiles.length, 0);
 });
@@ -636,7 +644,7 @@ test('기관단총: 한 발 4, 4초 연사하면 과열되어 2초 쉬고, 쉬�
   assert.ok(!run(c.match, c.inputs, 2).some((e) => e.type === 'overheat'), '쉬면 식어서 바로 과열되지 않음');
 });
 
-test('수류탄(아이템): 버튼을 누르면 든 무기와 상관없이 조준 방향으로 던지고, 엄폐물을 넘어 적 레일에서 터져 반경 240 안 적에게 50, 20초 쿨타임', () => {
+test('수류탄(아이템): 버튼을 누르면 든 무기와 상관없이 조준 방향으로 던지고, 엄폐물을 넘어 던지는 거리(600)에서 터져 반경 240 안 적에게 50, 20초 쿨타임', () => {
   assert.equal(WEAPONS.grenade.splash.radius, WEAPONS.rpg.splash.radius * 2);
   const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'rifle' } });
   const cover = coverById(match, 'center');
@@ -646,9 +654,9 @@ test('수류탄(아이템): 버튼을 누르면 든 무기와 상관없이 조�
   assert.equal(inputs.P1.item, false, '한 번 누르면 한 번만');
   assert.equal(events.filter((e) => e.type === 'fire' && e.weapon === 'grenade').length, 1);
   assert.equal(P1.weapon, 'rifle', '든 무기는 그대로');
-  assert.equal(cover.hp, COVER.hp, '엄폐물에 막히지 않고 넘어감');
+  assert.ok(!events.some((e) => e.type === 'block'), '엄폐물에 막히지 않고 넘어감');
   const boom = events.find((e) => e.type === 'explode');
-  assert.ok(Math.abs(boom.y - RAIL_Y.isb) < 1e-6, '적 레일 선에서 터짐');
+  assert.ok(Math.abs(boom.y - (P1.y - MUZZLE_OFFSET - RULES.throwRange)) < 1e-6, '던지는 거리만큼 날아가 터짐');
   assert.equal(boom.radius, 240);
   assert.equal(P2.hp, MAX_HP - 50);
 
@@ -856,7 +864,7 @@ test('단검: 조준 후 떼면 매우 빠르게 돌진, 상대에 닿으면 100
   assert.ok(step(match, inputs).some((e) => e.type === 'dash'), '10초 뒤 다시 돌진');
 });
 
-test('단검 돌진은 엄폐물에 막혀 돌아오고, 빗나가면 상대 레일에서 돌아옴', () => {
+test('단검 돌진은 엄폐물에 막혀 돌아오고, 빗나가면 경기장 끝(또는 최대 거리)에서 출발한 자리로 돌아옴', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { secondary: 'dagger' } });
   const cover = coverById(match, 'center');
   P1.x = P1.previousX = cover.x; P2.x = P2.previousX = cover.x;
@@ -875,8 +883,8 @@ test('단검 돌진은 엄폐물에 막혀 돌아오고, 빗나가면 상대 레
   o.inputs.P1.aiming = true; step(o.match, o.inputs); o.inputs.P1.aiming = false;
   let top = Infinity; t = 0;
   while ((o.P1.dash || t === 0) && t < 2) { step(o.match, o.inputs); top = Math.min(top, o.P1.y); t += TICK; }
-  assert.ok(Math.abs(top - RAIL_Y.isb) < 45, '상대 레일까지 갔다가');
-  assert.equal(o.P1.y, RAIL_Y.earth, '돌아옴');
+  assert.ok(top < 45, '경기장 끝까지 갔다가');
+  assert.equal(o.P1.y, RAIL_Y.earth, '출발한 자리로 돌아옴');
   assert.equal(o.P2.hp, MAX_HP);
 });
 
@@ -1164,4 +1172,48 @@ test('밸런스 내 기본값: 지금 수치를 내 기본값으로 저장하면
   assert.equal(b.getValue(p), factory);
   assert.equal(b.defaultValue(p), factory);
   assert.equal(b.hasCustomDefaults(), false);
+});
+
+test('1인칭 자유 이동: 앞뒤(Y)·좌우(X)로 움직이되 자기 진영(ZONE) 밖·가운데 무인 지대로는 못 감, 대각선은 빨라지지 않음', () => {
+  const { match, inputs, P1, P2 } = playing();
+  P1.x = P1.previousX = 300;
+  inputs.P1.moveY = -1;
+  run(match, inputs, 3);
+  assert.equal(P1.y, ZONE.earth.minY, '지구방위팀은 무인 지대 앞에서 멈춤');
+  inputs.P1.moveY = 1;
+  run(match, inputs, 3);
+  assert.equal(P1.y, ZONE.earth.maxY, '뒤쪽 끝');
+  inputs.P2.moveY = 1;
+  P2.x = P2.previousX = 300;
+  run(match, inputs, 3);
+  assert.equal(P2.y, ZONE.isb.maxY, 'ISB도 자기 진영까지만');
+  const s = playing();
+  s.P1.x = s.P1.previousX = 300;
+  const x0 = s.P1.x, y0 = s.P1.y;
+  s.inputs.P1.moveAxis = 1; s.inputs.P1.moveY = -1;
+  run(s.match, s.inputs, 0.5);
+  const moved = Math.hypot(s.P1.x - x0, s.P1.y - y0);
+  assert.ok(Math.abs(moved - s.P1.speed * 0.5) < s.P1.speed * TICK + 1e-6, '대각선도 같은 속도');
+});
+
+test('1인칭 자유 이동: 엄폐물은 뚫고 지나가지 못하고, 부서지면 지나감', () => {
+  const { match, inputs, P1 } = playing();
+  const cover = coverById(match, 'earth');
+  P1.x = P1.previousX = cover.x;
+  P1.y = P1.previousY = cover.y + 150;
+  inputs.P1.moveY = -1;
+  run(match, inputs, 1);
+  assert.ok(P1.y >= cover.y + cover.h / 2, '엄폐물 뒤에서 막힘');
+  cover.hp = 0;
+  run(match, inputs, 1);
+  assert.ok(P1.y < cover.y - cover.h / 2, '부서진 엄폐물은 지나감');
+});
+
+test('1인칭 3D: 조준(바라보는 방향)은 360도 어디든(뒤로 돌아서 쏠 수 있음)', () => {
+  const { match, inputs, P1 } = playing({ P1: { weapon: 'pistol' } });
+  inputs.P1.aim = DOWN; // 지구방위팀이 뒤(아래)로
+  inputs.P1.aiming = true;
+  step(match, inputs);
+  const b = match.projectiles.find((q) => q.ownerId === 'P1');
+  assert.ok(b.vy > 0, '아래로 날아감');
 });
