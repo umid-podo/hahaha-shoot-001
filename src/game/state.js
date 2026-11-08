@@ -76,6 +76,8 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
     x, previousX: x, y: RAIL_Y[slot.team],
     aim: initialAim(slot.team),
     hp: maxHp, maxHp, alive: true, hurt: 0,
+    // ammo: 무기별 남은 총알(없으면 가득), reload: 장전 중이면 { weapon, t(남은 초), total }
+    ammo: {}, reload: null,
     cooldown: 0, cooldowns: {}, dash: null, burstLeft: 0, burstTimer: 0, wasAiming: false,
     // entering: 스토리 모드에서 헬리콥터에서 내려오는 중(움직이지도 맞지도 않음) { t, duration, fromY }
     entering: null,

@@ -319,6 +319,7 @@ function fire(match, p, events) {
   const ws = weaponStats(match, p.id, weapon.id);
   if (ws) ws.shots++;
   if (weapon.battery) p.battery--;
+  if (hasMag(weapon)) { p.ammo ??= {}; p.ammo[weapon.id] = ammoOf(p, weapon) - 1; }
   if (weapon.heat) {
     p.heat += weapon.interval;
     if (p.heat >= weapon.heat.max - 1e-9) {
@@ -444,8 +445,39 @@ function updateDash(match, p, dt, events) {
   if (far || p.x <= MIN_X || p.x >= MAX_X || p.y < 0 || p.y > ARENA_HEIGHT) d.returning = true;
 }
 
-/** 탄약 외 제약(배터리·과열·무기별 쿨타임·즉사기 대기) 때문에 지금 쏠 수 없는지. */
+/** 장탄 수가 정해진 무기(mag > 0)인지 */
+const hasMag = (weapon) => (weapon.mag ?? 0) > 0;
+/** 그 무기의 남은 총알(한 번도 안 쐈으면 가득, 밸런스에서 장탄 수를 줄였으면 그만큼으로 자름) */
+export function ammoOf(p, weapon) {
+  if (!hasMag(weapon)) return Infinity;
+  return Math.min(weapon.mag, p.ammo?.[weapon.id] ?? weapon.mag);
+}
+/**
+ * 장전: 든 무기의 총알이 다 떨어지면 reload초 동안 탄창을 갈아 끼우고 가득 채운다.
+ * 다른 무기로 바꾸면 장전이 끊긴다(다시 들면 처음부터).
+ */
+function updateReload(p, weapon, dt, events) {
+  if (p.reload && p.reload.weapon !== weapon.id) p.reload = null;
+  if (!hasMag(weapon)) return;
+  if (!p.reload && p.burstLeft === 0 && ammoOf(p, weapon) <= 0) {
+    const total = Math.max(0.05, weapon.reload ?? 1.5);
+    p.reload = { weapon: weapon.id, t: total, total };
+    events.push({ type: 'reload', playerId: p.id, weapon: weapon.id, time: total });
+    return;
+  }
+  if (!p.reload) return;
+  p.reload.t -= dt;
+  if (p.reload.t <= 1e-9) {
+    p.reload = null;
+    p.ammo ??= {};
+    p.ammo[weapon.id] = weapon.mag;
+    events.push({ type: 'reloaded', playerId: p.id, weapon: weapon.id });
+  }
+}
+
+/** 탄약 외 제약(배터리·과열·무기별 쿨타임·즉사기 대기) 때문에 지금 쏠 수 없는지. 장전 중이거나 총알이 없어도 못 쏜다. */
 function blocked(p, weapon, match) {
+  if (hasMag(weapon) && (p.reload || ammoOf(p, weapon) <= 0)) return true;
   if (weapon.instakill) return elapsed(match) < weapon.readyAfter; // 쏜 뒤 대기는 공통 쿨타임(p.cooldown)
   if (weapon.battery) return p.battery <= 0;
   if (weapon.heat) return p.overheat > 0;
@@ -552,6 +584,7 @@ export function step(match, inputs, dt = TICK) {
     const carry = Math.min(0, p.cooldown - dt);
     p.cooldown = Math.max(0, p.cooldown - dt);
     updateResources(p, weapon.heat && input.aiming, dt);
+    updateReload(p, weapon, dt, events);
     p.aim = input.aim;
     // 단검 돌진 중에는 이동·사격·아이템 입력을 받지 않는다(조준 각도만 따라감).
     if (p.dash) {
@@ -572,9 +605,13 @@ export function step(match, inputs, dt = TICK) {
     if (p.burstLeft > 0) {
       p.burstTimer -= dt;
       if (p.burstTimer <= 0) {
-        fire(match, p, events);
-        p.burstLeft--;
-        p.burstTimer += weapon.burstGap;
+        // 점사 중에 총알이 떨어지면 남은 점사는 나가지 않는다
+        if (ammoOf(p, weapon) <= 0) p.burstLeft = 0;
+        else {
+          fire(match, p, events);
+          p.burstLeft--;
+          p.burstTimer += weapon.burstGap;
+        }
       }
     } else if (p.cooldown <= EPS && !blocked(p, weapon, match) &&
       (weapon.trigger === 'release' ? p.wasAiming && !input.aiming : input.aiming)) {

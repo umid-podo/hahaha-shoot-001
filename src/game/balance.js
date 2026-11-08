@@ -37,6 +37,11 @@ const gun = (id, extra = []) => [
   param(WEAPONS[id].name, WEAPONS[id].trigger === 'release' ? '쿨타임' : '발사 간격', ['weapons', id, 'interval'],
     { min: 0.02, max: 30, step: 0.01, unit: SEC }),
   ...(WEAPONS[id].speed ? [param(WEAPONS[id].name, '탄속(초당)', ['weapons', id, 'speed'], { min: 50, max: 5000, step: 10 })] : []),
+  // 장전: 탄창에 든 총알 수(0이면 무제한)와 탄창을 갈아 끼우는 시간
+  ...(WEAPONS[id].mag !== undefined ? [
+    param(WEAPONS[id].name, '장탄 수(0이면 무제한)', ['weapons', id, 'mag'], { max: 999, step: 1 }),
+    param(WEAPONS[id].name, '장전 시간', ['weapons', id, 'reload'], { min: 0.1, max: 30, step: 0.1, unit: SEC }),
+  ] : []),
   ...extra.map(([label, key, opts]) => param(WEAPONS[id].name, label, ['weapons', id, ...key], opts)),
 ];
 

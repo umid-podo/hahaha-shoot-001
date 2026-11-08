@@ -176,6 +176,9 @@ export function playEvents(events) {
     if (e.type === 'fire' && e.weapon === 'instakill') { /* 소리는 megalaser에서 */ }
     else if (e.type === 'fire' && e.weapon === 'laser') laserZap();
     else if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
+    // 장전: 탄창 빼는 소리 → 끼우는 소리(철컥)
+    if (e.type === 'reload') { tone(420, 0.04, 'square'); tone(260, 0.05, 'square', 0.08); }
+    if (e.type === 'reloaded') { tone(900, 0.03, 'square'); tone(1300, 0.04, 'square', 0.06); }
     if (e.type === 'overheat') [700, 500, 300].forEach((f, i) => tone(f, 0.08, 'sawtooth', i * 0.07)); // 과열 경고
     if (e.type === 'jet-fire') gunshot(SHOT.jet); // 미사일 발사음
     if (e.type === 'tank-fire') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 130, volume: 1.4 }); tone(70, 0.2, 'square', 0.02); } // 탱크 포성

@@ -1235,3 +1235,44 @@ test('1인칭 3D: 조준(바라보는 방향)은 360도 어디든(뒤로 돌아�
   const b = match.projectiles.find((q) => q.ownerId === 'P1');
   assert.ok(b.vy > 0, '아래로 날아감');
 });
+
+test('장전: 탄창(장탄 수)을 다 쏘면 장전 시간 동안 못 쏘고, 장전이 끝나면 가득 참', () => {
+  const { match, inputs, P1 } = playing({ P1: { weapon: 'pistol' } });
+  const w = WEAPONS.pistol;
+  assert.equal(w.mag, 12);
+  inputs.P1.aiming = true;
+  const first = run(match, inputs, w.mag * w.interval - 0.01);
+  assert.equal(shots(first, 'P1'), w.mag, '탄창 하나');
+  assert.ok(first.some((e) => e.type === 'reload' && e.playerId === 'P1' && e.weapon === 'pistol'), '다 쏘면 바로 장전 시작');
+  const reload = run(match, inputs, w.reload - 0.6);
+  assert.equal(shots(reload, 'P1'), 0, '장전 중엔 못 쏨');
+  assert.ok(P1.reload);
+  const after = run(match, inputs, 0.35);
+  assert.ok(after.some((e) => e.type === 'reloaded'));
+  assert.equal(shots(after, 'P1'), 1, '장전 뒤 다시 발사');
+  assert.equal(P1.ammo.pistol, w.mag - 1);
+});
+
+test('장전: 쌍권총은 한 발마다 1씩, 장탄 수 0이면 무제한, 무기를 바꾸면 장전이 끊김', () => {
+  const { match, inputs, P1 } = playing({ P1: { weapon: 'dual' } });
+  inputs.P1.aiming = true;
+  run(match, inputs, 0.2);
+  assert.equal(P1.ammo.dual, WEAPONS.dual.mag - 2, '점사 2발');
+  P1.ammo.dual = 0;
+  inputs.P1.aiming = false;
+  step(match, inputs);
+  assert.equal(P1.reload?.weapon, 'dual');
+  inputs.P1.select = 'secondary';
+  step(match, inputs);
+  assert.equal(P1.reload, null, '바꾸면 끊김');
+  inputs.P1.select = 'primary';
+  step(match, inputs);
+  assert.equal(P1.reload?.weapon, 'dual', '다시 들면 처음부터 장전');
+  assert.ok(Math.abs(P1.reload.t - WEAPONS.dual.reload) < 0.05);
+
+  const s = playing();
+  s.P1.slot = 'secondary'; s.P1.weapon = 'smg';
+  s.inputs.P1.aiming = true;
+  run(s.match, s.inputs, 0.5);
+  assert.equal(s.P1.reload, null, '기관단총은 기본 무제한(과열만)');
+});
