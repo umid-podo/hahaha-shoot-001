@@ -6,7 +6,9 @@ import {
   ELEVATOR, CEILING_X, ROOF_STAIRS, CORRIDOR_STAIRS, DRIVE_ROAD, DRIVE_Y, CARRIER_Y,
 } from '../game/story.js';
 import * as M from './models.js';
-import { createViewmodel, makeBullet, makeArrow, sharedShotGeometries, getFlashTexture, getSmokeTexture, vmFov } from './guns.js';
+import { createViewmodel, makeBullet, makeArrow, sharedShotGeometries, getFlashTexture, getSmokeTexture, vmFov, makeHeldGun, poseHeldGun, hasHeldGun } from './guns.js';
+import { segmentRectTime } from '../game/collision.js';
+import { modStore } from '../game/mods.js';
 
 /**
  * 1인칭 3D 화면(three.js). 게임 상태(경기장 위에서 본 2D 좌표)를 그대로 읽어 3D로 그린다.
@@ -762,6 +764,7 @@ export function createWorld3D(canvas, wrap, assets) {
         alpha: e?.kind === 'walk' ? Math.min(1, 0.3 + clamp01(e.t / e.duration) * 2) : 1,
         lying: !p.alive, hurt: p.hurt > 0, aim: p.aim,
       });
+      placeHeld(a, p, h, time, reducedMotion);
       a.ring.visible = p.boss && p.alive;
       if (a.ring.visible) {
         a.ring.position.set(p.x, h + 2, p.y);
@@ -772,12 +775,101 @@ export function createWorld3D(canvas, wrap, assets) {
     return seen;
   }
 
+  /**
+   * 다른 사람이 손에 든 총(3인칭): 장착한 무기 모양 그대로 그림 손 높이에서 조준 방향으로 겨누고, 장전하면 장전 동작을 한다.
+   * 사람 플레이어의 총에는 작업실에서 붙인 개조 파츠도 보인다. 쓰러지면 숨긴다.
+   */
+  function placeHeld(a, p, h, time, reducedMotion) {
+    const show = p.alive && !p.drone && hasHeldGun(p.weapon) && a.sprite.visible;
+    const key = show ? `${p.weapon}|${p.ai ? '' : modStore().signature(p.weapon)}` : null;
+    if (a.heldKey !== key) {
+      if (a.held) { scene.remove(a.held); a.held = null; }
+      if (key) { a.held = makeHeldGun(p.weapon, p.ai ? {} : modStore().equipped(p.weapon)); scene.add(a.held); }
+      a.heldKey = key;
+    }
+    if (!a.held) return;
+    a.held.visible = show;
+    const s = p.scale ?? 1;
+    const dx = Math.cos(p.aim), dz = Math.sin(p.aim);
+    const bob = reducedMotion ? 0 : Math.sin(time * 9 + p.x * 0.05) * (Math.hypot(p.x - p.previousX, p.y - (p.previousY ?? p.y)) > 0.5 ? 2 : 0);
+    // 만화 그림 크기에 맞춰 크게(실제 비율의 약 2배), 몸 앞 오른손 쪽에서 살짝 비스듬히 겨눠 옆모습이 보이게
+    const side = 0.32;
+    const rx = Math.cos(p.aim + Math.PI / 2), rz = Math.sin(p.aim + Math.PI / 2);
+    a.held.position.set(p.x + dx * 26 * s + rx * 10 * s, h + (GUN_Y - 6) * s + bob, p.y + dz * 26 * s + rz * 10 * s);
+    a.held.rotation.set(0, -(p.aim - side), 0);
+    a.held.scale.setScalar(2.0 * s);
+    poseHeldGun(a.held, p);
+  }
+
+  // ── 조준선(빨간 레이저): 총구에서 조준 방향으로, 엄폐물·사람에 닿는 곳까지. 끝에 빨간 점 ──
+  const laserGeo = new THREE.BoxGeometry(1, 1, 1);
+  const laserMat = new THREE.MeshBasicMaterial({ color: '#FF2A2A', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+  const laserMatOther = new THREE.MeshBasicMaterial({ color: '#FF2A2A', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
+  const aimLines = new Map();
+  function aimEnd(match, p, sx, sy) {
+    const max = 1700;
+    const ex = sx + Math.cos(p.aim) * max, ey = sy + Math.sin(p.aim) * max;
+    let t = 1;
+    for (const c of match.covers ?? []) {
+      if (!(c.hp > 0)) continue;
+      const k = segmentRectTime(sx - c.x, sy - c.y, ex - c.x, ey - c.y, c.w / 2, c.h / 2);
+      if (k !== null && k < t) t = k;
+    }
+    let hit = t < 1;
+    const vx = ex - sx, vy = ey - sy, vv = vx * vx + vy * vy;
+    for (const q of match.players) {
+      if (q === p || !q.alive || q.plane || q.entering) continue;
+      // 선분과 원(몸 반지름)이 처음 만나는 곳
+      const fx = sx - q.x, fy = sy - q.y;
+      const b = 2 * (fx * vx + fy * vy), c = fx * fx + fy * fy - q.radius * q.radius;
+      const disc = b * b - 4 * vv * c;
+      if (disc < 0) continue;
+      const k = (-b - Math.sqrt(disc)) / (2 * vv);
+      if (k > 0 && k < t) { t = k; hit = true; }
+    }
+    return { x: sx + vx * t, y: sy + vy * t, hit };
+  }
+  function placeAimLines(match) {
+    const live = new Set();
+    const stage = match.story?.stage;
+    if (stage !== 'sky' && !match.cutscene && !match.killcam && match.phase !== 'countdown') {
+      for (const p of match.players) {
+        const character = CHARACTERS.find((c) => c.id === p.characterId);
+        if (!p.alive || p.entering || p.plane || character?.aircraft || p.scripted || p.dash) continue;
+        const w = WEAPONS[p.weapon];
+        if (!w || w.thrown || w.dash) continue;
+        let l = aimLines.get(p.id);
+        if (!l) {
+          const line = new THREE.Mesh(laserGeo, p.ai ? laserMatOther : laserMat);
+          const dot = new THREE.Sprite(new THREE.SpriteMaterial({ map: getFlashTexture(), color: '#FF3030', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+          scene.add(line, dot);
+          l = { line, dot, owner: p.id };
+          aimLines.set(p.id, l);
+        }
+        live.add(p.id);
+        const h = GUN_Y + (stage === 'road' ? CAR_ROOF : 0);
+        const sx = p.x + Math.cos(p.aim) * MUZZLE_OFFSET, sy = p.y + Math.sin(p.aim) * MUZZLE_OFFSET;
+        const end = aimEnd(match, p, sx, sy);
+        const len = Math.max(1, Math.hypot(end.x - sx, end.y - sy));
+        l.line.visible = true;
+        l.line.position.set((sx + end.x) / 2, h, (sy + end.y) / 2);
+        l.line.rotation.set(0, -p.aim, 0);
+        l.line.scale.set(len, p.ai ? 0.8 : 1.1, p.ai ? 0.8 : 1.1);
+        l.dot.visible = end.hit;
+        l.dot.position.set(end.x - Math.cos(p.aim) * 3, h, end.y - Math.sin(p.aim) * 3);
+        l.dot.scale.setScalar(p.ai ? 9 : 13);
+      }
+    }
+    for (const [id, l] of aimLines) if (!live.has(id)) { l.line.visible = false; l.dot.visible = false; }
+  }
+
   /** 이번 프레임에 쓰지 않은 배우는 숨긴다(쓰러져 치운 요원 등) */
   function hideUnused(seen) {
     for (const [id, a] of actors) {
       if (seen.has(id)) continue;
       a.sprite.visible = false;
       a.ring.visible = false;
+      if (a.held) a.held.visible = false;
       if (a.model) a.model.visible = false;
       if (a.car) a.car.visible = false;
       if (a.chute) a.chute.visible = false;
@@ -1515,6 +1607,7 @@ export function createWorld3D(canvas, wrap, assets) {
       }
       if (!cut) placeShots(match, reducedMotion);
       else for (const [id, m] of shots) { scene.remove(m); shots.delete(id); }
+      placeAimLines(match);
       placeCovers(cut?.kind === 'drive' && !cut.switched ? { covers: [] } : match, time);
       hideUnused(seen);
       hideUnusedProps();
@@ -1541,8 +1634,8 @@ export function createWorld3D(canvas, wrap, assets) {
         cam.updateProjectionMatrix();
         // 내 몸(판·비행기)은 내 화면에서 숨긴다(쓰러지면 내려다보는 내 몸은 보인다)
         const own = viewer?.alive && actors.get(viewer.id);
-        const ownVisible = own ? [own.sprite.visible, own.model?.visible, own.car?.visible] : null;
-        if (own) { own.sprite.visible = false; if (own.model) own.model.visible = false; }
+        const ownVisible = own ? [own.sprite.visible, own.model?.visible, own.car?.visible, own.held?.visible] : null;
+        if (own) { own.sprite.visible = false; if (own.model) own.model.visible = false; if (own.held) own.held.visible = false; }
         // 판 그림의 방향: 카메라 오른쪽 기준으로 캐릭터가 왼쪽을 보면 뒤집는다
         // 카메라 바로 앞의 판(옆에 붙어 선 동료 등)은 화면을 가리지 않게 흐리게
         const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
@@ -1571,7 +1664,7 @@ export function createWorld3D(canvas, wrap, assets) {
           });
           if (smoke.length && !reducedMotion) ownSmoke(cam, smoke, viewer);
         }
-        if (own) { own.sprite.visible = ownVisible[0]; if (own.model) own.model.visible = !!ownVisible[1]; }
+        if (own) { own.sprite.visible = ownVisible[0]; if (own.model) own.model.visible = !!ownVisible[1]; if (own.held) own.held.visible = !!ownVisible[3]; }
         for (const [a, opacity] of faded) a.material.opacity = opacity;
         // HUD용 이름표·떠오르는 글자 위치
         const tags = [];

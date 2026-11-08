@@ -44,6 +44,7 @@
         <button id="single-btn" class="primary" type="button" disabled>싱글 플레이 (vs AI · 스토리)</button>
         <button id="setup-btn" class="primary" type="button" disabled>2인 대결</button>
         <button id="training-btn" type="button" disabled>건 카타 수련장</button>
+        <button id="mod-btn" type="button">총기 개조</button>
         <button id="balance-btn" type="button">밸런스 조정</button>
       </div>
       <div class="row continue-row">
@@ -202,6 +203,36 @@
       </div>
       <p id="balance-defaults-status" class="hint" role="status"></p>
       <div id="balance-form"></div>
+    </div>
+  </section>
+
+  <section id="screen-mod" class="screen mod-screen" hidden>
+    <div class="card mod-card">
+      <div class="mod-head">
+        <h2 tabindex="-1">총기 개조 작업실</h2>
+        <button class="mod-close-btn" type="button" data-pad-cancel>메인 메뉴</button>
+      </div>
+      <div class="mod-grid">
+        <div class="mod-left">
+          <div class="mod-stage">
+            <canvas id="mod-canvas" aria-label="작업실 책상(끌어서 총 돌려 보기)"></canvas>
+            <div id="mod-reveal" class="mod-reveal" role="dialog" aria-label="뽑기 결과" hidden></div>
+          </div>
+          <div id="mod-weapons" class="mod-weapons" role="group" aria-label="개조할 총"></div>
+        </div>
+        <div class="mod-side">
+          <div class="mod-gacha">
+            <button id="mod-draw-btn" class="primary" type="button">랜덤 뽑기</button>
+            <button id="mod-draw10-btn" type="button">10연속 뽑기</button>
+            <p id="mod-odds" class="hint"></p>
+          </div>
+          <h3><span id="mod-weapon-name"></span> 장착 파츠</h3>
+          <ul id="mod-slots" class="mod-slots"></ul>
+          <h3>배낭 <span id="mod-count" class="hint"></span></h3>
+          <div id="mod-filter" class="mod-filter" role="group" aria-label="배낭 칸 고르기"></div>
+          <div id="mod-bag" class="mod-bag"></div>
+        </div>
+      </div>
     </div>
   </section>
 

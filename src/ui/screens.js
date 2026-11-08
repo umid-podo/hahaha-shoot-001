@@ -1,3 +1,4 @@
+import { createWorkshop } from './workshop.js';
 import {
   TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, TICK,
 } from '../game/config.js';
@@ -127,7 +128,7 @@ export function createScreens(handlers) {
   const game = $('#game');
   const screens = {
     menu: $('#screen-menu'), ready: $('#screen-ready'), pause: $('#screen-pause'), result: $('#screen-result'),
-    balance: $('#screen-balance'), summary: $('#screen-summary'), single: $('#screen-single'),
+    balance: $('#screen-balance'), summary: $('#screen-summary'), single: $('#screen-single'), mod: $('#screen-mod'),
   };
 
   function show(name) {
@@ -151,6 +152,9 @@ export function createScreens(handlers) {
     onClose() { handlers.onMenu(); },
   });
   $('#balance-btn').addEventListener('click', balance.open);
+  // 총기 개조 작업실(랜덤 뽑기·배낭·장착)
+  const workshop = createWorkshop({ show, onClose() { handlers.onMenu(); } });
+  $('#mod-btn').addEventListener('click', workshop.open);
   $('#retry-btn').addEventListener('click', handlers.onRetryLoad);
   $('#start-btn').addEventListener('click', handlers.onStart);
   $('#back-btn').addEventListener('click', handlers.onMenu);
