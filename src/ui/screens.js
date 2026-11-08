@@ -1,4 +1,5 @@
 import { createWorkshop } from './workshop.js';
+import { modStore } from '../game/mods.js';
 import {
   TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, TICK,
 } from '../game/config.js';
@@ -131,7 +132,12 @@ export function createScreens(handlers) {
     balance: $('#screen-balance'), summary: $('#screen-summary'), single: $('#screen-single'), mod: $('#screen-mod'),
   };
 
+  /** 메인 메뉴 '총기 개조' 버튼의 가진 코인 표시 */
+  const syncMenuCoins = () => { $('#menu-coins').textContent = `🪙 ${modStore().coins}`; };
+  modStore().onChange(syncMenuCoins);
+  syncMenuCoins();
   function show(name) {
+    if (name === 'menu') syncMenuCoins();
     game.hidden = !['game', 'pause', 'result'].includes(name);
     for (const [key, el] of Object.entries(screens)) el.hidden = key !== name;
     // 버튼 대신 제목에 포커스: 눌린 채 넘어온 Enter(P2 발사키) 반복이 버튼을 누르지 않게 한다.

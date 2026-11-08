@@ -688,7 +688,8 @@ export function createWorld3D(canvas, wrap, assets) {
    * 판의 그림 방향(오른쪽·왼쪽)은 카메라마다 renderView에서 맞춘다(a.aim을 남겨 둔다).
    */
   function placeSprite(a, pose) {
-    const id = imageOf(pose.characterId, pose.weapon);
+    // 손에 3D 총을 쥐어 줄 때는 무기를 지운 그림(있으면)
+    const id = pose.bare && assets[`${pose.characterId}-bare`] ? `${pose.characterId}-bare` : imageOf(pose.characterId, pose.weapon);
     if (!assets[id]) { a.sprite.visible = false; return; }
     a.image = id;
     const size = SPRITE_SIZE * (pose.scale ?? 1) * CHAR_SCALE;
@@ -761,6 +762,7 @@ export function createWorld3D(canvas, wrap, assets) {
       if (chute) chute.position.set(p.x, h, p.y);
       placeSprite(a, {
         characterId: p.characterId, weapon: p.weapon, scale: p.scale, x: p.x, y: p.y, h,
+        bare: p.alive && !p.drone && hasHeldGun(p.weapon),
         alpha: e?.kind === 'walk' ? Math.min(1, 0.3 + clamp01(e.t / e.duration) * 2) : 1,
         lying: !p.alive, hurt: p.hurt > 0, aim: p.aim,
       });
@@ -790,6 +792,9 @@ export function createWorld3D(canvas, wrap, assets) {
     if (!a.held) return;
     a.held.visible = show;
     const s = p.scale ?? 1;
+    // 무기 없는 그림이면 그림 속 손 자리에 총을 쥐어 준다(화면 칸마다 카메라 쪽 판의 방향이 달라서 그릴 때 맞춘다: fitHeldToHands)
+    const hands = assets[a.image]?.hands;
+    a.grip = hands ? { hands, size: SPRITE_SIZE * s * CHAR_SCALE, foot: footOf(a.image), h, x: p.x, y: p.y, aim: p.aim } : null;
     const dx = Math.cos(p.aim), dz = Math.sin(p.aim);
     const bob = reducedMotion ? 0 : Math.sin(time * 9 + p.x * 0.05) * (Math.hypot(p.x - p.previousX, p.y - (p.previousY ?? p.y)) > 0.5 ? 2 : 0);
     // 만화 그림 크기에 맞춰 크게(실제 비율의 약 2배), 몸 앞 오른손 쪽에서 살짝 비스듬히 겨눠 옆모습이 보이게
@@ -799,6 +804,32 @@ export function createWorld3D(canvas, wrap, assets) {
     a.held.rotation.set(0, -(p.aim - side), 0);
     a.held.scale.setScalar(2.0 * s);
     poseHeldGun(a.held, p);
+  }
+
+  /**
+   * 화면 칸 하나를 그리기 직전: 무기 없는 그림의 손 자리(그림 비율 좌표)를 지금 카메라에 맞춰 3D 위치로 옮겨 총 손잡이를 거기에 둔다.
+   * 판(Sprite)은 늘 카메라를 보므로 손의 3D 위치는 카메라 오른쪽 방향(right)으로 정해진다. 그림이 뒤집혔으면(왼쪽을 봄) 좌우를 바꾼다.
+   * 쌍권총·석궁처럼 두 자루면 두 번째 총은 두 번째 손에.
+   */
+  const handV = new THREE.Vector3(), handV2 = new THREE.Vector3(), toCam = new THREE.Vector3();
+  function fitHeldToHands(a, right, facesLeft, cam) {
+    const g = a.grip;
+    if (!g || !a.held?.visible) return;
+    const where = (uv, out) => {
+      const u = facesLeft ? 1 - uv[0] : uv[0];
+      out.set(g.x, g.h + (1 - uv[1] - g.foot) * g.size, g.y).addScaledVector(right, (u - 0.5) * g.size);
+      toCam.set(cam.position.x - out.x, 0, cam.position.z - out.z).normalize();
+      return out.addScaledVector(toCam, 5); // 판보다 살짝 앞(손 위)에
+    };
+    where(g.hands[0], handV);
+    a.held.position.copy(handV);
+    const items = a.held.userData.items;
+    if (items.length > 1) {
+      where(g.hands[1] ?? g.hands[0], handV2);
+      a.held.updateMatrixWorld(true);
+      const local = a.held.worldToLocal(handV2.clone());
+      items[1].position.set(local.x, (items[1].userData.poseY ?? 0) + local.y, local.z);
+    }
   }
 
   // ── 조준선(빨간 레이저): 총구에서 조준 방향으로, 엄폐물·사람에 닿는 곳까지. 끝에 빨간 점 ──
@@ -1644,6 +1675,7 @@ export function createWorld3D(canvas, wrap, assets) {
           if (!a.sprite.visible || !a.image) continue;
           const facesLeft = Math.cos(a.aim) * right.x + Math.sin(a.aim) * right.z < 0;
           a.material.map = spriteTexture(a.image, facesLeft);
+          fitHeldToHands(a, right, facesLeft, cam);
           if (v.target) continue;
           const d = Math.hypot(a.sprite.position.x - cam.position.x, a.sprite.position.z - cam.position.z);
           if (d < 170) { faded.push([a, a.material.opacity]); a.material.opacity *= Math.max(0.12, (d - 50) / 120); }

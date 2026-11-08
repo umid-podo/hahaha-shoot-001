@@ -159,7 +159,10 @@
       "hasAlphaChannel": true,
       "source": "요원 1 그림을 그대로 씀(저격총은 코드로 덧그림)",
       "kind": "static-character",
-      "bodyAnchor": [0.48, 0.64],
+      "bodyAnchor": [
+        0.48,
+        0.64
+      ],
       "anchorStatus": "initial visual estimate",
       "frames": 1
     },
@@ -172,7 +175,10 @@
       "format": "svg",
       "source": "hand-written SVG",
       "kind": "static-character",
-      "bodyAnchor": [0.5, 0.6],
+      "bodyAnchor": [
+        0.5,
+        0.6
+      ],
       "anchorStatus": "initial visual estimate",
       "frames": 1
     },
@@ -392,6 +398,258 @@
       "format": "svg",
       "source": "hand-written SVG(받은 권총형 석궁 그림을 보고 새로 그림)",
       "kind": "ui"
+    },
+    {
+      "id": "isb-agent-1-bare",
+      "name": "요원 1 (무기 없음)",
+      "path": "characters/isb-agent-1-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.48,
+        0.64
+      ],
+      "hands": [
+        [
+          0.548,
+          0.605
+        ],
+        [
+          0.72,
+          0.42
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "isb-agent-2-bare",
+      "name": "요원 2 (무기 없음)",
+      "path": "characters/isb-agent-2-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.39,
+        0.65
+      ],
+      "hands": [
+        [
+          0.548,
+          0.605
+        ],
+        [
+          0.72,
+          0.42
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "earth-pizza-bare",
+      "name": "피자럭스 (무기 없음)",
+      "path": "characters/earth-pizza-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.39,
+        0.68
+      ],
+      "hands": [
+        [
+          0.548,
+          0.605
+        ],
+        [
+          0.72,
+          0.42
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "wilson-bare",
+      "name": "윌슨 요원 (무기 없음)",
+      "path": "characters/isb-agent-2-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.39,
+        0.65
+      ],
+      "hands": [
+        [
+          0.548,
+          0.605
+        ],
+        [
+          0.72,
+          0.42
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "johnson-bare",
+      "name": "존슨 요원 (무기 없음)",
+      "path": "characters/isb-agent-1-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.48,
+        0.64
+      ],
+      "hands": [
+        [
+          0.548,
+          0.605
+        ],
+        [
+          0.72,
+          0.42
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "earth-arrow-bare",
+      "name": "온이름 (무기 없음)",
+      "path": "characters/earth-arrow-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.48,
+        0.68
+      ],
+      "hands": [
+        [
+          0.555,
+          0.688
+        ],
+        [
+          0.688,
+          0.558
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "creator-bare",
+      "name": "제작자 (무기 없음)",
+      "path": "characters/creator-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.48,
+        0.68
+      ],
+      "hands": [
+        [
+          0.555,
+          0.688
+        ],
+        [
+          0.688,
+          0.558
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "codename-x-bare",
+      "name": "코드네임 X (무기 없음)",
+      "path": "characters/codename-x-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.268,
+        0.56
+      ],
+      "hands": [
+        [
+          0.255,
+          0.47
+        ],
+        [
+          0.465,
+          0.46
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "codename-v-bare",
+      "name": "코드네임 V (무기 없음)",
+      "path": "characters/codename-v-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.48,
+        0.56
+      ],
+      "hands": [
+        [
+          0.385,
+          0.295
+        ],
+        [
+          0.605,
+          0.255
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "codename-r-bare",
+      "name": "코드네임 R (무기 없음)",
+      "path": "characters/codename-r-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.272,
+        0.56
+      ],
+      "hands": [
+        [
+          0.27,
+          0.34
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "sirius-k-bare",
+      "name": "시리우스 K (무기 없음)",
+      "path": "characters/sirius-k-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.387,
+        0.56
+      ],
+      "hands": [
+        [
+          0.545,
+          0.335
+        ]
+      ],
+      "frames": 1
+    },
+    {
+      "id": "arc-trooper-bare",
+      "name": "아크 트루퍼 (무기 없음)",
+      "path": "characters/arc-trooper-bare.png",
+      "kind": "static-character",
+      "source": "무기를 지운 판(scratch 스크립트로 무기 영역 지우기·머리 바꾸기). 3D 화면에서 손에 3D 총을 쥐어 줄 때 씀",
+      "bodyAnchor": [
+        0.5,
+        0.7125
+      ],
+      "hands": [
+        [
+          0.635,
+          0.565
+        ]
+      ],
+      "frames": 1
     }
   ]
 }

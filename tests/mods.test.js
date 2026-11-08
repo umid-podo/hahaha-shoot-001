@@ -30,7 +30,10 @@ test('개조 파츠: 칸 5종, 같은 seed면 같은 디자인·이름, 다른 s
 test('개조 배낭: 뽑으면 배낭에 저장되고, 총마다 붙일 수 있는 칸만 장착, 분해하면 장착도 풀림, 다시 열어도 그대로', () => {
   const storage = memory();
   const store = createModStore(storage);
+  assert.deepEqual(store.draw(1, seededRng(3)), [], '코인이 없으면 못 뽑음');
+  store.addCoins(11);
   const got = store.draw(10, seededRng(3));
+  assert.equal(store.coins, 1, '1번에 1코인');
   assert.equal(got.length, 10);
   assert.equal(store.items.length, 10);
   assert.equal(store.draws, 10);
@@ -56,6 +59,7 @@ test('개조 배낭: 뽑으면 배낭에 저장되고, 총마다 붙일 수 있�
   const again = createModStore(storage);
   assert.equal(again.items.length, store.items.length, '저장한 배낭을 다시 읽음');
   assert.equal(again.draws, 11);
+  assert.equal(again.coins, 0, '코인도 저장');
   assert.ok(Object.keys(MOD_WEAPONS).every((w) => MOD_WEAPONS[w].includes('skin')), '모든 총은 색깔을 바꿀 수 있음');
 });
 
