@@ -402,8 +402,14 @@ export function createRenderer(canvas, wrap, assets) {
   /** 팀별 체력 요약: 팀 이름과 멤버마다 이름·총기·체력바 */
   function drawTeam(team, players) {
     const members = players.filter((p) => p.team === team);
-    const w = TEAM_BOX.w, h = 40 + members.length * 30, x = ARENA_WIDTH - TEAM_BOX.right - w;
-    const y = team === 'isb' ? TEAM_BOX.isbTop : TEAM_BOX.earthBottom - h;
+    const h = 40 + members.length * 30;
+    drawTeamBox(team, players, ARENA_WIDTH - TEAM_BOX.right - TEAM_BOX.w, team === 'isb' ? TEAM_BOX.isbTop : TEAM_BOX.earthBottom - h);
+  }
+
+  /** 팀 체력판: 왼쪽 위가 (x, y) */
+  function drawTeamBox(team, players, x, y) {
+    const members = players.filter((p) => p.team === team);
+    const w = TEAM_BOX.w, h = 40 + members.length * 30;
     ctx.fillStyle = 'rgba(255,255,255,0.88)';
     ctx.strokeStyle = TEAM_COLOR[team];
     ctx.lineWidth = 4;
@@ -2743,9 +2749,420 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.fillText(text, x, y);
   }
 
+  /* ───────── 1인칭 3D 화면 위 HUD(2D 캔버스, 3D 화면 위에 겹쳐 그림) ─────────
+   * 화면 칸(view)마다: 이름표·체력(3D에서 투영한 위치), 조준점·명중 표시, 맞은 방향 표시, 손에 든 무기(또는 라이트닝 조종석),
+   * 왼쪽 아래 내 체력, 오른쪽 아래 무기·쿨타임, 왼쪽 위 레이더(위에서 본 작은 지도, 내가 보는 쪽이 위).
+   */
+  const hud = { hitMarker: {}, hurtFrom: {}, kick: {} };
+  const SKIN = '#F2C9A0';
+
+  function hudEvents(events, match) {
+    for (const e of events) {
+      if (e.type === 'fire') hud.kick[e.playerId] = 1;
+      if (e.type !== 'hit') continue;
+      if (e.ownerId) hud.hitMarker[e.ownerId] = 0.25;
+      const owner = match?.players.find((p) => p.id === e.ownerId);
+      const from = owner ? { x: owner.x, y: owner.y } : null;
+      if (e.victimId) hud.hurtFrom[e.victimId] = { from, age: 0 };
+    }
+  }
+
+  /** 총 모양 하나: 길이 len, 몸통 굵기 h, 색 color. (x, y)는 손잡이 자리, 총구는 왼쪽 위(화면 가운데) 쪽 */
+  function gunShape(x, y, s, { len = 260, h = 46, color = '#2A2E35', barrel = 120, mag = true, scope = false, stock = true, accent = null }) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.32);
+    ctx.scale(s, s);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#0D0F14';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.roundRect(-len, -h / 2, len, h, 10); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(-len - barrel, -h / 5, barrel, h / 2.5, 4); ctx.fill(); ctx.stroke();
+    if (mag) { ctx.beginPath(); ctx.roundRect(-len * 0.55, h / 2 - 4, 34, h * 1.1, 6); ctx.fill(); ctx.stroke(); }
+    if (scope) {
+      ctx.fillStyle = '#15171C';
+      ctx.beginPath(); ctx.roundRect(-len * 0.75, -h / 2 - 34, len * 0.5, 30, 12); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#7FB2E6';
+      ctx.beginPath(); ctx.arc(-len * 0.75 + 8, -h / 2 - 19, 9, 0, Math.PI * 2); ctx.fill();
+    }
+    if (stock) { ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(-10, -h / 2, 80, h * 0.9, 12); ctx.fill(); ctx.stroke(); }
+    if (accent) { ctx.fillStyle = accent; ctx.fillRect(-len + 20, -h / 2 + 6, len - 60, 6); }
+    // 손
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.ellipse(-20, h / 2 + 10, 34, 26, 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(-len * 0.72, h / 2 + 4, 28, 20, 0.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  /** 손에 든 무기(화면 오른쪽 아래). kick(0~1)이면 뒤로 튄다 */
+  function drawViewmodel(p, rect, kick, time, reducedMotion, moving) {
+    const bob = reducedMotion ? 0 : moving ? Math.sin(time * 11) * 8 : Math.sin(time * 2) * 3;
+    const x = rect.x + rect.w * 0.82 + kick * 18, y = rect.y + rect.h * 0.97 + bob + kick * 26;
+    const s = Math.min(rect.w / 1600, rect.h / 1000) * 1.9 * (rect.w < 1000 ? 1.3 : 1);
+    const w = p.weapon;
+    const team = TEAM_COLOR[p.team];
+    if (w === 'pistol') gunShape(x - 40 * s, y - 40 * s, s, { len: 120, h: 40, barrel: 30, mag: false, stock: false, accent: team });
+    else if (w === 'dual' || w === 'dualrpg') {
+      gunShape(x - 40 * s, y - 40 * s, s, { len: 120, h: 40, barrel: 30, mag: false, stock: false, accent: team });
+      ctx.save(); ctx.translate(rect.x + rect.w, 0); ctx.scale(-1, 1); ctx.translate(-rect.x, 0);
+      gunShape(rect.x + rect.w * 0.7 - 40 * s + kick * 18, y - 50 * s, s, { len: 120, h: 40, barrel: 30, mag: false, stock: false, accent: team });
+      ctx.restore();
+    } else if (w === 'rifle') gunShape(x, y - 30 * s, s, { len: 280, h: 50, barrel: 110, accent: team });
+    else if (w === 'smg') gunShape(x, y - 30 * s, s, { len: 200, h: 48, barrel: 60, accent: '#8E6BD6' });
+    else if (w === 'sniper') gunShape(x, y - 30 * s, s, { len: 320, h: 42, barrel: 170, scope: true, mag: false, accent: team });
+    else if (w === 'shotgun') gunShape(x, y - 30 * s, s, { len: 260, h: 56, barrel: 120, mag: false, color: '#5A3A22', accent: '#2A2E35' });
+    else if (w === 'rpg') {
+      ctx.save();
+      ctx.translate(x, y - 120 * s);
+      ctx.rotate(-0.25);
+      ctx.scale(s, s);
+      ctx.fillStyle = '#4E6B3A'; ctx.strokeStyle = '#0D0F14'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.roundRect(-420, -34, 520, 68, 14); ctx.fill(); ctx.stroke();
+      if (p.cooldown <= 0) ctx.drawImage(assets.rocket.img, -500, -40, 110, 80);
+      ctx.fillStyle = SKIN;
+      ctx.beginPath(); ctx.ellipse(-120, 50, 34, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    } else if (w === 'crossbow') {
+      const { img } = assets['akimbo-crossbow'];
+      const size = 360 * s;
+      ctx.drawImage(img, x - size * 0.9, y - size * 0.75, size, size * 0.75);
+    } else if (w === 'dagger') {
+      ctx.save();
+      ctx.translate(x - 60 * s, y - 60 * s);
+      ctx.rotate(-0.6);
+      ctx.scale(s, s);
+      ctx.fillStyle = '#C9CED6'; ctx.strokeStyle = '#0D0F14'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(-200, 0); ctx.lineTo(0, -16); ctx.lineTo(0, 16); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#5A3A22'; ctx.fillRect(0, -12, 70, 24);
+      ctx.fillStyle = SKIN; ctx.beginPath(); ctx.ellipse(36, 18, 34, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    } else if (w === 'instakill') gunShape(x, y - 40 * s, s * 1.2, { len: 300, h: 80, barrel: 90, color: '#3A1E2A', accent: '#FF3B6B', mag: false });
+    else gunShape(x, y - 30 * s, s, { len: 240, h: 48, barrel: 90, accent: team });
+  }
+
+  /** 라이트닝 조종석: 캐노피 틀과 계기판 */
+  function drawCockpit(p, rect, time, reducedMotion) {
+    const { x, y, w, h } = rect;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.strokeStyle = 'rgba(40,46,58,0.95)';
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.5, y + h * 0.05); ctx.lineTo(x + w * 0.5, y + h * 0.16);
+    ctx.moveTo(x + w * 0.05, y + h * 0.2); ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.05, x + w * 0.95, y + h * 0.2);
+    ctx.moveTo(x + w * 0.02, y + h * 0.75); ctx.lineTo(x + w * 0.22, y + h * 0.18);
+    ctx.moveTo(x + w * 0.98, y + h * 0.75); ctx.lineTo(x + w * 0.78, y + h * 0.18);
+    ctx.stroke();
+    const dash = ctx.createLinearGradient(0, y + h * 0.78, 0, y + h);
+    dash.addColorStop(0, '#2A2E38'); dash.addColorStop(1, '#14171E');
+    ctx.fillStyle = dash;
+    ctx.beginPath();
+    ctx.moveTo(x, y + h); ctx.lineTo(x, y + h * 0.84); ctx.quadraticCurveTo(x + w / 2, y + h * 0.74, x + w, y + h * 0.84); ctx.lineTo(x + w, y + h);
+    ctx.closePath(); ctx.fill();
+    for (let i = 0; i < 4; i++) {
+      const cx = x + w * (0.3 + i * 0.13), cy = y + h * 0.9;
+      ctx.fillStyle = '#0B0F1A'; ctx.beginPath(); ctx.arc(cx, cy, 24, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = p.boost > 0 ? '#5AAAFF' : '#9FE0FF'; ctx.lineWidth = 3;
+      const a = (reducedMotion ? 0 : time * (i + 1)) + i;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * 18, cy + Math.sin(a) * 18); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** 조준점: 팀 색 십자. 쏠 수 없는 동안(쿨타임·방전·과열)은 회색, 내 탄이 맞으면 X 표시 */
+  function drawCrosshair(p, rect, reloading, kick, hitT) {
+    const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+    const gap = 10 + kick * 14;
+    ctx.strokeStyle = reloading ? 'rgba(154,158,165,0.9)' : '#FFFFFF';
+    ctx.lineWidth = 5;
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#000';
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * gap, cy + dy * gap); ctx.lineTo(cx + dx * (gap + 16), cy + dy * (gap + 16)); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = reloading ? '#9A9EA5' : TEAM_COLOR[p.team] === TEAM_COLOR.earth ? '#8FD0FF' : '#FFB060';
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * gap, cy + dy * gap); ctx.lineTo(cx + dx * (gap + 16), cy + dy * (gap + 16)); ctx.stroke(); }
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+    if (hitT > 0) {
+      ctx.strokeStyle = `rgba(255,80,60,${Math.min(1, hitT * 5)})`;
+      ctx.lineWidth = 4;
+      for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * 12, cy + dy * 12); ctx.lineTo(cx + dx * 24, cy + dy * 24); ctx.stroke(); }
+    }
+  }
+
+  /** 레이더: 위에서 본 작은 지도. 내가 가운데, 보는 쪽이 위. 같은 팀 파랑·상대 주황, 전투기·탱크·배는 흰 점 */
+  function drawRadar(match, p, rect) {
+    const r = Math.min(110, rect.w * 0.09);
+    const cx = rect.x + r + 24, cy = rect.y + r + 24;
+    const range = 1300, k = r / range;
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,14,24,0.6)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.clip();
+    // 내가 보는 방향이 위로: 경기장 좌표를 -aim-π/2만큼 돌린다
+    const rot = -p.aim - Math.PI / 2;
+    const toScreen = (x, y) => {
+      const dx = (x - p.x) * k, dy = (y - p.y) * k;
+      return [cx + dx * Math.cos(rot) - dy * Math.sin(rot), cy + dx * Math.sin(rot) + dy * Math.cos(rot)];
+    };
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    [[0, 0], [ARENA_WIDTH, 0], [ARENA_WIDTH, ARENA_HEIGHT], [0, ARENA_HEIGHT]].forEach(([x, y], i) => {
+      const [sx, sy] = toScreen(x, y);
+      if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy);
+    });
+    ctx.closePath(); ctx.stroke();
+    for (const c of match.covers ?? []) {
+      if (c.hp <= 0) continue;
+      const [sx, sy] = toScreen(c.x, c.y);
+      ctx.fillStyle = 'rgba(200,200,200,0.5)';
+      ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    if (match.jet) {
+      const [sx, sy] = toScreen(match.jet.x, match.jet.y);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill();
+    }
+    for (const q of match.players) {
+      if (q.id === p.id || (q.entering && q.entering.t < 0)) continue;
+      const [sx, sy] = toScreen(q.x, q.y);
+      ctx.fillStyle = !q.alive ? '#6A6E76' : q.team === p.team ? '#5AAEFF' : q.boss ? '#FF3B30' : '#FF9D3F';
+      ctx.beginPath(); ctx.arc(sx, sy, q.boss ? 7 : 5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+    // 나: 가운데 삼각형(위가 보는 쪽)
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx - 6, cy + 6); ctx.lineTo(cx + 6, cy + 6); ctx.closePath(); ctx.fill();
+  }
+
+  /** 이름표: 이름·체력바(멀수록 작게). 보스는 붉게 */
+  function drawTag(t) {
+    const p = t.player;
+    const s = Math.max(0.55, Math.min(1.15, 700 / Math.max(200, t.dist)));
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.scale(s, s);
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = p.boss ? `BOSS ${p.name}` : p.name;
+    const w = ctx.measureText(label).width + 16;
+    ctx.fillStyle = p.boss ? '#B3261E' : TEAM_COLOR[p.team];
+    ctx.globalAlpha = p.alive ? 0.92 : 0.5;
+    ctx.beginPath(); ctx.roundRect(-w / 2, -36, w, 24, 12); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(p.alive ? label : `${label} · KO`, 0, -23);
+    if (p.alive) drawHpBar(ctx, -HP_BAR.w / 2, -8, HP_BAR.w, HP_BAR.h, p.hp, p.maxHp);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  /** 맞은 쪽 표시: 화면 가장자리 붉은 호(쏜 쪽 방향), 화면 붉게 */
+  function drawHurt(p, rect, hurt) {
+    if (!hurt) return;
+    const k = Math.max(0, 1 - hurt.age / 0.9);
+    if (k <= 0) return;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+    const g = ctx.createRadialGradient(rect.x + rect.w / 2, rect.y + rect.h / 2, rect.h * 0.3, rect.x + rect.w / 2, rect.y + rect.h / 2, rect.h * 0.8);
+    g.addColorStop(0, 'rgba(200,0,0,0)');
+    g.addColorStop(1, `rgba(200,0,0,${0.28 * k})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    if (hurt.from) {
+      const a = Math.atan2(hurt.from.y - p.y, hurt.from.x - p.x) - p.aim; // 0 = 정면
+      const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2, R = rect.h * 0.3;
+      ctx.strokeStyle = `rgba(255,60,40,${0.75 * k})`;
+      ctx.lineWidth = 14;
+      ctx.beginPath(); ctx.arc(cx, cy, R, a - Math.PI / 2 - 0.35, a - Math.PI / 2 + 0.35); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** 왼쪽 아래 내 체력, 오른쪽 아래 무기 안내 */
+  function drawStatus(p, rect) {
+    const pad = 22;
+    const bx = rect.x + pad, by = rect.y + rect.h - 96;
+    ctx.fillStyle = 'rgba(10,14,24,0.6)';
+    ctx.beginPath(); ctx.roundRect(bx, by, 300, 74, 14); ctx.fill();
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = TEAM_COLOR[p.team] === TEAM_COLOR.earth ? '#8FD0FF' : '#FFB060';
+    ctx.fillText(`${p.id} ${p.name}`, bx + 14, by + 18);
+    drawHpBar(ctx, bx + 14, by + 36, 200, 20, p.hp, p.maxHp);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 24px system-ui, sans-serif';
+    ctx.fillText(`${Math.max(0, Math.round(p.hp))}`, bx + 226, by + 47);
+    // 무기: 체력 칸 위
+    const weapon = WEAPONS[p.weapon];
+    const wx = bx, wy = by - 92;
+    ctx.fillStyle = 'rgba(10,14,24,0.6)';
+    ctx.beginPath(); ctx.roundRect(wx, wy, 300, 82, 14); ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(weapon.name, wx + 14, wy + 20);
+    ctx.font = '15px system-ui, sans-serif';
+    ctx.fillStyle = '#C9CED6';
+    const item = WEAPONS[p.item ?? 'grenade'];
+    const second = p.primaryOnly ? '전용 무기' : `다른 칸 ${WEAPONS[p.slot === 'primary' ? p.secondary : p.primary].name}`
+      + ` · ${p.grenadeCooldown > 0 ? `${item.name} ${Math.ceil(p.grenadeCooldown)}초` : `${item.name} 준비`}`;
+    ctx.fillText(second, wx + 14, wy + 46);
+    if (!drawGauge(p, wx + 14, wy + 64, 272)) {
+      const cool = WEAPONS[p.secondary]?.ownCooldown ? p.cooldowns[p.secondary] ?? 0 : 0;
+      if (cool > 0) bar(wx + 14, wy + 64, 272, 1 - cool / WEAPONS[p.secondary].interval, '#8E6BD6');
+    }
+  }
+
+  /** 1인칭 화면 칸 하나의 HUD */
+  function drawFpsView(match, v, inputs, time, reducedMotion, dt) {
+    const p = v.viewer;
+    if (!p) return;
+    const rect = v.rect;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+    for (const t of [...v.tags].sort((a, b) => b.dist - a.dist)) drawTag(t);
+    const kick = hud.kick[p.id] ?? 0;
+    const moving = Math.hypot(p.x - p.previousX, p.y - (p.previousY ?? p.y)) > 0.5;
+    if (p.alive) {
+      if (p.plane) drawCockpit(p, rect, time, reducedMotion);
+      else drawViewmodel(p, rect, kick, time, reducedMotion, moving);
+      const weapon = WEAPONS[p.weapon];
+      const reloading = (weapon.trigger === 'release' && p.cooldown > 0) || (weapon.ownCooldown && (p.cooldowns[weapon.id] ?? 0) > 0)
+        || (weapon.battery && p.battery <= 0) || (weapon.heat && p.overheat > 0);
+      drawCrosshair(p, rect, reloading, kick, hud.hitMarker[p.id] ?? 0);
+      // 떼면 쏘는 무기를 조준 중이면 '떼면 발사'
+      if (weapon.trigger === 'release' && inputs?.[p.id]?.aiming) {
+        ctx.font = 'bold 18px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFD45E';
+        ctx.fillText('떼면 발사', rect.x + rect.w / 2, rect.y + rect.h / 2 + 46);
+      }
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.font = 'bold 56px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 10; ctx.strokeStyle = '#fff'; ctx.fillStyle = '#D9443A';
+      ctx.strokeText('쓰러짐', rect.x + rect.w / 2, rect.y + rect.h * 0.42);
+      ctx.fillText('쓰러짐', rect.x + rect.w / 2, rect.y + rect.h * 0.42);
+    }
+    drawHurt(p, rect, hud.hurtFrom[p.id]);
+    drawRadar(match, p, rect);
+    drawStatus(p, rect);
+    ctx.restore();
+  }
+
+  /** 떠오르는 글자(피해 숫자·MISS·퍽!) */
+  function drawLabels(v) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(v.rect.x, v.rect.y, v.rect.w, v.rect.h); ctx.clip();
+    for (const l of v.labels) {
+      ctx.globalAlpha = 1 - l.age / l.life;
+      ctx.font = `bold ${l.size}px system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.fillStyle = l.color;
+      ctx.strokeText(l.text, l.sx, l.sy);
+      ctx.fillText(l.text, l.sx, l.sy);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  /** 대교 가는 길: 남은 거리 막대 */
+  function drawDriveHud(cut) {
+    const k = Math.min(1, cut.dist / cut.length);
+    const bw = 520, bx = ARENA_WIDTH / 2 - bw / 2, byy = 70;
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(bx - 14, byy - 22, bw + 84, 44, 22); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#C6D0DC';
+    ctx.beginPath(); ctx.roundRect(bx, byy - 8, bw, 16, 8); ctx.fill();
+    ctx.fillStyle = TEAM_COLOR.earth;
+    ctx.beginPath(); ctx.roundRect(bx, byy - 8, Math.max(16, bw * k), 16, 8); ctx.fill();
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.fillStyle = INK;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('대교', bx + bw + 16, byy + 1);
+  }
+
+  /** 1인칭 3D 화면 위 2D 그리기(HUD·자막·화면 전환·카운트다운·건 카타). views는 world3d.draw()가 돌려준 화면 칸 */
+  function drawOverlay(match, inputs, dt, time, reducedMotion, views, { mouseHint = false } = {}) {
+    elapsedTime = match.tick * TICK;
+    ctx.setTransform(canvas.width / ARENA_WIDTH, 0, 0, canvas.height / ARENA_HEIGHT, 0, 0);
+    ctx.clearRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    // 건 카타는 옆에서 본 시점의 다른 화면(2D)으로 화면 전체를 덮는다
+    if (match.gunkata) {
+      drawGunKata(match, time, reducedMotion);
+      return;
+    }
+    const paused = match.phase === 'paused';
+    if (!paused) {
+      for (const id of Object.keys(hud.hitMarker)) hud.hitMarker[id] = Math.max(0, hud.hitMarker[id] - dt);
+      for (const id of Object.keys(hud.kick)) hud.kick[id] = Math.max(0, hud.kick[id] - dt * 6);
+      for (const h of Object.values(hud.hurtFrom)) h.age += dt;
+    }
+    const cut = match.cutscene, killcam = match.killcam;
+    for (const v of views) {
+      if (!v.cinematic) drawFpsView(match, v, inputs, time, reducedMotion, dt);
+      drawLabels(v);
+    }
+    if (views.length > 1) {
+      ctx.fillStyle = '#0D0F14';
+      ctx.fillRect(ARENA_WIDTH / 2 - 3, 0, 6, ARENA_HEIGHT);
+    }
+    if (killcam) {
+      drawKillcamOverlay(killcam, time, reducedMotion);
+    } else if (cut) {
+      if (['stairs', 'lightning', 'parachute', 'drive'].includes(cut.kind) && cut.fade > 0) {
+        ctx.fillStyle = `rgba(0,0,0,${cut.fade})`;
+        ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+      }
+      if (cut.kind === 'lightning' && cut.flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${cut.flash})`;
+        ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+      }
+      if (cut.kind === 'drive' && !cut.switched) drawDriveHud(cut);
+      drawLetterbox(cut);
+    } else {
+      if (views.length === 1) {
+        drawTeamBox('isb', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20);
+        drawTeamBox('earth', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20 + 52 + match.players.filter((p) => p.team === 'isb').length * 30);
+      }
+      if (match.story) drawStoryHud(match.story);
+    }
+    if (match.phase === 'countdown') {
+      ctx.font = 'bold 200px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 12;
+      ctx.strokeStyle = '#fff';
+      ctx.fillStyle = INK;
+      const n = String(Math.ceil(match.countdown));
+      ctx.strokeText(n, ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
+      ctx.fillText(n, ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
+    }
+    // 마우스로 시점을 돌리려면 화면을 눌러 포인터를 잠근다
+    if (mouseHint && !cut && !killcam) {
+      const text = '화면을 클릭하면 마우스로 시점 조작 (Esc 일시정지)';
+      ctx.font = 'bold 20px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const w = ctx.measureText(text).width + 30;
+      ctx.fillStyle = 'rgba(10,14,24,0.6)';
+      ctx.beginPath(); ctx.roundRect(ARENA_WIDTH / 2 - w / 2, 18, w, 38, 19); ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(text, ARENA_WIDTH / 2, 38);
+    }
+  }
+
   return {
-    /** step()이 돌려준 이벤트로 짧은 수명의 효과를 만든다. */
-    addEvents(events) {
+    /** step()이 돌려준 이벤트로 짧은 수명의 효과를 만든다(match를 주면 1인칭 HUD의 명중·맞은 방향 표시도). */
+    addEvents(events, match = null) {
+      hudEvents(events, match);
       for (const e of events) {
         if (e.type === 'fire') recoil[e.playerId] = RECOIL_TIME;
         if (e.type === 'hit') effects.push({ kind: 'hit', x: e.x, y: e.y, damage: e.damage, age: 0 });
@@ -2763,8 +3180,10 @@ export function createRenderer(canvas, wrap, assets) {
         if (e.type === 'bump') effects.push({ kind: 'bump', x: e.x, y: e.y - 70, age: 0 });
       }
     },
+    drawOverlay,
     reset() {
       effects = [];
+      hud.hitMarker = {}; hud.hurtFrom = {}; hud.kick = {};
       smokeFrom.clear();
       for (const id of Object.keys(recoil)) delete recoil[id];
       Object.assign(cam, { x: ARENA_WIDTH / 2, y: ARENA_HEIGHT / 2, z: 1 });

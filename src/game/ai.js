@@ -1,4 +1,4 @@
-import { MIN_X, MAX_X, BULLET_RADIUS, TICK, WEAPONS, RULES } from './config.js';
+import { MIN_X, MAX_X, BULLET_RADIUS, TICK, WEAPONS, RULES, ZONE } from './config.js';
 import { segmentRectTime } from './collision.js';
 import { createRng, between } from './state.js';
 
@@ -41,7 +41,7 @@ export function createAI(playerId, difficulty = 'normal', seed = Date.now()) {
   return {
     playerId, diff, rng,
     dodgeDecisions: new Map(), // 탄 id → 피할지 여부(탄마다 한 번만 정한다)
-    wanderX: null, wanderTimer: 0,
+    wanderX: null, wanderY: null, wanderTimer: 0,
     firing: true, fireTimer: between(rng, diff.fire[0]),
     charge: null, // 떼면 쏘는 무기를 조준 중이면 남은 시간
     blockedFor: 0, // 떼면 쏘는 무기가 엄폐물에 막혀 기다린 시간
@@ -50,8 +50,11 @@ export function createAI(playerId, difficulty = 'normal', seed = Date.now()) {
   };
 }
 
-/** 대상의 이번 틱 이동으로 추정한 X 속도 */
+/** 대상의 이번 틱 이동으로 추정한 속도 */
 const velocityX = (p) => (p.x - p.previousX) / TICK;
+const velocityY = (p) => (p.y - (p.previousY ?? p.y)) / TICK;
+/** 팀 진영의 세로 범위(없으면 경기장 전체) */
+const zoneOf = (team) => ZONE[team] ?? { minY: 0, maxY: 1000 };
 
 /** 무기 탄속(레이저처럼 즉시 닿으면 Infinity) */
 function projectileSpeed(me, weaponId) {
@@ -61,93 +64,100 @@ function projectileSpeed(me, weaponId) {
 }
 
 /**
- * 상대 플레이어를 향한 조준 각도. lead만큼 상대가 움직일 곳을 예측한다.
- * 결과는 자기 팀의 조준 반원(상단 [0, π], 하단 [-π, 0]) 안으로 맞춘다.
+ * 상대 플레이어를 향한 조준 각도(1인칭 3D에서는 바라보는 방향도 된다). lead만큼 상대가 움직일 곳을 예측한다.
  */
 export function aimAtTarget(me, target, speed, lead) {
-  let tx = target.x;
+  let tx = target.x, ty = target.y;
   if (lead > 0 && Number.isFinite(speed)) {
-    const vx = velocityX(target);
+    const vx = velocityX(target), vy = velocityY(target);
     for (let i = 0; i < 2; i++) {
-      const t = Math.hypot(tx - me.x, target.y - me.y) / speed;
+      const t = Math.hypot(tx - me.x, ty - me.y) / speed;
       tx = Math.min(MAX_X, Math.max(MIN_X, target.x + vx * t * lead));
+      ty = target.y + vy * t * lead;
     }
   }
-  const angle = Math.atan2(target.y - me.y, tx - me.x);
-  return me.team === 'isb' ? Math.min(Math.PI, Math.max(0, angle)) : Math.min(0, Math.max(-Math.PI, angle));
+  return Math.atan2(ty - me.y, tx - me.x);
 }
 
-/** x에서 상대를 향해 쏠 때 부서지지 않은 엄폐물이 가로막는지 */
-function blockedAt(match, me, x, target) {
-  const x0 = x, y0 = me.y, x1 = target.x, y1 = target.y;
+/** (x, y)에서 상대를 향해 쏠 때 부서지지 않은 엄폐물이 가로막는지 */
+function blockedAt(match, me, x, target, y = me.y) {
+  const x0 = x, y0 = y, x1 = target.x, y1 = target.y;
   return match.covers.some((c) => c.hp > 0 && segmentRectTime(
     x0 - c.x, y0 - c.y, x1 - c.x, y1 - c.y, c.w / 2 + BULLET_RADIUS, c.h / 2 + BULLET_RADIUS) !== null);
 }
 
 /**
- * 나에게 날아오는 탄 목록: { t: 내 레일에 닿기까지 남은 시간, x: 그때 X, reach: 맞는 거리 }.
+ * 나에게 날아오는 탄 목록: { t: 나와 가장 가까워지기까지 남은 시간, x·y: 그때 탄의 자리, reach: 맞는 거리 }.
  * 나온 지 reaction초가 안 된 탄은 아직 못 본 것으로 치고, 탄마다 dodge 확률로 피할지 한 번 정한다.
  */
 function threats(ai, match, me) {
   const list = [];
   const seen = new Set();
+  const approach = (key, x, y, vx, vy, reach, age) => {
+    seen.add(key);
+    const rx = me.x - x, ry = me.y - y, v2 = vx * vx + vy * vy;
+    if (!v2) return;
+    const t = (rx * vx + ry * vy) / v2;
+    if (t <= 0 || t > DODGE_HORIZON) return; // 멀어지는 탄·아직 먼 탄
+    if (age < ai.diff.reaction) return;
+    if (!ai.dodgeDecisions.has(key)) ai.dodgeDecisions.set(key, ai.rng() < ai.diff.dodge);
+    if (!ai.dodgeDecisions.get(key)) return;
+    list.push({ t, x: x + vx * t, y: y + vy * t, reach });
+  };
   for (const b of match.projectiles) {
     if (b.team === me.team || b.ownerId === me.id) continue;
-    seen.add(b.id);
-    const dy = me.y - b.y;
-    if (dy * b.vy <= 0) continue; // 멀어지는 탄
-    if (RULES.bulletLife - b.life < ai.diff.reaction) continue;
-    if (!ai.dodgeDecisions.has(b.id)) ai.dodgeDecisions.set(b.id, ai.rng() < ai.diff.dodge);
-    if (!ai.dodgeDecisions.get(b.id)) continue;
-    const t = dy / b.vy;
-    if (t > DODGE_HORIZON) continue;
     // 폭발 무기는 폭발 반경까지, 던진 무기는 직격 없이 폭발만
     const direct = b.thrown ? 0 : me.radius + BULLET_RADIUS;
     const reach = Math.max(direct, b.splash ? b.splash.radius + me.radius : 0) + DODGE_MARGIN;
-    list.push({ t, x: b.x + b.vx * t, reach });
+    approach(b.id, b.x, b.y, b.vx, b.vy, reach, RULES.bulletLife - b.life);
   }
   // 상대의 단검 돌진도 날아오는 탄처럼 피한다(몸끼리 닿는 거리)
   for (const q of match.players) {
     const d = q.dash;
     if (!d || d.returning || q.team === me.team) continue;
-    const key = `dash-${q.id}`;
-    seen.add(key);
-    const dy = me.y - q.y;
-    if (dy * d.vy <= 0 || d.age < ai.diff.reaction) continue;
-    if (!ai.dodgeDecisions.has(key)) ai.dodgeDecisions.set(key, ai.rng() < ai.diff.dodge);
-    if (!ai.dodgeDecisions.get(key)) continue;
-    const t = dy / d.vy;
-    list.push({ t, x: q.x + d.vx * t, reach: me.radius + q.radius + DODGE_MARGIN });
+    approach(`dash-${q.id}`, q.x, q.y, d.vx, d.vy, me.radius + q.radius + DODGE_MARGIN, d.age);
   }
   for (const id of ai.dodgeDecisions.keys()) if (!seen.has(id)) ai.dodgeDecisions.delete(id);
   return list;
 }
 
-/** 이동 방향 dir(-1·0·1)을 유지했을 때 날아오는 탄들에 얼마나 위험한지. 0이면 안전. */
-function danger(me, dir, speed, list) {
+/** 이동 방향 (dx, dy)(길이 0~1)를 유지했을 때 날아오는 탄들에 얼마나 위험한지. 0이면 안전. */
+function danger(me, dx, dy, speed, list) {
+  const zone = zoneOf(me.team);
   let sum = 0;
   for (const th of list) {
-    const x = Math.min(MAX_X, Math.max(MIN_X, me.x + dir * speed * th.t));
-    const overlap = th.reach - Math.abs(x - th.x);
+    const x = Math.min(MAX_X, Math.max(MIN_X, me.x + dx * speed * th.t));
+    const y = Math.min(zone.maxY, Math.max(zone.minY, me.y + dy * speed * th.t));
+    const overlap = th.reach - Math.hypot(x - th.x, y - th.y);
     if (overlap > 0) sum += overlap / (th.t + 0.1);
   }
   return sum;
 }
 
-/** 평소 이동: 이리저리 자리를 옮기되, 엄폐물에 막혔으면 상대가 보이는 곳으로 간다. */
-function wanderAxis(ai, match, me, target, dt) {
+/** 피할 때 견주어 보는 방향: 가만히, 8방향 */
+const DIRS = [[0, 0], ...Array.from({ length: 8 }, (_, i) => [Math.cos((i * Math.PI) / 4), Math.sin((i * Math.PI) / 4)])];
+
+/**
+ * 평소 이동: 자기 진영 안에서 이리저리 자리를 옮기되(앞뒤·좌우), 엄폐물에 막혔으면 상대가 보이는 곳으로 간다.
+ * 가려는 쪽 방향 [dx, dy](길이 0~1)를 돌려준다.
+ */
+function wanderDir(ai, match, me, target, dt) {
   ai.wanderTimer -= dt;
+  const zone = zoneOf(me.team);
   const needsClearShot = ai.diff.coverAware && blockedAt(match, me, me.x, target);
-  if (ai.wanderX === null || ai.wanderTimer <= 0 || (needsClearShot && blockedAt(match, me, ai.wanderX, target))) {
+  const spot = () => [between(ai.rng, [MIN_X + 60, MAX_X - 60]), between(ai.rng, [zone.minY + 20, zone.maxY - 20])];
+  if (ai.wanderX === null || ai.wanderTimer <= 0 || (needsClearShot && blockedAt(match, me, ai.wanderX, target, ai.wanderY))) {
     ai.wanderTimer = between(ai.rng, [1.2, 3]);
-    let x = between(ai.rng, [MIN_X + 60, MAX_X - 60]);
+    let [x, y] = spot();
     if (ai.diff.coverAware) {
-      for (let i = 0; i < 8 && blockedAt(match, me, x, target); i++) x = between(ai.rng, [MIN_X + 60, MAX_X - 60]);
+      for (let i = 0; i < 8 && blockedAt(match, me, x, target, y); i++) [x, y] = spot();
     }
     ai.wanderX = x;
+    ai.wanderY = y;
   }
-  const gap = ai.wanderX - me.x;
-  return Math.abs(gap) < 10 ? 0 : Math.sign(gap);
+  const gx = ai.wanderX - me.x, gy = (ai.wanderY ?? me.y) - me.y;
+  const dist = Math.hypot(gx, gy);
+  return dist < 10 ? [0, 0] : [gx / dist, gy / dist];
 }
 
 /** 가장 가까운 살아 있는 상대(스토리 모드 2인 협동처럼 상대가 여럿이면 가까운 쪽을 노린다). 없으면 undefined. */
@@ -155,7 +165,7 @@ export function nearestTarget(match, me) {
   let best, dist = Infinity;
   for (const p of match.players) {
     if (!p.alive || p.entering || p.team === me.team) continue;
-    const d = Math.abs(p.x - me.x);
+    const d = Math.hypot(p.x - me.x, p.y - me.y);
     if (d < dist) { best = p; dist = d; }
   }
   return best;
@@ -173,6 +183,7 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   // 스토리 모드에서 헬리콥터에서 내려오는 중인 요원은 아직 움직이지 않는다
   if (!me.alive || me.entering || !target || match.phase !== 'playing') {
     frame.moveAxis = 0;
+    frame.moveY = 0;
     frame.aiming = false;
     ai.charge = null;
     if (me.alive && target) frame.aim = aimAtTarget(me, target, projectileSpeed(me, me.weapon), 0);
@@ -183,19 +194,20 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   // 조준: 무조건 상대 플레이어
   frame.aim = aimAtTarget(me, target, projectileSpeed(me, me.weapon), ai.diff.lead);
 
-  // 이동: 위험한 탄이 있으면 가장 안전한 방향, 없으면 평소 이동
+  // 이동: 위험한 탄이 있으면 가장 안전한 방향(8방향·가만히 중), 없으면 평소 이동(자기 진영 안 이곳저곳)
   const speed = me.speed * ai.diff.move;
-  const wander = wanderAxis(ai, match, me, target, dt);
+  const wander = wanderDir(ai, match, me, target, dt);
   const list = threats(ai, match, me);
-  let axis = wander;
-  if (list.length && danger(me, wander, speed, list) > 0) {
+  let dir = wander;
+  if (list.length && danger(me, wander[0], wander[1], speed, list) > 0) {
     let best = Infinity;
-    for (const dir of [wander, -1, 1, 0]) {
-      const d = danger(me, dir, speed, list);
-      if (d < best - 1e-6) { best = d; axis = dir; }
+    for (const d of [wander, ...DIRS]) {
+      const risk = danger(me, d[0], d[1], speed, list);
+      if (risk < best - 1e-6) { best = risk; dir = d; }
     }
   }
-  frame.moveAxis = axis * ai.diff.move;
+  frame.moveAxis = dir[0] * ai.diff.move;
+  frame.moveY = dir[1] * ai.diff.move;
 
   // 무기 전환: 가끔 주무기 ↔ 보조무기. 기관단총이 과열되거나 단검·샷건이 쿨타임이면 바로 주무기로,
   // 쿨타임 중인 보조무기로는 바꾸지 않는다.

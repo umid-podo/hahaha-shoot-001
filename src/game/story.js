@@ -784,7 +784,7 @@ function updateTurrets(match, dt, events) {
 
 /**
  * 데스스타 3갈래 미사일: 보스전에서 싸우는 동안 WEAPONS.dsmissile.interval초마다, 가장 가까운 살아 있는 라이트닝 쪽으로
- * volley.count발을 volley.spread도 간격 부채꼴로 쏜다. 미사일은 유도 없이 곧게 날아가 맞거나 레일 선에서 터진다(폭발 피해).
+ * volley.count발을 volley.spread도 간격 부채꼴로 쏜다. 미사일은 유도 없이 곧게 날아가 맞거나 노린 자리를 지나 터진다(폭발 피해).
  * 피해는 데스스타 웨이브 설정의 피해(%)·탄속(%)을 따른다.
  */
 function updateDeathstarVolley(match, dt, events) {
@@ -813,7 +813,8 @@ function updateDeathstarVolley(match, dt, events) {
       id: match.nextProjectileId++, ownerId: boss.id, team: 'isb', weapon: w.id,
       x, y, previousX: x, previousY: y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
       life: 4, damage: Math.round(w.damage * scale), connected: false,
-      splash: { ...w.splash, damage: Math.round(w.splash.damage * scale) }, endY: RAIL_Y[target.team],
+      splash: { ...w.splash, damage: Math.round(w.splash.damage * scale) }, startX: x, startY: y,
+      range: Math.hypot(target.x - x, target.y - y) + 40, // 노린 라이트닝이 있던 자리 조금 뒤에서 터진다
     });
   }
   if (stats) (stats.weapons[w.id] ??= { shots: 0, hits: 0, damage: 0, coverDamage: 0 }).shots += n;
@@ -821,7 +822,7 @@ function updateDeathstarVolley(match, dt, events) {
 }
 
 /**
- * 포탄 한 발: ISB팀 탄이라 요원은 맞지 않는다. 엄폐물에 막히고, 맞히거나 플레이어 레일 선에서 터져 폭발 피해를 준다.
+ * 포탄 한 발: ISB팀 탄이라 요원은 맞지 않는다. 엄폐물에 막히고, 맞히거나 노린 주인공이 있던 자리에서 터져 폭발 피해를 준다.
  * 쏜 쪽(ownerId)은 'turret'이라 결과 화면에 '포탑'으로 나온다.
  */
 function fireTurret(match, t, hero, events) {
@@ -833,7 +834,7 @@ function fireTurret(match, t, hero, events) {
     x, y, previousX: x, previousY: y,
     vx: Math.cos(aim) * TURRET.speed, vy: Math.sin(aim) * TURRET.speed,
     life: TURRET_SHELL_LIFE, damage: TURRET.damage, connected: false,
-    splash: { ...TURRET.splash }, endY: RAIL_Y[hero.team],
+    splash: { ...TURRET.splash }, startX: x, startY: y, range: Math.hypot(hero.x - x, hero.y - y), // 노린 주인공이 있던 자리에서 터진다
   });
   events.push({ type: 'turret-fire', x: t.x, y: t.y });
 }
