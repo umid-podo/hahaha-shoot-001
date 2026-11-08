@@ -2808,13 +2808,18 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.strokeStyle = '#000';
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * gap, cy + dy * gap); ctx.lineTo(cx + dx * (gap + 16), cy + dy * (gap + 16)); ctx.stroke(); }
     ctx.globalAlpha = 1;
+    // 빨간 조준점(장전·쿨타임 중엔 회색). 둘레에 붉은 빛
     ctx.lineWidth = 3;
-    ctx.strokeStyle = reloading ? '#9A9EA5' : TEAM_COLOR[p.team] === TEAM_COLOR.earth ? '#8FD0FF' : '#FFB060';
+    ctx.strokeStyle = reloading ? '#9A9EA5' : '#FF2A2A';
+    ctx.shadowColor = reloading ? 'transparent' : 'rgba(255,40,40,0.9)';
+    ctx.shadowBlur = 8;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * gap, cy + dy * gap); ctx.lineTo(cx + dx * (gap + 16), cy + dy * (gap + 16)); ctx.stroke(); }
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = reloading ? '#9A9EA5' : '#FF2A2A';
+    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
     if (hitT > 0) {
-      ctx.strokeStyle = `rgba(255,80,60,${Math.min(1, hitT * 5)})`;
+      ctx.strokeStyle = `rgba(255,255,255,${Math.min(1, hitT * 5)})`;
       ctx.lineWidth = 4;
       for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * 12, cy + dy * 12); ctx.lineTo(cx + dx * 24, cy + dy * 24); ctx.stroke(); }
     }
@@ -2890,16 +2895,45 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.globalAlpha = 1;
   }
 
-  /** 맞은 쪽 표시: 화면 가장자리 붉은 호(쏜 쪽 방향), 화면 붉게 */
-  function drawHurt(p, rect, hurt) {
-    if (!hurt) return;
-    const k = Math.max(0, 1 - hurt.age / 0.9);
-    if (k <= 0) return;
+  /** 화면 테두리 붉은 빛(안쪽으로 번지는 빛 띠). k: 0~1 세기 */
+  function redBorder(rect, k) {
+    if (k <= 0.01) return;
+    const t = Math.min(rect.w, rect.h) * 0.16;
+    const sides = [
+      [rect.x, rect.y, rect.w, t, rect.x, rect.y, rect.x, rect.y + t],
+      [rect.x, rect.y + rect.h - t, rect.w, t, rect.x, rect.y + rect.h, rect.x, rect.y + rect.h - t],
+      [rect.x, rect.y, t, rect.h, rect.x, rect.y, rect.x + t, rect.y],
+      [rect.x + rect.w - t, rect.y, t, rect.h, rect.x + rect.w, rect.y, rect.x + rect.w - t, rect.y],
+    ];
+    for (const [x, y, w, h, x0, y0, x1, y1] of sides) {
+      const g = ctx.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, `rgba(255,20,20,${0.75 * k})`);
+      g.addColorStop(0.35, `rgba(220,0,0,${0.35 * k})`);
+      g.addColorStop(1, 'rgba(200,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.strokeStyle = `rgba(255,60,60,${0.9 * k})`;
+    ctx.lineWidth = 6;
+    ctx.shadowColor = 'rgba(255,0,0,0.9)';
+    ctx.shadowBlur = 24 * k;
+    ctx.strokeRect(rect.x + 3, rect.y + 3, rect.w - 6, rect.h - 6);
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+  }
+
+  /** 맞으면 화면 테두리가 붉게 빛나고(맞은 쪽 방향 표시), 체력이 25% 아래면 테두리가 계속 두근두근 붉게 */
+  function drawHurt(p, rect, hurt, time = 0, reducedMotion = false) {
+    const low = p.alive && p.hp > 0 && p.hp <= p.maxHp * 0.25 ? (reducedMotion ? 0.45 : 0.3 + 0.25 * (0.5 + 0.5 * Math.sin(time * 6))) : 0;
+    const k = hurt ? Math.max(0, 1 - hurt.age / 0.9) : 0;
+    if (k <= 0 && low <= 0) return;
     ctx.save();
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+    redBorder(rect, Math.max(k, low));
+    if (k <= 0) { ctx.restore(); return; }
     const g = ctx.createRadialGradient(rect.x + rect.w / 2, rect.y + rect.h / 2, rect.h * 0.3, rect.x + rect.w / 2, rect.y + rect.h / 2, rect.h * 0.8);
     g.addColorStop(0, 'rgba(200,0,0,0)');
-    g.addColorStop(1, `rgba(200,0,0,${0.28 * k})`);
+    g.addColorStop(1, `rgba(200,0,0,${0.22 * k})`);
     ctx.fillStyle = g;
     ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
     if (hurt.from) {
@@ -2985,7 +3019,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.strokeText('쓰러짐', rect.x + rect.w / 2, rect.y + rect.h * 0.42);
       ctx.fillText('쓰러짐', rect.x + rect.w / 2, rect.y + rect.h * 0.42);
     }
-    drawHurt(p, rect, hud.hurtFrom[p.id]);
+    drawHurt(p, rect, hud.hurtFrom[p.id], time, reducedMotion);
     drawRadar(match, p, rect);
     drawStatus(p, rect);
     ctx.restore();

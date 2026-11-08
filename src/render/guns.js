@@ -745,6 +745,55 @@ export function buildShowcase(weapon, equipped = {}) {
   return model;
 }
 
+/**
+ * 다른 사람(적·동료)이 손에 든 총(3인칭). 캐릭터 그림 손 높이에서 조준 방향으로 겨눈다. 손은 그림에 있으므로 총만.
+ * 쌍권총·석궁·쌍 RPG는 양손에 한 자루씩. 돌려주는 Group의 userData.items가 한 자루씩(장전 동작은 1인칭과 같은 applyReload).
+ */
+const HELD = {
+  rifle: () => rifleModel(), smg: () => smgModel(), sniper: () => sniperModel(), jsniper: () => sniperModel(), shotgun: () => shotgunModel(),
+  pistol: () => pistolModel(), dual: () => pistolModel({ twoTone: true }), rpg: () => rpgModel(), dualrpg: () => rpgModel(),
+  crossbow: () => crossbowModel(), dagger: () => daggerModel(), instakill: () => instakillModel(),
+};
+const PAIRED = new Set(['dual', 'dualrpg', 'crossbow']);
+export const hasHeldGun = (weapon) => !!HELD[weapon];
+export function makeHeldGun(weapon, equipped = {}) {
+  const root = new THREE.Group();
+  const items = [];
+  for (const side of PAIRED.has(weapon) ? [1, -1] : [1]) {
+    const model = applyMods(HELD[weapon](), equipped);
+    const item = new THREE.Group();
+    const spin = new THREE.Group();
+    const [px, py] = model.userData.pivot ?? [0, 0];
+    spin.position.set(px, py, 0);
+    model.position.set(-px, -py, 0);
+    spin.add(model);
+    item.add(spin);
+    item.userData = { ...model.userData, model, spin, side };
+    // 손잡이가 원점(손 자리)에 오게
+    const grip = model.userData.grip ?? { x: 0, y: 0 };
+    spin.position.x -= grip.x; spin.position.y -= grip.y;
+    if (model.userData.warhead) model.userData.warhead.visible = true;
+    root.add(item);
+    items.push(item);
+  }
+  root.userData.items = items;
+  root.userData.weapon = weapon;
+  return root;
+}
+/** 3인칭 총의 장전 동작·탄두/화살 보이기. p: 그 플레이어(장전 중이면 p.reload) */
+export function poseHeldGun(root, p) {
+  const weapon = root.userData.weapon;
+  const rl = p.reload && p.reload.weapon === weapon ? clamp01(1 - p.reload.t / p.reload.total) : null;
+  const e = rl === null ? 0 : ease(rl / 0.15) * (1 - ease((rl - 0.85) / 0.15));
+  const anim = reloadPose(weapon, rl, e);
+  for (const item of root.userData.items) {
+    const side = item.userData.side;
+    item.position.set(0, anim.y * 0.6, side * (PAIRED.has(weapon) ? 9 : 0));
+    item.rotation.set(anim.roll * side, 0, anim.pitch * 1.4 + (rl !== null && !PAIRED.has(weapon) && weapon !== 'rpg' ? -0.35 * e : 0));
+    applyReload(item, weapon, rl, p);
+  }
+}
+
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const ease = (v) => { const q = clamp01(v); return q * q * (3 - 2 * q); };
 /** 0→1 구간 [a, b]에서의 부드러운 진행도 */
