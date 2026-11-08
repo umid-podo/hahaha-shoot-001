@@ -55,6 +55,9 @@ const velocityX = (p) => (p.x - p.previousX) / TICK;
 const velocityY = (p) => (p.y - (p.previousY ?? p.y)) / TICK;
 /** 팀 진영의 세로 범위(없으면 경기장 전체) */
 const zoneOf = (team) => ZONE[team] ?? { minY: 0, maxY: 1000 };
+/** AI가 움직일 범위: 넓은 맵이면 맵 전체, 아니면 자기 진영 */
+const areaOf = (match, team) => (match?.wide ? { minX: match.bounds.minX + 60, maxX: match.bounds.maxX - 60, minY: match.bounds.minY + 60, maxY: match.bounds.maxY - 60 }
+  : { minX: MIN_X, maxX: MAX_X, ...zoneOf(team) });
 
 /** 무기 탄속(레이저처럼 즉시 닿으면 Infinity) */
 function projectileSpeed(me, weaponId) {
@@ -122,11 +125,11 @@ function threats(ai, match, me) {
 }
 
 /** 이동 방향 (dx, dy)(길이 0~1)를 유지했을 때 날아오는 탄들에 얼마나 위험한지. 0이면 안전. */
-function danger(me, dx, dy, speed, list) {
-  const zone = zoneOf(me.team);
+function danger(me, dx, dy, speed, list, match = null) {
+  const zone = areaOf(match, me.team);
   let sum = 0;
   for (const th of list) {
-    const x = Math.min(MAX_X, Math.max(MIN_X, me.x + dx * speed * th.t));
+    const x = Math.min(zone.maxX, Math.max(zone.minX, me.x + dx * speed * th.t));
     const y = Math.min(zone.maxY, Math.max(zone.minY, me.y + dy * speed * th.t));
     const overlap = th.reach - Math.hypot(x - th.x, y - th.y);
     if (overlap > 0) sum += overlap / (th.t + 0.1);
@@ -143,9 +146,16 @@ const DIRS = [[0, 0], ...Array.from({ length: 8 }, (_, i) => [Math.cos((i * Math
  */
 function wanderDir(ai, match, me, target, dt) {
   ai.wanderTimer -= dt;
-  const zone = zoneOf(me.team);
+  const zone = areaOf(match, me.team);
   const needsClearShot = ai.diff.coverAware && blockedAt(match, me, me.x, target);
-  const spot = () => [between(ai.rng, [MIN_X + 60, MAX_X - 60]), between(ai.rng, [zone.minY + 20, zone.maxY - 20])];
+  // 넓은 맵: 상대 둘레 350~700 거리의 자리로 옮겨 다니며 따라간다(멀리 도망가도 쫓아감). 좁은 맵: 자기 진영 안 아무 데나
+  const spot = () => {
+    if (match.wide) {
+      const a = ai.rng() * Math.PI * 2, r = between(ai.rng, [350, 700]);
+      return [Math.min(zone.maxX, Math.max(zone.minX, target.x + Math.cos(a) * r)), Math.min(zone.maxY, Math.max(zone.minY, target.y + Math.sin(a) * r))];
+    }
+    return [between(ai.rng, [MIN_X + 60, MAX_X - 60]), between(ai.rng, [zone.minY + 20, zone.maxY - 20])];
+  };
   if (ai.wanderX === null || ai.wanderTimer <= 0 || (needsClearShot && blockedAt(match, me, ai.wanderX, target, ai.wanderY))) {
     ai.wanderTimer = between(ai.rng, [1.2, 3]);
     let [x, y] = spot();
@@ -199,15 +209,21 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   const wander = wanderDir(ai, match, me, target, dt);
   const list = threats(ai, match, me);
   let dir = wander;
-  if (list.length && danger(me, wander[0], wander[1], speed, list) > 0) {
+  if (list.length && danger(me, wander[0], wander[1], speed, list, match) > 0) {
     let best = Infinity;
     for (const d of [wander, ...DIRS]) {
-      const risk = danger(me, d[0], d[1], speed, list);
+      const risk = danger(me, d[0], d[1], speed, list, match);
       if (risk < best - 1e-6) { best = risk; dir = d; }
     }
   }
   frame.moveAxis = dir[0] * ai.diff.move;
   frame.moveY = dir[1] * ai.diff.move;
+  // 가려는데 엄폐물·고지대 옆면에 막혀 거의 못 움직이면 뛰어넘는다(넓은 맵에서 컨테이너 등을 넘어 따라옴)
+  const moved = Math.hypot(me.x - (ai.lastX ?? me.x), me.y - (ai.lastY ?? me.y));
+  const wants = Math.hypot(dir[0], dir[1]) > 0.3;
+  ai.stuck = wants && moved < speed * dt * 0.25 ? (ai.stuck ?? 0) + dt : 0;
+  if (ai.stuck > 0.25) { frame.jump = true; ai.stuck = 0; }
+  ai.lastX = me.x; ai.lastY = me.y;
 
   // 무기 전환: 가끔 주무기 ↔ 보조무기. 기관단총이 과열되거나 단검·샷건이 쿨타임이면 바로 주무기로,
   // 쿨타임 중인 보조무기로는 바꾸지 않는다.

@@ -128,7 +128,7 @@ function startMatch() {
   // 건 카타 수련장: P1이 고른 캐릭터로 훈련용 전투 로봇과 끝없이 건 카타
   match = mode === 'training' ? createTrainingMatch(loadout.P1)
     : storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies())
-    : createMatch(mode === 'single' ? singleLoadout() : loadout);
+    : createMatch(mode === 'single' ? singleLoadout() : loadout, Date.now(), { wide: true });
   inputs = createInputs(match.players);
   humans = match.players.filter((p) => !p.ai);
   const aiPlayer = match.players.find((p) => p.ai);

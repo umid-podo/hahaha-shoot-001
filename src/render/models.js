@@ -296,6 +296,71 @@ export function makeChute(height = 180) {
 }
 
 /** 엄폐물(콘크리트 방호벽): 폭 w, 두께 d, 높이 h. 팀 진영 엄폐물은 윗면에 팀 색 띠, 강철 엄폐물은 금속판 */
+/**
+ * 고지대: 올라설 수 있는 높은 단(철골 비계 위 철판 + 한쪽 계단 모양 옆면 + 노랑·검정 가장자리 줄). g는 { w, h(앞뒤 폭), height }.
+ */
+export function makeHigh(g) {
+  if (g.kind === 'container') return makeContainer(g);
+  const out = new THREE.Group();
+  const H = g.height;
+  const steel = mat('#5E6672', { metal: 0.7, rough: 0.4 });
+  const deck = mat('#7C858F', { metal: 0.6, rough: 0.5 });
+  const dark = mat('#2A2E35', { metal: 0.5, rough: 0.6 });
+  // 옆면(콘크리트 블록)과 위 철판
+  out.add(at(box(g.w, H - 6, g.h, mat('#9A948A', { rough: 0.9 })), 0, (H - 6) / 2, 0));
+  out.add(at(box(g.w + 4, 6, g.h + 4, deck), 0, H - 3, 0));
+  // 철판 미끄럼 방지 줄
+  for (let x = -g.w / 2 + 12; x < g.w / 2 - 6; x += 16) out.add(at(box(2, 0.6, g.h - 10, dark), x, H + 0.3, 0));
+  // 가장자리 경고 줄(노랑·검정)
+  const yellow = mat('#FFC53D', { rough: 0.6 }), black = mat('#1A1C20', { rough: 0.6 });
+  for (const [w, d, x, z] of [[g.w + 6, 3, 0, g.h / 2 + 2], [g.w + 6, 3, 0, -g.h / 2 - 2], [3, g.h + 6, g.w / 2 + 2, 0], [3, g.h + 6, -g.w / 2 - 2, 0]]) {
+    const along = w > d;
+    const len = along ? w : d;
+    const n = Math.floor(len / 14);
+    for (let i = 0; i < n; i++) {
+      const seg = box(along ? 14 : 3, 4, along ? 3 : 14, i % 2 ? black : yellow);
+      seg.position.set(along ? -len / 2 + 7 + i * 14 : x, H - 2, along ? z : -len / 2 + 7 + i * 14);
+      out.add(seg);
+    }
+  }
+  // 옆면 철골 기둥·가로대
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) out.add(at(box(6, H, 6, steel), sx * (g.w / 2 - 3), H / 2, sz * (g.h / 2 - 3)));
+  for (const sz of [-1, 1]) out.add(at(box(g.w - 6, 4, 2, steel), 0, H * 0.5, sz * (g.h / 2 + 0.5)));
+  // 오르기 쉬운 쪽 표시: 낮은 받침 계단 두 칸(장식)
+  out.add(at(box(40, H * 0.33, 24, mat('#8A847A', { rough: 0.9 })), -g.w / 2 + 30, H * 0.165, g.h / 2 + 12));
+  out.add(at(box(40, H * 0.66, 12, mat('#8A847A', { rough: 0.9 })), -g.w / 2 + 30, H * 0.33, g.h / 2 + 6));
+  return out;
+}
+
+/** 화물 컨테이너(골판 옆면·문짝 쪽 막대·위 철판). g: { w, h, height, color } — 긴 쪽이 w(가로) 또는 h(세로) */
+export function makeContainer(g) {
+  const out = new THREE.Group();
+  const H = g.height;
+  const body = mat(g.color ?? '#B4472F', { metal: 0.4, rough: 0.55 });
+  const dark = mat('#2A2E35', { metal: 0.6, rough: 0.5 });
+  out.add(at(box(g.w, H, g.h, body), 0, H / 2, 0));
+  // 골판(긴 면을 따라 세로 홈)
+  const long = g.w >= g.h;
+  const L = long ? g.w : g.h, T = long ? g.h : g.w;
+  for (let i = -L / 2 + 8; i < L / 2 - 4; i += 12) {
+    for (const s of [-1, 1]) {
+      const rib = box(long ? 4 : 1.5, H - 10, long ? 1.5 : 4, body);
+      rib.position.set(long ? i : s * (T / 2 + 0.8), H / 2, long ? s * (T / 2 + 0.8) : i);
+      out.add(rib);
+    }
+  }
+  // 모서리 기둥·위 테두리
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) out.add(at(box(5, H + 1, 5, dark), sx * (g.w / 2 - 2), H / 2, sz * (g.h / 2 - 2)));
+  out.add(at(box(g.w + 1, 3, g.h + 1, dark), 0, H - 1, 0));
+  // 문짝 쪽(짧은 면) 잠금 막대
+  for (const s of [-1, 1]) for (const k of [-0.25, 0.25]) {
+    const bar = box(long ? 1.5 : 3, H - 14, long ? 3 : 1.5, mat('#C9CED6', { metal: 0.9, rough: 0.3 }));
+    bar.position.set(long ? s * (g.w / 2 + 1) : k * g.w, H / 2, long ? k * g.h : s * (g.h / 2 + 1));
+    out.add(bar);
+  }
+  return out;
+}
+
 export function makeCover(c, teamColor, h = 100) {
   const g = new THREE.Group();
   const concrete = c.steel ? mat('#7D8A99', { metal: 0.8, rough: 0.3 }) : mat('#8F8A80', { rough: 0.9 });

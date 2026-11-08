@@ -283,13 +283,13 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 .panel-head { color: var(--team); font-size: 14px; font-weight: 700; text-align: center; white-space: nowrap; }
 .actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   width: 100%;
-  max-width: 330px;
+  max-width: 400px;
 }
 /* 무기 선택·아이템 버튼: 누르는 즉시 반응. 든 무기는 팀 색으로 채운다. */
-.weapon-btn, .item-btn {
+.weapon-btn, .item-btn, .jump-btn {
   display: grid;
   place-items: center;
   min-width: 0;
@@ -302,7 +302,8 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
   line-height: 1.15;
   touch-action: none;
 }
-.weapon-btn small, .item-btn small { font-size: 10px; font-weight: 400; opacity: 0.8; }
+.jump-btn { border-color: var(--team); color: var(--team); background: #eef6ff; font-weight: 800; }
+.weapon-btn small, .item-btn small, .jump-btn small { font-size: 10px; font-weight: 400; opacity: 0.8; }
 .weapon-btn span, .item-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weapon-btn[aria-pressed="true"] { background: var(--team); color: #fff; }
 .item-btn { border-style: dashed; background: #fffbea; }
@@ -312,8 +313,8 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 @container (max-width: 230px) {
   .panel-head { font-size: 12px; }
   .actions { grid-template-columns: 1fr; gap: 3px; }
-  .weapon-btn, .item-btn { min-height: 28px; font-size: 12px; }
-  .weapon-btn small, .item-btn small { display: none; }
+  .weapon-btn, .item-btn, .jump-btn { min-height: 28px; font-size: 12px; }
+  .weapon-btn small, .item-btn small, .jump-btn small { display: none; }
 }
 .stick {
   position: relative;

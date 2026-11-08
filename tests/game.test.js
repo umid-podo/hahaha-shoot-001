@@ -8,7 +8,7 @@ import { lookFromDrag, moveFromDrag, moveAxisFromDrag } from '../src/input/point
 import { applyView, toWorld } from '../src/input/view.js';
 import {
   MIN_X, MAX_X, RAIL_Y, TICK, MAX_HP, WEAPONS, JET, COVERS, COVER, ARENA_WIDTH, BODY_RADIUS, CHARACTERS, RULES,
-  PRIMARY_IDS, MUZZLE_OFFSET, ZONE,
+  PRIMARY_IDS, MUZZLE_OFFSET, ZONE, MIN_Y, MAX_Y, JUMP,
 } from '../src/game/config.js';
 import {
   PARAMS, getValue, setValue, resetAll, overrides, applyOverrides, isChanged, summaryText,
@@ -1192,19 +1192,21 @@ test('밸런스 내 기본값: 지금 수치를 내 기본값으로 저장하면
   assert.equal(b.hasCustomDefaults(), false);
 });
 
-test('1인칭 자유 이동: 앞뒤(Y)·좌우(X)로 움직이되 자기 진영(ZONE) 밖·가운데 무인 지대로는 못 감, 대각선은 빨라지지 않음', () => {
+test('1인칭 자유 이동: 앞뒤(Y)·좌우(X)로 상대 진영까지 넘어갈 수 있고(경기장 끝 MIN_Y~MAX_Y까지), 대각선은 빨라지지 않음', () => {
   const { match, inputs, P1, P2 } = playing();
+  match.highs = [];
   P1.x = P1.previousX = 300;
   inputs.P1.moveY = -1;
-  run(match, inputs, 3);
-  assert.equal(P1.y, ZONE.earth.minY, '지구방위팀은 무인 지대 앞에서 멈춤');
+  run(match, inputs, 4);
+  assert.equal(P1.y, MIN_Y, '지구방위팀이 ISB 진영 끝까지');
+  assert.ok(P1.y < ZONE.isb.maxY, '상대 진영 안');
   inputs.P1.moveY = 1;
-  run(match, inputs, 3);
-  assert.equal(P1.y, ZONE.earth.maxY, '뒤쪽 끝');
+  run(match, inputs, 4);
+  assert.equal(P1.y, MAX_Y, '뒤쪽 끝');
   inputs.P2.moveY = 1;
   P2.x = P2.previousX = 300;
-  run(match, inputs, 3);
-  assert.equal(P2.y, ZONE.isb.maxY, 'ISB도 자기 진영까지만');
+  run(match, inputs, 4);
+  assert.equal(P2.y, MAX_Y, 'ISB도 지구방위팀 진영까지');
   const s = playing();
   s.P1.x = s.P1.previousX = 300;
   const x0 = s.P1.x, y0 = s.P1.y;
@@ -1212,6 +1214,80 @@ test('1인칭 자유 이동: 앞뒤(Y)·좌우(X)로 움직이되 자기 진영(
   run(s.match, s.inputs, 0.5);
   const moved = Math.hypot(s.P1.x - x0, s.P1.y - y0);
   assert.ok(Math.abs(moved - s.P1.speed * 0.5) < s.P1.speed * TICK + 1e-6, '대각선도 같은 속도');
+});
+
+test('점프: 뛰어올라 약 120 높이까지 갔다가 내려오고, 공중에선 다시 못 뜀, 엄폐물을 뛰어넘음', () => {
+  const { match, inputs, P1 } = playing();
+  match.highs = [];
+  inputs.P1.jump = true;
+  const ev = step(match, inputs);
+  assert.ok(ev.some((e) => e.type === 'jump' && e.playerId === 'P1'));
+  assert.equal(inputs.P1.jump, false, '한 번 누르면 한 번');
+  let peak = 0;
+  for (let t = 0; t < 1.2; t += TICK) {
+    if (t > 0.1 && t < 0.2) inputs.P1.jump = true; // 공중에서 또 눌러도
+    step(match, inputs);
+    peak = Math.max(peak, P1.z);
+  }
+  const top = JUMP.jump ** 2 / (2 * JUMP.gravity);
+  assert.ok(Math.abs(peak - top) < 12, `최고 높이 ${peak}`);
+  assert.equal(P1.z, 0, '착지');
+  // 엄폐물: 걸어서는 막히고, 뛰면 넘어감
+  const cover = coverById(match, 'earth');
+  P1.x = P1.previousX = cover.x; P1.y = P1.previousY = cover.y + 80;
+  inputs.P1.moveY = -1;
+  run(match, inputs, 0.8);
+  assert.ok(P1.y >= cover.y + cover.h / 2, '걸어서는 막힘');
+  P1.y = P1.previousY = cover.y + 60;
+  inputs.P1.jump = true;
+  run(match, inputs, 0.8);
+  assert.ok(P1.y < cover.y - cover.h / 2, '뛰어서 넘어감');
+});
+
+test('고지대: 걸어서는 못 올라가고 뛰어오르면 올라서며(그 위 바닥이 높아짐), 걸어 나가면 떨어짐', () => {
+  const { match, inputs, P1 } = playing();
+  const g = match.highs.find((h) => h.id === 'high-west');
+  assert.ok(g.height > JUMP.step && g.height < JUMP.jump ** 2 / (2 * JUMP.gravity), '뛰면 닿는 높이');
+  P1.x = P1.previousX = g.x; P1.y = P1.previousY = g.y + g.h / 2 + 40;
+  inputs.P1.moveY = -1;
+  run(match, inputs, 0.6);
+  assert.ok(P1.y >= g.y + g.h / 2 - 1, '옆면에 막힘');
+  assert.equal(P1.z, 0);
+  inputs.P1.jump = true;
+  run(match, inputs, 0.7);
+  assert.ok(P1.y < g.y + g.h / 2, '올라섬');
+  inputs.P1.moveY = 0;
+  run(match, inputs, 0.5);
+  assert.equal(P1.z, g.height, '고지대 위에 서 있음');
+  inputs.P1.moveY = -1;
+  run(match, inputs, 1.2);
+  assert.ok(P1.y < g.y - g.h / 2);
+  assert.equal(P1.z, 0, '반대편으로 걸어 나가면 떨어짐');
+});
+
+test('높이와 탄: 점프로 낮은 탄을 피하고, 고지대에서 쏘면 엄폐물 위로 넘어감', () => {
+  const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'pistol' }, P2: { weapon: 'pistol' } });
+  match.highs = [];
+  // 공중 높이 뜬 P1: 땅에서 쏜 P2의 탄은 밑으로 지나감
+  P1.x = P1.previousX = 300; P2.x = P2.previousX = 300;
+  P1.z = JUMP.hitAbove + 10; P1.vz = 0;
+  const b = spawnProjectile(match, P2, DOWN);
+  b.y = b.previousY = P1.y - 60;
+  P1.vz = 0;
+  const hp = P1.hp;
+  for (let i = 0; i < 12; i++) { P1.z = JUMP.hitAbove + 10; P1.vz = 0; step(match, inputs); }
+  assert.equal(P1.hp, hp, '피함');
+  // 고지대 높이에서 쏜 탄은 엄폐물에 막히지 않음
+  const cover = coverById(match, 'center');
+  const q = playing({ P1: { weapon: 'pistol' } });
+  q.match.highs = [];
+  q.P1.x = q.P1.previousX = cover.x; q.P2.x = q.P2.previousX = cover.x;
+  q.P1.z = 92;
+  const shot = spawnProjectile(q.match, q.P1, UP);
+  q.P1.z = 0; q.P2.z = 0;
+  const ev = run(q.match, q.inputs, 1);
+  assert.ok(!ev.some((e) => e.type === 'block'), '엄폐물 위로');
+  assert.ok(shot.z > JUMP.coverClear);
 });
 
 test('1인칭 자유 이동: 엄폐물은 뚫고 지나가지 못하고, 부서지면 지나감', () => {
@@ -1275,4 +1351,34 @@ test('장전: 쌍권총은 한 발마다 1씩, 장탄 수 0이면 무제한, 무
   s.inputs.P1.aiming = true;
   run(s.match, s.inputs, 0.5);
   assert.equal(s.P1.reload, null, '기관단총은 기본 무제한(과열만)');
+});
+
+test('넓은 맵(2인 대결·자유 대전): 이동 범위가 크게 넓어지고 엄폐물·고지대가 더 있으며, 계단식 탑은 한 칸씩 뛰어 올라감', async () => {
+  const { FIELD, WIDE_HIGHS, WIDE_COVERS } = await import('../src/game/config.js');
+  const match = createMatch(undefined, 1, { wide: true });
+  match.phase = 'playing'; match.jetTimer = Infinity;
+  const inputs = createInputs(match.players);
+  const [P1] = match.players;
+  assert.ok((FIELD.maxX - FIELD.minX) * (FIELD.maxY - FIELD.minY) >= 10 * 1600 * 1000, '원래의 10배 넘는 넓이');
+  assert.equal(match.covers.length, COVERS.length + WIDE_COVERS.length);
+  assert.equal(match.highs.length, 4 + WIDE_HIGHS.length);
+  P1.x = P1.previousX = -1000; P1.y = P1.previousY = 400;
+  inputs.P1.moveAxis = -1;
+  run(match, inputs, 3);
+  assert.equal(P1.x, FIELD.minX, '원래 경기장 밖 멀리까지');
+  // 북쪽 탑: 64 → 128 → 190
+  const t1 = match.highs.find((h) => h.id === 'tower-n-1');
+  P1.x = P1.previousX = t1.x; P1.y = P1.previousY = t1.y + t1.h / 2 + 30; inputs.P1.moveAxis = 0;
+  // 뛰면서 조금씩 앞으로(한 칸 올라설 만큼만)
+  for (let i = 0; i < 4 && P1.z < 190; i++) {
+    inputs.P1.jump = true; inputs.P1.moveY = -1;
+    run(match, inputs, i === 0 ? 0.45 : 0.3);
+    inputs.P1.moveY = 0;
+    run(match, inputs, 0.6);
+  }
+  assert.equal(P1.z, 190, '탑 꼭대기');
+  // 탄은 넓은 맵 끝까지 날아감(원래 경기장 밖에서도 사라지지 않음)
+  const b = spawnProjectile(match, P1, Math.PI);
+  step(match, inputs);
+  assert.ok(match.projectiles.includes(b));
 });
