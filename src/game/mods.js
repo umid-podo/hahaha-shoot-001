@@ -2,6 +2,7 @@
  * 총기 개조(개조 모드). 작업실에서 랜덤 뽑기로 파츠(개머리판·총구·스코프·탄창·총 색깔)를 뽑아 배낭에 모으고,
  * 총마다 하나씩 장착한다. 파츠는 모양만 바꾸고(게임 수치는 그대로) 1인칭 화면의 손에 든 총에도 보인다.
  *
+ * 뽑기는 1번에 1코인. 코인은 스토리 모드에서 스테이지를 깰 때마다 1개씩 바로 들어온다(중간에 그만둬도 이미 받은 코인은 남는다).
  * 파츠 하나는 { id, slot, grade, seed, name }. 디자인(종류·길이·색·무늬·발광 등)은 seed로 그때그때 만들어 낸다(designOf).
  * 같은 seed면 늘 같은 모양이라 저장은 seed만 하면 되고, 뽑을 때마다 새 seed라 디자인이 계속 새로 나온다.
  * 등급이 높을수록 종류가 다양해지고(소음기·드럼 탄창·열상 조준경…) 재질·무늬·금빛·발광 장식이 붙어 더 멋있어진다.
@@ -36,6 +37,8 @@ export const MOD_WEAPONS = {
   crossbow: ['scope', 'skin'],
 };
 export const canMount = (weapon, slot) => !!MOD_WEAPONS[weapon]?.includes(slot);
+/** 뽑기 1번에 드는 코인 */
+export const DRAW_COST = 1;
 
 /** 0~1 난수(시드 고정). mulberry32 */
 export function seededRng(seed) {
@@ -176,10 +179,10 @@ function defaultStorage() {
 
 /**
  * 배낭(뽑은 파츠 목록)과 총별 장착 상태. 바뀔 때마다 저장하고, 구독한 함수(onChange)를 부른다.
- * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws }
+ * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws, coins }
  */
 export function createModStore(storage = defaultStorage()) {
-  let state = { items: [], equips: {}, nextId: 1, draws: 0 };
+  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0 };
   try {
     const saved = JSON.parse(storage.getItem(KEY));
     if (saved && Array.isArray(saved.items)) {
@@ -188,6 +191,7 @@ export function createModStore(storage = defaultStorage()) {
         equips: saved.equips && typeof saved.equips === 'object' ? saved.equips : {},
         nextId: Number.isFinite(saved.nextId) ? saved.nextId : 1,
         draws: Number.isFinite(saved.draws) ? saved.draws : 0,
+        coins: Number.isFinite(saved.coins) && saved.coins > 0 ? Math.floor(saved.coins) : 0,
       };
       state.nextId = Math.max(state.nextId, ...state.items.map((i) => i.id + 1), 1);
     }
@@ -203,11 +207,18 @@ export function createModStore(storage = defaultStorage()) {
   return {
     get items() { return state.items; },
     get draws() { return state.draws; },
+    get coins() { return state.coins; },
+    /** 코인 받기(스테이지 클리어) */
+    addCoins(n = 1) { state.coins += Math.max(0, Math.floor(n)); save(); return state.coins; },
+    /** 지금 코인으로 뽑을 수 있는 횟수까지 */
+    canDraw(count = 1) { return state.coins >= count * DRAW_COST; },
     /** 바뀔 때마다 늘어나는 번호(3D 모델을 다시 만들지 판단) */
     get version() { return version; },
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    /** 뽑기 count번: 뽑은 파츠들을 배낭에 넣고 돌려준다 */
+    /** 뽑기 count번(1번에 1코인): 뽑은 파츠들을 배낭에 넣고 돌려준다. 코인이 모자라면 아무것도 뽑지 않고 [] */
     draw(count = 1, rng = Math.random) {
+      if (!this.canDraw(count)) return [];
+      state.coins -= count * DRAW_COST;
       const got = [];
       for (let n = 0; n < count; n++) {
         const item = { id: state.nextId++, ...rollItem(rng) };

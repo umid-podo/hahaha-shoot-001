@@ -78,7 +78,7 @@ export async function loadAssets() {
     const img = new Image();
     img.src = manifest.pathBase + entry.path;
     try { await img.decode(); } catch { throw new Error(img.src); }
-    assets[entry.id] = { img, anchor: entry.bodyAnchor };
+    assets[entry.id] = { img, anchor: entry.bodyAnchor, hands: entry.hands ?? null }; // hands: 무기 없는 그림의 손 자리(3D 총 쥐는 곳)
   }));
   return assets;
 }

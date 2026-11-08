@@ -789,6 +789,7 @@ export function poseHeldGun(root, p) {
   for (const item of root.userData.items) {
     const side = item.userData.side;
     item.position.set(0, anim.y * 0.6, side * (PAIRED.has(weapon) ? 9 : 0));
+    item.userData.poseY = anim.y * 0.6;
     item.rotation.set(anim.roll * side, 0, anim.pitch * 1.4 + (rl !== null && !PAIRED.has(weapon) && weapon !== 'rpg' ? -0.35 * e : 0));
     applyReload(item, weapon, rl, p);
   }

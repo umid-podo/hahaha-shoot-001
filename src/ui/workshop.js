@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { WEAPONS } from '../game/config.js';
-import { GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, canMount, modStore } from '../game/mods.js';
+import { GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, canMount, modStore } from '../game/mods.js';
 import { buildShowcase, environmentMap } from '../render/guns.js';
 import { makePartPreview } from '../render/parts.js';
 
@@ -339,10 +339,12 @@ export function createWorkshop({ show, onClose }) {
       const actions = el('div', 'mod-item-actions');
       const on = store.isEquipped(weapon, item.id);
       const fits = canMount(weapon, item.slot);
-      const equip = el('button', 'small primary', on ? '장착됨 ✓' : fits ? '장착' : '이 총엔 못 붙임');
+      // 장착한 파츠는 '장착 해제'(누르면 기본 부품으로 돌아감)
+      const equip = el('button', on ? 'small unequip' : 'small primary', on ? '장착 해제' : fits ? '장착' : '이 총엔 못 붙임');
       equip.type = 'button';
-      equip.disabled = on || !fits;
-      equip.addEventListener('click', () => { store.equip(weapon, item.id); });
+      equip.disabled = !on && !fits;
+      equip.setAttribute('aria-label', `${item.name} ${on ? '장착 해제' : '장착'}`);
+      equip.addEventListener('click', () => { if (on) store.unequip(weapon, item.slot); else store.equip(weapon, item.id); });
       const scrap = el('button', 'small', '분해');
       scrap.type = 'button';
       scrap.addEventListener('click', () => {
@@ -356,8 +358,17 @@ export function createWorkshop({ show, onClose }) {
       return card;
     }));
   }
-  function renderAll() { renderWeapons(); renderSlots(); renderFilter(); renderBag(); }
-  store.onChange(() => { if (running) { renderSlots(); renderBag(); } });
+  /** 가진 코인과 뽑기 버튼(코인이 모자라면 못 누름) */
+  function renderCoins() {
+    $('#mod-coins').textContent = `🪙 코인 ${store.coins}개`;
+    $('#mod-draw-btn').disabled = !store.canDraw(1);
+    $('#mod-draw10-btn').disabled = !store.canDraw(10);
+    $('#mod-coin-hint').textContent = store.coins < DRAW_COST
+      ? '코인이 없어요. 스토리 모드에서 스테이지를 깰 때마다 코인 1개를 받아요(중간에 그만둬도 받은 코인은 남아요).'
+      : `뽑기 1번에 ${DRAW_COST}코인. 코인은 스토리 모드 스테이지를 깰 때마다 1개씩 받아요.`;
+  }
+  function renderAll() { renderCoins(); renderWeapons(); renderSlots(); renderFilter(); renderBag(); }
+  store.onChange(() => { if (running) { renderCoins(); renderSlots(); renderBag(); } });
 
   /** 뽑은 결과 카드(가장 좋은 등급부터) */
   function reveal(items) {
@@ -379,6 +390,7 @@ export function createWorkshop({ show, onClose }) {
   }
   function draw(count) {
     const items = store.draw(count);
+    if (!items.length) { renderCoins(); return; }
     if (three) playDraw(items);
     reveal(items);
   }

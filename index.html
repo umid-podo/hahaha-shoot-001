@@ -17,6 +17,7 @@
       <!-- 건 카타(스토리 모드에서 요원을 쓰러뜨릴 때마다) 동안에만 보이는 1·2·3·4 버튼 -->
       <div id="kata-keys" role="group" aria-label="건 카타 버튼"></div>
     </div>
+    <p id="coin-toast" class="coin-toast" hidden></p>
     <p id="live" class="sr-only" aria-live="polite"></p>
   </main>
 
@@ -44,7 +45,7 @@
         <button id="single-btn" class="primary" type="button" disabled>싱글 플레이 (vs AI · 스토리)</button>
         <button id="setup-btn" class="primary" type="button" disabled>2인 대결</button>
         <button id="training-btn" type="button" disabled>건 카타 수련장</button>
-        <button id="mod-btn" type="button">총기 개조</button>
+        <button id="mod-btn" type="button">총기 개조 <span class="coin-badge" id="menu-coins"></span></button>
         <button id="balance-btn" type="button">밸런스 조정</button>
       </div>
       <div class="row continue-row">
@@ -210,6 +211,7 @@
     <div class="card mod-card">
       <div class="mod-head">
         <h2 tabindex="-1">총기 개조 작업실</h2>
+        <span class="coin-count" id="mod-coins" aria-live="polite"></span>
         <button class="mod-close-btn" type="button" data-pad-cancel>메인 메뉴</button>
       </div>
       <div class="mod-grid">
@@ -222,9 +224,10 @@
         </div>
         <div class="mod-side">
           <div class="mod-gacha">
-            <button id="mod-draw-btn" class="primary" type="button">랜덤 뽑기</button>
-            <button id="mod-draw10-btn" type="button">10연속 뽑기</button>
+            <button id="mod-draw-btn" class="primary" type="button">랜덤 뽑기 (1코인)</button>
+            <button id="mod-draw10-btn" type="button">10연속 뽑기 (10코인)</button>
             <p id="mod-odds" class="hint"></p>
+            <p id="mod-coin-hint" class="hint"></p>
           </div>
           <h3><span id="mod-weapon-name"></span> 장착 파츠</h3>
           <ul id="mod-slots" class="mod-slots"></ul>

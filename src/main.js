@@ -14,6 +14,7 @@ import { blockBrowserGestures } from './input/gestures.js';
 import { loadAssets, createRenderer } from './render/canvas.js';
 import { createWorld3D } from './render/world3d.js';
 import { createScreens } from './ui/screens.js';
+import { modStore } from './game/mods.js';
 import { unlock, setMuted, playEvents, updateEngine, updateBattleMusic, restartMusic } from './audio/synth.js';
 import {
   loadSettings, saveSettings, loadBalance, saveBalance, loadBalanceDefaults, saveBalanceDefaults, loadSingle, saveSingle, loadStory, saveStory,
@@ -43,6 +44,16 @@ let match = null;
 let inputs = null;
 let controls = null;
 let renderer = null;
+/** 경기 화면 위에 잠깐 뜨는 코인 알림 */
+function coinToast(text) {
+  const el = document.querySelector('#coin-toast');
+  el.textContent = `🪙 ${text}`;
+  el.hidden = false;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(coinToast.timer);
+  coinToast.timer = setTimeout(() => { el.hidden = true; }, 3200);
+  screens.announce(text);
+}
 const worldCanvas = document.querySelector('#world');
 // 1인칭 3D 화면(three.js). renderer(2D 캔버스)는 그 위에 HUD·자막·건 카타를 그린다.
 let world = null;
@@ -330,6 +341,11 @@ function frame(now) {
       for (const e of events) {
         if (e.type === 'wave') {
           screens.announce(`${waveLabel(e.wave)} 시작`);
+        }
+        // 스토리 스테이지를 깰 때마다 1코인(바로 저장되므로 중간에 그만둬도 남는다). 마지막 대교는 승리할 때
+        if (match.story && (e.type === 'stage' || (e.type === 'result' && e.winner === 'earth'))) {
+          const coins = modStore().addCoins(1);
+          coinToast(`스테이지 클리어! 코인 +1 (가진 코인 ${coins})`);
         }
         if (e.type === 'wave-clear') screens.announce(`${waveLabel(e.wave)} 클리어`);
         if (e.type === 'stage') {
