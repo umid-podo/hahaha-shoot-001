@@ -80,7 +80,7 @@ export const WEAPONS = {
     battery: { shots: 15, recharge: 2 },
   },
   // 보조무기
-  smg: { id: 'smg', name: '기관단총', interval: 0.1, damage: 4, speed: 800, burst: 1, heat: { max: 4, cooldown: 2, decay: 1 } },
+  smg: { id: 'smg', name: '기관단총', interval: 0.02, damage: 4, speed: 800, burst: 1, heat: { max: 1, cooldown: 2, decay: 1 } },
   // 단검: 조준한 뒤 떼면 조준 방향으로 매우 빠르게 돌진해, 상대 몸에 닿으면 큰 피해. 돌진 뒤 자기 레일로 돌아온다.
   dagger: {
     id: 'dagger', name: '단검', interval: 10, damage: 100, burst: 1, trigger: 'release', ownCooldown: true,
@@ -93,14 +93,14 @@ export const WEAPONS = {
   },
   // 수류탄(아이템): 아이템 버튼으로 지금 조준 방향에 바로 던진다. interval은 던진 뒤의 쿨타임
   grenade: {
-    id: 'grenade', name: '수류탄', interval: 20, damage: 0, speed: 700, burst: 1, thrown: true,
+    id: 'grenade', name: '수류탄', interval: 10, damage: 0, speed: 700, burst: 1, thrown: true,
     splash: { damage: 50, radius: 240 },
   },
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
   // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)
   lightning: { id: 'lightning', name: '라이트닝 기관포', interval: 0.16, damage: 9, speed: 1300, burst: 1, arrows: 2, arrowGap: 30 },
-  // 과냉각(공중전 보조무기): 누르면 active초 동안 주무기 연사 간격이 rate배로 짧아지고 한 발 피해는 boost.damage(1)가 된다. interval은 다시 쓸 때까지의 쿨타임
-  overcool: { id: 'overcool', name: '과냉각', interval: 15, damage: 0, burst: 1, ownCooldown: true, boost: { active: 5, rate: 0.3, damage: 1 } },
+  // 과냉각(공중전 보조무기): 누르면 active초 동안 주무기 연사 간격이 rate배로 짧아지고 한 발 피해는 boost.damage(3)가 된다. interval은 다시 쓸 때까지의 쿨타임
+  overcool: { id: 'overcool', name: '과냉각', interval: 15, damage: 0, burst: 1, ownCooldown: true, boost: { active: 5, rate: 0.3, damage: 3 } },
   // 미사일(공중전 아이템): 아이템 버튼으로 쏘는 미사일(유도 없음)
   missile: {
     id: 'missile', name: '미사일', interval: 6, damage: 60, speed: 950, burst: 1,
@@ -150,7 +150,7 @@ export const SLOT_NAME = { primary: '주무기', secondary: '보조무기' };
  * maxHp·radius·speed는 밸런스 메뉴에서 캐릭터별로 조정한다.
  */
 export const CHARACTERS = [
-  { id: 'earth-arrow', name: '온이름', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED },
+  { id: 'earth-arrow', name: '온이름', maxHp: 1000, radius: BODY_RADIUS, speed: MAX_SPEED },
   { id: 'earth-pizza', name: '피자럭스', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED },
   // 지구방위팀 요원들(사용자가 준 캐릭터 소개 그림). 키 큰 전신 그림이라 조금 크게 그린다.
   { id: 'codename-x', name: '코드네임 X', pictured: 'rifle', maxHp: MAX_HP, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2 },
@@ -170,7 +170,7 @@ export const CHARACTERS = [
   },
   // 스토리 모드 5스테이지(대교)의 보스: 저격총을 든 존슨 요원(빨간 조준선 3발·체력 절반 아래면 5발). 그림은 요원 1에 저격총을 덧그린다.
   {
-    id: 'johnson', name: '존슨 요원', hidden: true, weapon: 'jsniper', maxHp: 900, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2,
+    id: 'johnson', name: '존슨 요원', hidden: true, weapon: 'jsniper', maxHp: 800, radius: BODY_RADIUS, speed: MAX_SPEED, scale: 1.2,
     image: 'assets/characters/isb-agent-1.png',
   },
   // 건 카타 수련장의 상대: 훈련용 전투 로봇(선택 화면에는 나오지 않음)
@@ -231,8 +231,8 @@ export const TANK = {
   delay: [6, 12],
   length: 300,
   missile: {
-    interval: 1.4, damage: 25, speed: 720, offset: 70,
-    splash: { damage: 10, radius: 130 },
+    interval: 1.4, damage: 5, speed: 720, offset: 70,
+    splash: { damage: 2, radius: 130 },
   },
 };
 
@@ -241,12 +241,12 @@ export const TANK = {
  * gap: 한 공격이 끝나고 다음 공격까지 쉬는 시간 [최소, 최대](초, 그 사이에서 무작위), damage: 못 막았을 때 깎이는 체력.
  * 밸런스 조정의 '건 카타' 칸에서 바꾼다.
  */
-export const KATA = { warn: 0.5, gap: [0.55, 1.1], damage: 100 };
+export const KATA = { warn: 1.5, gap: [0.55, 0.55], damage: 100 };
 
 /**
  * 배: 스토리 5스테이지(대교)에서 전투기 대신 나온다. 다리 가운데가 벌어지면(openTime초 동안 열림) 그 틈의 강을 따라 가로로 지나가며,
  * 화면 안에 있는 동안 missile.interval마다 위(ISB)·아래(지구방위) 양쪽으로 대포를 한 발씩 쏜다(전투기 미사일과 같은 규칙).
- * 대포알은 맞으면(명중) damage(20), 폭발 범위에 닿으면 splash.damage(8). 배가 지나가면 다리가 다시 닫힌다.
+ * 대포알은 맞으면(명중) damage(5), 폭발 범위에 닿으면 splash.damage(2). 배가 지나가면 다리가 다시 닫힌다.
  */
 export const SHIP = {
   y: ARENA_HEIGHT / 2,
@@ -256,8 +256,8 @@ export const SHIP = {
   length: 460,
   openTime: 1.5,
   missile: {
-    interval: 1.2, damage: 20, speed: 700, offset: 70,
-    splash: { damage: 8, radius: 120 },
+    interval: 1.2, damage: 5, speed: 700, offset: 70,
+    splash: { damage: 2, radius: 120 },
   },
 };
 
@@ -295,8 +295,8 @@ export const STEEL_SPOTS = {
  * 포탄은 엄폐물에 막히고, 맞으면 damage, 폭발 범위(splash)에 닿으면 splash.damage. ISB팀(요원)은 맞지 않는다.
  */
 export const TURRET = {
-  firstDelay: 4, burst: 5, rest: 10, interval: 1, damage: 25, speed: 620,
-  splash: { damage: 10, radius: 100 },
+  firstDelay: 4, burst: 5, rest: 10, interval: 1, damage: 5, speed: 620,
+  splash: { damage: 2, radius: 100 },
 };
 export const TURRETS = [
   { id: 'turret-left', x: 46, y: 340, dir: 1 },

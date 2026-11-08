@@ -262,7 +262,7 @@ test('전투기는 하늘 높이 날아 양 팀 총알·레이저를 막지 않�
   const events = run(match, inputs, 2);
   assert.equal(events.filter((e) => e.type === 'block').length, 0, '막힘 없음');
   assert.equal(P2.hp, MAX_HP - WEAPONS.pistol.damage);
-  assert.equal(P1.hp, MAX_HP - WEAPONS.pistol.damage);
+  assert.equal(P1.hp, P1.maxHp - WEAPONS.pistol.damage);
 
   const d = playing({ P1: { characterId: 'r10' } });
   d.match.jet = { x: 300, previousX: 300, y: JET.y, dir: 1, fireTimer: Infinity };
@@ -328,7 +328,7 @@ test('엄폐물: 가운데 1개 + 팀마다 1개, 모든 탄을 막고 RPG는 �
     const down = spawnProjectile(match, P2, DOWN);
     const events = run(match, inputs, 1);
     assert.ok(!match.projectiles.includes(up) && !match.projectiles.includes(down), cover.id);
-    assert.equal(P1.hp, MAX_HP, cover.id);
+    assert.equal(P1.hp, P1.maxHp, cover.id);
     assert.equal(P2.hp, MAX_HP, cover.id);
     assert.ok(events.filter((e) => e.type === 'block').length >= 2, cover.id);
     assert.ok(events.some((e) => e.type === 'explode'), cover.id);
@@ -356,7 +356,7 @@ test('전투기는 1초마다 위·아래 양쪽으로 20 피해 미사일을 �
   const hits = events.filter((e) => e.type === 'hit' && e.team === 'jet');
   assert.ok(hits.some((e) => e.victimId === 'P1') && hits.some((e) => e.victimId === 'P2'), '위·아래 모두');
   assert.ok(hits.every((e) => e.damage === JET.missile.damage && e.damage === 20));
-  assert.equal(P1.hp, MAX_HP - 20 * volleys);
+  assert.equal(P1.hp, P1.maxHp - 20 * volleys);
   assert.equal(P2.hp, MAX_HP - 20 * volleys);
 });
 
@@ -462,7 +462,7 @@ test('전투기 미사일은 진영마다 가장 가까운 플레이어가 있�
   events.push(...run(match, inputs, 1));
   assert.ok(Math.abs(Math.atan2(up.vy, up.vx) - heading) < 1e-9, '휘지 않음');
   assert.equal(P2.hp, MAX_HP - JET.missile.splash.damage, '직격 없이 폭발 피해');
-  assert.equal(P1.hp, MAX_HP);
+  assert.equal(P1.hp, P1.maxHp);
   const booms = events.filter((e) => e.type === 'explode');
   assert.equal(booms.length, 2);
   assert.ok(booms.some((e) => Math.hypot(e.x - spot.x, e.y - spot.y) < 1e-6), 'P2가 있던 자리에서 터짐');
@@ -594,7 +594,7 @@ test('저격총을 고른 플레이어마다 그 팀 진영에 강철 엄폐물:
   assert.equal(events.filter((e) => e.type === 'block').length, 2);
   assert.ok(!events.some((e) => e.type === 'cover-hit' || e.type === 'cover-break'));
   assert.equal(steel[0].hp, Infinity);
-  assert.equal(P1.hp, MAX_HP, '적 저격탄은 강철에 막힘');
+  assert.equal(P1.hp, P1.maxHp, '적 저격탄은 강철에 막힘');
 
   const both = createMatch({ P1: { weapon: 'sniper' }, P2: { weapon: 'sniper' } });
   assert.deepEqual(both.covers.filter((c) => c.steel).map((c) => c.team), ['earth', 'isb'], '둘 다 고르면 각 진영에 하나씩');
@@ -637,7 +637,7 @@ test('무기 선택 버튼: 누른 칸으로 바로 전환, 이미 든 칸이면
   assert.ok(P1.cooldown > 0, '전환 직후 대기');
 });
 
-test('기관단총: 한 발 4, 4초 연사하면 과열되어 2초 쉬고, 쉬는 동안엔 식음', () => {
+test('기관단총: 한 발 4, 0.02초 간격으로 1초 연사하면 과열되어 2초 쉬고, 쉬는 동안엔 식음', () => {
   assert.equal(WEAPONS.smg.damage, 4);
   const { match, inputs, P1, P2 } = playing();
   P1.slot = 'secondary'; P1.weapon = 'smg';
@@ -648,21 +648,21 @@ test('기관단총: 한 발 4, 4초 연사하면 과열되어 2초 쉬고, 쉬�
   const g = playing();
   g.P1.slot = 'secondary'; g.P1.weapon = 'smg';
   g.inputs.P1.aiming = true;
-  const firstFour = run(g.match, g.inputs, 4);
-  assert.equal(shots(firstFour, 'P1'), 40, '0.1초 간격으로 4초 = 40발');
+  const firstFour = run(g.match, g.inputs, WEAPONS.smg.heat.max);
+  assert.ok(Math.abs(shots(firstFour, 'P1') - WEAPONS.smg.heat.max / WEAPONS.smg.interval) <= 1, '과열까지 연사 시간 ÷ 발사 간격');
   assert.ok(firstFour.some((e) => e.type === 'overheat' && e.playerId === 'P1'));
   assert.equal(shots(run(g.match, g.inputs, 1.9), 'P1'), 0, '과열 2초 동안 발사 없음');
   assert.ok(shots(run(g.match, g.inputs, 0.3), 'P1') >= 1, '2초 뒤 다시 발사');
 
   const c = playing();
   c.P1.slot = 'secondary'; c.P1.weapon = 'smg';
-  c.inputs.P1.aiming = true; run(c.match, c.inputs, 3);
-  c.inputs.P1.aiming = false; run(c.match, c.inputs, 2);
+  c.inputs.P1.aiming = true; run(c.match, c.inputs, 0.75);
+  c.inputs.P1.aiming = false; run(c.match, c.inputs, 0.5);
   c.inputs.P1.aiming = true;
-  assert.ok(!run(c.match, c.inputs, 2).some((e) => e.type === 'overheat'), '쉬면 식어서 바로 과열되지 않음');
+  assert.ok(!run(c.match, c.inputs, 0.5).some((e) => e.type === 'overheat'), '쉬면 식어서 바로 과열되지 않음');
 });
 
-test('수류탄(아이템): 버튼을 누르면 든 무기와 상관없이 조준 방향으로 던지고, 엄폐물을 넘어 던지는 거리(600)에서 터져 반경 240 안 적에게 50, 20초 쿨타임', () => {
+test('수류탄(아이템): 버튼을 누르면 든 무기와 상관없이 조준 방향으로 던지고, 엄폐물을 넘어 던지는 거리(600)에서 터져 반경 240 안 적에게 50, 10초 쿨타임', () => {
   assert.equal(WEAPONS.grenade.splash.radius, WEAPONS.rpg.splash.radius * 2);
   const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'rifle' } });
   const cover = coverById(match, 'center');
@@ -680,9 +680,9 @@ test('수류탄(아이템): 버튼을 누르면 든 무기와 상관없이 조�
 
   inputs.P1.item = true;
   assert.equal(shots(step(match, inputs), 'P1'), 0, '쿨타임 중엔 못 던짐');
-  run(match, inputs, 18);
+  run(match, inputs, 8);
   inputs.P1.item = true;
-  assert.equal(shots(step(match, inputs), 'P1'), 1, '20초 뒤 다시 던짐');
+  assert.equal(shots(step(match, inputs), 'P1'), 1, '10초 뒤 다시 던짐');
 
   const drone = playing({ P1: { characterId: 'r10' } });
   drone.inputs.P1.item = true;
