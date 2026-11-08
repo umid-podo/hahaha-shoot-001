@@ -1,5 +1,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { WEAPONS } from '../game/config.js';
+import { modStore } from '../game/mods.js';
+import { applyMods } from './parts.js';
 
 /** 그 무기의 장탄 수(없거나 0이면 무제한) */
 const WEAPON_MAG = (id) => (WEAPONS[id]?.mag > 0 ? WEAPONS[id].mag : Infinity);
@@ -25,15 +27,18 @@ function mat(color, { metal = 0.2, rough = 0.6, emissive = null, intensity = 1 }
   }
   return cache.get(key);
 }
-const STEEL = () => mat('#2A2C31', { metal: 0.85, rough: 0.38 });
-const BLUED = () => mat('#1A1C20', { metal: 0.8, rough: 0.45 });
-const POLY = () => mat('#1E1F23', { metal: 0.1, rough: 0.78 });
-const POLY2 = () => mat('#2D2F34', { metal: 0.1, rough: 0.7 });
+/** 재질의 역할: 'metal'(쇠 부분)·'furniture'(손잡이·개머리판 같은 몸통). 총 색깔 파츠가 이 역할대로 색을 바꾼다 */
+const role = (m, r) => { m.userData.role = r; return m; };
+const STEEL = () => role(mat('#2A2C31', { metal: 0.85, rough: 0.38 }), 'metal');
+const BLUED = () => role(mat('#1A1C20', { metal: 0.8, rough: 0.45 }), 'metal');
+const POLY = () => role(mat('#1E1F23', { metal: 0.1, rough: 0.78 }), 'furniture');
+const POLY2 = () => role(mat('#2D2F34', { metal: 0.1, rough: 0.7 }), 'furniture');
+const MAGMAT = () => role(mat('#2E3035', { metal: 0.5, rough: 0.5 }), 'metal');
 const BLACK = () => mat('#060708', { metal: 0.2, rough: 0.9 });
-const STAINLESS = () => mat('#B8BCC4', { metal: 0.95, rough: 0.22 });
-const WOOD = () => mat('#7A4724', { metal: 0, rough: 0.55 });
-const WOOD_DARK = () => mat('#4E2C15', { metal: 0, rough: 0.6 });
-const OLIVE = () => mat('#5B6440', { metal: 0.05, rough: 0.7 });
+const STAINLESS = () => role(mat('#B8BCC4', { metal: 0.95, rough: 0.22 }), 'metal');
+const WOOD = () => role(mat('#7A4724', { metal: 0, rough: 0.55 }), 'furniture');
+const WOOD_DARK = () => role(mat('#4E2C15', { metal: 0, rough: 0.6 }), 'furniture');
+const OLIVE = () => role(mat('#5B6440', { metal: 0.05, rough: 0.7 }), 'furniture');
 const BRASS = () => mat('#C9A34B', { metal: 1, rough: 0.28 });
 const COPPER = () => mat('#C06E3C', { metal: 1, rough: 0.3 });
 const SKIN = () => mat('#E9BC97', { metal: 0, rough: 0.68 });
@@ -89,6 +94,9 @@ function magazine(g, parts, dir, base) {
   const v = new THREE.Vector2(dir[0], dir[1]).normalize();
   return { obj: m, dir: [v.x, v.y], base };
 }
+
+/** g 안의 묶음(개조할 때 통째로 숨기거나 바꾸는 부분: 기본 조준경·개머리판) */
+function sub(g) { const m = new THREE.Group(); g.add(m); return m; }
 
 // ── 손 ──
 /**
@@ -190,7 +198,7 @@ function pistolModel({ twoTone = false } = {}) {
   g.add(slab(frame, 2.8, POLY(), { bevel: 0.3, holes: [guard] }));
   // 탄창: 손잡이 안의 몸통(평소엔 손잡이에 가려 안 보임) + 바닥판
   const mag = magazine(g, [
-    slab([[-3.7, -3.2], [-8.7, -3.2], [-9.2, -13.0], [-4.0, -13.0]], 2.2, mat('#2E3035', { metal: 0.5, rough: 0.5 }), { bevel: 0.1 }),
+    slab([[-3.7, -3.2], [-8.7, -3.2], [-9.2, -13.0], [-4.0, -13.0]], 2.2, MAGMAT(), { bevel: 0.1 }),
     box(5.9, 0.55, 2.9, POLY2(), -6.5, -13.4),
   ], [-0.2, -1], [-6.5, -13.7]);
   const trigger = box(0.35, 1.5, 0.45, BLACK(), 1.5, -2.9);
@@ -198,7 +206,11 @@ function pistolModel({ twoTone = false } = {}) {
   g.add(trigger);
   // 손잡이 미끄럼 방지 무늬(오른쪽 면)
   for (let y = -11.5; y < -4.5; y += 1.1) g.add(box(4.2, 0.12, 0.05, BLACK(), -6.4 + (y + 8) * 0.14, y, 1.42));
-  g.userData = { muzzle: [8.8, 0, 0], grip: { x: -6.3, y: -7.4, tilt: 0.2, w: 2.8, d: 5.4 }, mag, pivot: [1.4, -3.0] };
+  mag.hideOnMod = [mag.obj.children[1]]; // 개조 탄창은 바닥판 자리에 붙는다(손잡이 안 탄창 몸통은 그대로)
+  g.userData = {
+    muzzle: [8.8, 0, 0], grip: { x: -6.3, y: -7.4, tilt: 0.2, w: 2.8, d: 5.4 }, mag, pivot: [1.4, -3.0],
+    mods: { size: 0.55, bore: 0.55, scope: [-3.4, 1.6], magFit: { top: [-6.5, -13.6], w: 5.4, len: 3.6, depth: 2.7, curve: 0, pistol: true } },
+  };
   return g;
 }
 
@@ -210,18 +222,19 @@ function rifleModel() {
   g.add(box(5.2, 1.6, 0.06, BLUED(), -5.5, 0.2, 1.53)); // 배출구 덮개
   g.add(tube(0.55, 0.55, -11.8, -10.4, STEEL(), { y: 1.0, z: 1.9 })); // 전진기
   g.add(box(2.6, 0.7, 3.6, BLUED(), -14.6, 1.6)); // 장전 손잡이
-  // 도트 조준경
-  g.add(box(4.0, 1.4, 2.2, BLUED(), -4, 3.3));
-  g.add(tube(2.0, 2.0, -7.2, -0.6, BLUED(), { y: 5.3 }));
-  g.add(tube(2.15, 2.15, -1.0, 0.2, BLUED(), { y: 5.3 }));
+  // 도트 조준경(개조 스코프를 달면 숨김)
+  const sight = sub(g);
+  sight.add(box(4.0, 1.4, 2.2, BLUED(), -4, 3.3));
+  sight.add(tube(2.0, 2.0, -7.2, -0.6, BLUED(), { y: 5.3 }));
+  sight.add(tube(2.15, 2.15, -1.0, 0.2, BLUED(), { y: 5.3 }));
   const lens = new THREE.Mesh(new THREE.CircleGeometry(1.7, 20), mat('#1C2A3A', { metal: 0.9, rough: 0.05 }));
   lens.rotation.y = -Math.PI / 2;
   lens.position.set(-7.25, 5.3, 0);
   const dot = new THREE.Mesh(new THREE.CircleGeometry(0.16, 10), new THREE.MeshBasicMaterial({ color: '#FF2030' }));
   dot.rotation.y = -Math.PI / 2;
   dot.position.set(-7.3, 5.3, 0);
-  g.add(lens, dot);
-  g.add(tube(0.9, 0.9, -4.6, -3.4, BLUED(), { y: 7.4, seg: 12 }));
+  sight.add(lens, dot);
+  sight.add(tube(0.9, 0.9, -4.6, -3.4, BLUED(), { y: 7.4, seg: 12 }));
   // 총열 덮개(팔각) · 델타 링
   const hg = tube(2.2, 2.2, 6.6, 22, POLY(), { seg: 8 });
   hg.rotation.x = Math.PI / 8;
@@ -245,7 +258,7 @@ function rifleModel() {
   g.add(slab([[-14, -1.6], [4, -1.6], [4, -3.2], [-1, -3.6], [-14, -3.4]], 2.8, STEEL(), { bevel: 0.25 }));
   g.add(slab([[-4.6, -1.6], [2.6, -1.6], [2.7, -5.8], [-4.5, -5.8]], 3.1, STEEL(), { bevel: 0.25 }));
   const mag = magazine(g, [
-    slab([[-4.2, -5.4], [2.3, -5.4], [3.7, -13.8], [4.6, -19.6], [-1.4, -20.4], [-2.5, -14.2]], 2.4, mat('#2E3035', { metal: 0.5, rough: 0.5 }), { bevel: 0.25 }),
+    slab([[-4.2, -5.4], [2.3, -5.4], [3.7, -13.8], [4.6, -19.6], [-1.4, -20.4], [-2.5, -14.2]], 2.4, MAGMAT(), { bevel: 0.25 }),
     slab([[4.6, -19.6], [5.0, -20.6], [-1.6, -21.4], [-1.4, -20.4]], 2.8, POLY(), { bevel: 0.2 }),
   ], [0.15, -1], [1.6, -21.4]);
   // 방아쇠울 · 방아쇠 · 손잡이
@@ -257,9 +270,14 @@ function rifleModel() {
   g.add(slab([[-12.4, -3.0], [-8.6, -3.0], [-10.8, -13.6], [-15.0, -13.2]], 3.0, POLY(), { bevel: 0.45 }));
   // 완충 튜브 · 개머리판 · 고무 받침
   g.add(tube(1.5, 1.5, -28, -14, BLUED(), { y: -0.2 }));
-  g.add(slab([[-38, 2.2], [-27, 1.6], [-26, -2.6], [-27.5, -6.2], [-38, -9.6], [-39, -9.6], [-39, 2.2]], 3.8, POLY(), { bevel: 0.35 }));
-  g.add(box(0.9, 12, 4.0, BLACK(), -39.4, -3.6));
-  g.userData = { muzzle: [40.3, 0, 0], grip: { x: -12.1, y: -8.3, tilt: 0.2, w: 3.0, d: 4.0 }, support: { x: 14.5, r: 2.2 }, mag };
+  const stock = sub(g);
+  stock.add(slab([[-38, 2.2], [-27, 1.6], [-26, -2.6], [-27.5, -6.2], [-38, -9.6], [-39, -9.6], [-39, 2.2]], 3.8, POLY(), { bevel: 0.35 }));
+  stock.add(box(0.9, 12, 4.0, BLACK(), -39.4, -3.6));
+  g.userData = {
+    muzzle: [40.3, 0, 0], grip: { x: -12.1, y: -8.3, tilt: 0.2, w: 3.0, d: 4.0 }, support: { x: 14.5, r: 2.2 }, mag,
+    mods: { size: 1, bore: 0.95, scope: [-4, 2.7], sight, stock, stockAt: [-27, -0.2], stockFit: { len: 12, top: 2.4, bottom: -9.4 },
+      magFit: { top: [-0.9, -5.4], w: 6.4, len: 15, depth: 2.4, curve: 0.25 } },
+  };
   return g;
 }
 
@@ -284,7 +302,7 @@ function smgModel() {
   g.add(drum);
   // 곡선 탄창
   const mag = magazine(g, [
-    slab([[1.2, -2.0], [4.8, -2.0], [6.8, -9], [9.8, -15.4], [6.8, -16.6], [3.6, -9.6]], 2.1, mat('#2E3035', { metal: 0.5, rough: 0.5 }), { bevel: 0.2 }),
+    slab([[1.2, -2.0], [4.8, -2.0], [6.8, -9], [9.8, -15.4], [6.8, -16.6], [3.6, -9.6]], 2.1, MAGMAT(), { bevel: 0.2 }),
   ], [0.4, -1], [8.3, -16.4]);
   g.add(slab([[-10, -2], [-1, -2], [-1.5, -5.6], [-4.6, -5.8], [-7.4, -14], [-11.6, -13.4], [-10.6, -5.0], [-11.5, -2]], 3.0, POLY(), {
     bevel: 0.35, holes: [[[-2.1, -2.6], [-2.3, -4.9], [-4.9, -5.0], [-5.1, -2.6]]],
@@ -292,9 +310,14 @@ function smgModel() {
   const trig = box(0.35, 1.5, 0.4, BLACK(), -3.4, -3.6);
   trig.rotation.z = 0.25;
   g.add(trig);
-  for (const z of [-1.3, 1.3]) g.add(tube(0.45, 0.45, -30, -15.6, STEEL(), { z, y: -0.6, seg: 10 }));
-  g.add(slab([[-31, 3.0], [-29.6, 3.0], [-29.6, -7.0], [-31, -7.0]], 4.6, POLY(), { bevel: 0.4 }));
-  g.userData = { muzzle: [21.2, 0, 0], grip: { x: -8.8, y: -8.8, tilt: 0.3, w: 3.0, d: 4.0 }, support: { x: 12.5, r: 2.4 }, mag };
+  const stock = sub(g);
+  for (const z of [-1.3, 1.3]) stock.add(tube(0.45, 0.45, -30, -15.6, STEEL(), { z, y: -0.6, seg: 10 }));
+  stock.add(slab([[-31, 3.0], [-29.6, 3.0], [-29.6, -7.0], [-31, -7.0]], 4.6, POLY(), { bevel: 0.4 }));
+  g.userData = {
+    muzzle: [21.2, 0, 0], grip: { x: -8.8, y: -8.8, tilt: 0.3, w: 3.0, d: 4.0 }, support: { x: 12.5, r: 2.4 }, mag,
+    mods: { size: 0.85, bore: 0.7, scope: [-6, 2.15], stock, stockAt: [-16, -0.4], stockFit: { len: 14, top: 2.6, bottom: -7.4 },
+      magFit: { top: [3, -2.0], w: 3.6, len: 14, depth: 2.1, curve: 0.45 } },
+  };
   return g;
 }
 
@@ -315,34 +338,40 @@ function sniperModel() {
   knob.position.set(-10.5, -1.6, 4.6);
   g.add(knob);
   // 개머리판
-  const stock = [[-14, -1.0], [14, -1.0], [14, -4.0], [-3.6, -4.4], [-5.8, -5.6], [-8.4, -13.2], [-12.8, -13.0], [-13.8, -6.6], [-22, -6.0],
-    [-46, -8.6], [-54, -11.8], [-55, -11.8], [-55, 2.8], [-46, 2.8], [-38, 1.0], [-24, 1.4], [-17.5, 1.6]];
-  g.add(slab(stock, 4.0, OLIVE(), { bevel: 0.6 }));
-  g.add(slab([[-40, 1.4], [-27, 1.6], [-26, 3.6], [-40, 3.8]], 3.4, mat('#4A5234', { metal: 0.05, rough: 0.7 }), { bevel: 0.4 }));
-  g.add(box(1.0, 15, 4.2, BLACK(), -55.6, -4.5));
+  // 앞(손잡이까지)과 뒤(개머리판: 개조하면 바뀜)로 나눈다
+  g.add(slab([[-17, 1.6], [-14, -1.0], [14, -1.0], [14, -4.0], [-3.6, -4.4], [-5.8, -5.6], [-8.4, -13.2], [-12.8, -13.0], [-13.8, -6.6], [-17, -6.3]], 4.0, OLIVE(), { bevel: 0.6 }));
+  const stock = sub(g);
+  stock.add(slab([[-17.6, -6.3], [-22, -6.0], [-46, -8.6], [-54, -11.8], [-55, -11.8], [-55, 2.8], [-46, 2.8], [-38, 1.0], [-24, 1.4], [-17.6, 1.6]], 4.0, OLIVE(), { bevel: 0.6 }));
+  stock.add(slab([[-40, 1.4], [-27, 1.6], [-26, 3.6], [-40, 3.8]], 3.4, role(mat('#4A5234', { metal: 0.05, rough: 0.7 }), 'furniture'), { bevel: 0.4 }));
+  stock.add(box(1.0, 15, 4.2, BLACK(), -55.6, -4.5));
   g.add(box(5.2, 0.4, 1.3, STEEL(), -6.9, -6.9));
   g.add(box(0.4, 2.8, 1.3, STEEL(), -4.4, -5.5));
   const trig = box(0.35, 1.6, 0.45, BLACK(), -6.2, -5.6);
   trig.rotation.z = 0.25;
   g.add(trig);
   const mag = magazine(g, [box(5.0, 3.0, 2.6, STEEL(), 1.5, -5.0)], [0, -1], [1.5, -6.6]); // 탄창
-  // 조준경
-  g.add(tube(1.45, 1.45, -12, 12, BLUED(), { y: 5.8 }));
-  g.add(tube(1.45, 2.7, 12, 18, BLUED(), { y: 5.8, seg: 24 }));
-  g.add(tube(2.3, 1.45, -18.5, -12, BLUED(), { y: 5.8, seg: 24 }));
+  // 조준경(개조 스코프를 달면 숨김)
+  const sight = sub(g);
+  sight.add(tube(1.45, 1.45, -12, 12, BLUED(), { y: 5.8 }));
+  sight.add(tube(1.45, 2.7, 12, 18, BLUED(), { y: 5.8, seg: 24 }));
+  sight.add(tube(2.3, 1.45, -18.5, -12, BLUED(), { y: 5.8, seg: 24 }));
   const front = new THREE.Mesh(new THREE.CircleGeometry(2.4, 24), mat('#20385E', { metal: 0.9, rough: 0.05, emissive: '#2C5AA8', intensity: 0.25 }));
   front.rotation.y = Math.PI / 2;
   front.position.set(18.05, 5.8, 0);
-  g.add(front);
-  g.add(tube(1.0, 1.0, -0.8, 0.8, BLUED(), { y: 8.0, seg: 14 }).rotateZ(Math.PI / 2));
+  sight.add(front);
+  sight.add(tube(1.0, 1.0, -0.8, 0.8, BLUED(), { y: 8.0, seg: 14 }).rotateZ(Math.PI / 2));
   const side = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 2.2, 14), BLUED());
   side.rotation.x = Math.PI / 2;
   side.position.set(0, 5.8, 2.1);
-  g.add(side);
-  for (const x of [-7, 7]) { g.add(tube(1.8, 1.8, x - 0.7, x + 0.7, BLACK(), { y: 5.8 })); g.add(box(1.4, 3.4, 1.6, BLACK(), x, 3.2)); }
+  sight.add(side);
+  for (const x of [-7, 7]) { sight.add(tube(1.8, 1.8, x - 0.7, x + 0.7, BLACK(), { y: 5.8 })); sight.add(box(1.4, 3.4, 1.6, BLACK(), x, 3.2)); }
   // 접은 양각대
   for (const z of [-0.9, 0.9]) g.add(tube(0.3, 0.3, 16, 38, BLACK(), { y: -1.9, z, seg: 8 }));
-  g.userData = { muzzle: [63.3, 0, 0], grip: { x: -10.4, y: -8.6, tilt: 0.3, w: 3.4, d: 4.2 }, support: { x: 6, r: 3.0 }, mag };
+  g.userData = {
+    muzzle: [63.3, 0, 0], grip: { x: -10.4, y: -8.6, tilt: 0.3, w: 3.4, d: 4.2 }, support: { x: 6, r: 3.0 }, mag,
+    mods: { size: 1.1, bore: 1.35, scope: [0, 1.6], sight, stock, stockAt: [-17, -1.2], stockFit: { len: 38, top: 4.2, bottom: -10.6 },
+      magFit: { top: [1.5, -3.6], w: 5, len: 4.5, depth: 2.6, curve: 0 } },
+  };
   return g;
 }
 
@@ -366,10 +395,14 @@ function shotgunModel() {
   const trig = box(0.35, 1.6, 0.45, BLACK(), -4.4, -3.6);
   trig.rotation.z = 0.25;
   g.add(trig);
-  g.add(slab([[-12, 1.0], [-12, -2.4], [-9.6, -3.4], [-12.6, -6.8], [-22, -7.6], [-46, -10.6], [-47, -10.6], [-47, 1.6], [-46, 1.6], [-24, 0.4], [-14, 1.4]],
-    3.6, WOOD(), { bevel: 0.45 }));
-  g.add(box(1.2, 12.6, 3.8, BLACK(), -47.6, -4.5));
-  g.userData = { muzzle: [52.2, 0, 0], grip: { x: -13.4, y: -4.4, tilt: 0.55, w: 3.4, d: 3.8 }, support: { x: 22, r: 2.0, y: -2.2 } };
+  g.add(slab([[-12, 1.0], [-12, -2.4], [-9.6, -3.4], [-12.6, -6.8], [-20, -7.4], [-20, 0.6], [-14, 1.4]], 3.6, WOOD(), { bevel: 0.45 }));
+  const stock = sub(g);
+  stock.add(slab([[-20.6, -7.4], [-22, -7.6], [-46, -10.6], [-47, -10.6], [-47, 1.6], [-46, 1.6], [-24, 0.4], [-20.6, 0.6]], 3.6, WOOD(), { bevel: 0.45 }));
+  stock.add(box(1.2, 12.6, 3.8, BLACK(), -47.6, -4.5));
+  g.userData = {
+    muzzle: [52.2, 0, 0], grip: { x: -13.4, y: -4.4, tilt: 0.55, w: 3.4, d: 3.8 }, support: { x: 22, r: 2.0, y: -2.2 },
+    mods: { size: 1.05, bore: 1.0, scope: [-3, 1.9], stock, stockAt: [-20, -3.2], stockFit: { len: 27, top: 3.6, bottom: -7.6 } },
+  };
   return g;
 }
 
@@ -389,10 +422,11 @@ function rpgModel() {
   trig.rotation.z = 0.25;
   g.add(trig);
   g.add(slab([[-22, -2.0], [-18.6, -2.0], [-19.6, -10.6], [-23.4, -10.2]], 3.0, WOOD_DARK(), { bevel: 0.5 }));
-  // PGO-7 조준경(왼쪽)
-  g.add(box(9, 3.2, 2.2, mat('#2F3A2A', { metal: 0.3, rough: 0.6 }), 4, 3.0, -3.4));
-  g.add(tube(1.3, 1.3, -3, 0, BLACK(), { y: 3.6, z: -3.4 }));
-  g.add(tube(1.7, 1.4, -5, -3, BLACK(), { y: 3.6, z: -3.4 }));
+  // PGO-7 조준경(왼쪽, 개조 스코프를 달면 숨김)
+  const sight = sub(g);
+  sight.add(box(9, 3.2, 2.2, mat('#2F3A2A', { metal: 0.3, rough: 0.6 }), 4, 3.0, -3.4));
+  sight.add(tube(1.3, 1.3, -3, 0, BLACK(), { y: 3.6, z: -3.4 }));
+  sight.add(tube(1.7, 1.4, -5, -3, BLACK(), { y: 3.6, z: -3.4 }));
   g.add(box(0.4, 1.4, 0.4, BLACK(), 22, 2.6));
   // 탄두(PG-7): 추진 막대 + 국방색 원뿔형 탄두 + 신관
   const warhead = new THREE.Group();
@@ -400,7 +434,8 @@ function rpgModel() {
   warhead.add(lathe([[47, 1.6], [48, 3.6], [52, 4.3], [56, 4.3], [61, 3.0], [64, 1.4], [65, 0.9]], mat('#4F5A35', { metal: 0.3, rough: 0.55 }), 22));
   warhead.add(lathe([[65, 0.9], [66.6, 0.6], [67.2, 0.0]], STEEL(), 14));
   g.add(warhead);
-  g.userData = { muzzle: [40.5, 0, 0], back: [-57, 0, 0], grip: { x: 3.6, y: -6.6, tilt: 0.15, w: 3.0, d: 4.2 }, support: { x: 24, r: 2.0 }, warhead };
+  g.userData = { muzzle: [40.5, 0, 0], back: [-57, 0, 0], grip: { x: 3.6, y: -6.6, tilt: 0.15, w: 3.0, d: 4.2 }, support: { x: 24, r: 2.0 }, warhead,
+    mods: { size: 1, bore: 2.0, scope: [2, 2.0], sight } };
   return g;
 }
 
@@ -435,7 +470,7 @@ function crossbowModel() {
     bolt.add(v);
   }
   g.add(bolt);
-  g.userData = { muzzle: [17.4, 1.75, 0], grip: { x: -5.6, y: -5.4, tilt: 0.22, w: 2.6, d: 3.8 }, arrow: bolt };
+  g.userData = { muzzle: [17.4, 1.75, 0], grip: { x: -5.6, y: -5.4, tilt: 0.22, w: 2.6, d: 3.8 }, arrow: bolt, mods: { size: 0.65, scope: [-7, 1.5] } };
   return g;
 }
 
@@ -493,8 +528,9 @@ function laserModel() {
 }
 
 /** 무기 id → 손에 든 모습. hands: 오른손(주) + 왼손(받침) 구성 */
-function build(weapon) {
+function build(weapon, equipped = {}) {
   const root = new THREE.Group();
+  const mod = (model) => applyMods(model, equipped); // 개조 파츠 장착(작업실에서 고른 것)
   /**
    * 손에 든 한 자루: item(손 포함) 안에 spin(총만, 방아쇠 둘레로 돌릴 수 있게) 안에 model.
    * 손은 item에 붙어 있어 총을 돌려도(쌍권총 장전) 손은 그 자리에 있다.
@@ -532,35 +568,35 @@ function build(weapon) {
   const items = [];
   switch (weapon) {
     case 'pistol':
-      items.push(set(gun(pistolModel(), 'cup'), { x: 6.5, y: -6.6, z: -31, yaw: 0.16, pitch: 0.03, k: 1.25 }));
+      items.push(set(gun(mod(pistolModel()), 'cup'), { x: 6.5, y: -6.6, z: -31, yaw: 0.16, pitch: 0.03, k: 1.25 }));
       break;
     case 'dual':
     case 'dualrpg': {
-      const r = set(gun(pistolModel({ twoTone: true }), 'one'), { x: 12, y: -7.2, z: -31, yaw: 0.18, pitch: 0.03, roll: -0.15, k: 1.25 });
-      const l = set(gun(pistolModel({ twoTone: true }), 'one'), { x: -12, y: -7.2, z: -31, yaw: -0.18, pitch: 0.03, roll: 0.15, mirror: true, k: 1.25 });
+      const r = set(gun(mod(pistolModel({ twoTone: true })), 'one'), { x: 12, y: -7.2, z: -31, yaw: 0.18, pitch: 0.03, roll: -0.15, k: 1.25 });
+      const l = set(gun(mod(pistolModel({ twoTone: true })), 'one'), { x: -12, y: -7.2, z: -31, yaw: -0.18, pitch: 0.03, roll: 0.15, mirror: true, k: 1.25 });
       items.push(r, l);
       break;
     }
     case 'crossbow': {
-      items.push(set(gun(crossbowModel(), 'one'), { x: 12.5, y: -7.6, z: -31, yaw: 0.16, roll: -0.12, k: 1.25 }));
-      items.push(set(gun(crossbowModel(), 'one'), { x: -12.5, y: -7.6, z: -31, yaw: -0.16, roll: 0.12, mirror: true, k: 1.25 }));
+      items.push(set(gun(mod(crossbowModel()), 'one'), { x: 12.5, y: -7.6, z: -31, yaw: 0.16, roll: -0.12, k: 1.25 }));
+      items.push(set(gun(mod(crossbowModel()), 'one'), { x: -12.5, y: -7.6, z: -31, yaw: -0.16, roll: 0.12, mirror: true, k: 1.25 }));
       break;
     }
     case 'rifle':
-      items.push(set(gun(rifleModel()), { x: 12.5, y: -11, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
+      items.push(set(gun(mod(rifleModel())), { x: 12.5, y: -11, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
       break;
     case 'smg':
-      items.push(set(gun(smgModel()), { x: 12, y: -10.5, z: -30, yaw: 0.2, pitch: 0.03, roll: -0.08, k: 1.5 }));
+      items.push(set(gun(mod(smgModel())), { x: 12, y: -10.5, z: -30, yaw: 0.2, pitch: 0.03, roll: -0.08, k: 1.5 }));
       break;
     case 'sniper':
     case 'jsniper':
-      items.push(set(gun(sniperModel()), { x: 12.5, y: -11.5, z: -32, yaw: 0.17, pitch: 0.02, roll: -0.06, k: 1.6 }));
+      items.push(set(gun(mod(sniperModel())), { x: 12.5, y: -11.5, z: -32, yaw: 0.17, pitch: 0.02, roll: -0.06, k: 1.6 }));
       break;
     case 'shotgun':
-      items.push(set(gun(shotgunModel()), { x: 12.5, y: -11, z: -32, yaw: 0.18, pitch: 0.03, roll: -0.06, k: 1.55 }));
+      items.push(set(gun(mod(shotgunModel())), { x: 12.5, y: -11, z: -32, yaw: 0.18, pitch: 0.03, roll: -0.06, k: 1.55 }));
       break;
     case 'rpg':
-      items.push(set(gun(rpgModel()), { x: 13, y: -7.5, z: -30, yaw: 0.1, pitch: 0.02, k: 1.6 }));
+      items.push(set(gun(mod(rpgModel())), { x: 13, y: -7.5, z: -30, yaw: 0.1, pitch: 0.02, k: 1.6 }));
       break;
     case 'dagger':
       items.push(set(gun(daggerModel(), 'one'), { x: 11, y: -11, z: -24, yaw: 0.25, pitch: 0.35, roll: -0.5 }));
@@ -572,7 +608,7 @@ function build(weapon) {
       items.push(set(gun(laserModel()), { x: 0, y: -13, z: -26, yaw: 0, pitch: 0.04, k: 1.6 }));
       break;
     default:
-      items.push(set(gun(rifleModel()), { x: 12.5, y: -11, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
+      items.push(set(gun(mod(rifleModel())), { x: 12.5, y: -11, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
   }
   root.userData.items = items;
   return root;
@@ -664,6 +700,49 @@ function makeFlash() {
   }
   g.visible = false;
   return g;
+}
+
+/** 금속이 실제처럼 비치도록 하늘빛·바닥빛·조명판이 있는 주변 환경 맵. 렌더러마다 한 번 만든다(작업실 화면도 쓴다) */
+const envMaps = new WeakMap();
+export function environmentMap(renderer) {
+  if (envMaps.has(renderer)) return envMaps.get(renderer);
+  const env = new THREE.Scene();
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 256;
+  const g2 = c.getContext('2d');
+  const grad = g2.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#E8EEF8'); grad.addColorStop(0.45, '#8A94A8'); grad.addColorStop(0.55, '#4A4E58'); grad.addColorStop(1, '#1A1C22');
+  g2.fillStyle = grad; g2.fillRect(0, 0, 16, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  env.add(new THREE.Mesh(new THREE.SphereGeometry(100, 24, 16), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide })));
+  const panel = new THREE.MeshBasicMaterial({ color: '#FFFFFF' });
+  for (const [x, y, z, w, h] of [[-40, 70, 40, 60, 20], [60, 40, -30, 20, 50], [0, 80, -60, 80, 14]]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), panel);
+    m.position.set(x, y, z);
+    m.lookAt(0, 0, 0);
+    env.add(m);
+  }
+  // 화면 나누기용 가위 자르기(scissor)가 켜져 있으면 환경 맵 일부만 그려지므로 잠깐 끄고, 화면 칸 설정은 되돌린다
+  const vp = renderer.getViewport(new THREE.Vector4()), sc = renderer.getScissor(new THREE.Vector4());
+  const scissor = renderer.getScissorTest();
+  renderer.setScissorTest(false);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const map = pmrem.fromScene(env, 0.02).texture;
+  renderer.setScissorTest(scissor);
+  renderer.setViewport(vp);
+  renderer.setScissor(sc);
+  pmrem.dispose();
+  envMaps.set(renderer, map);
+  return map;
+}
+
+/** 작업실 책상에 올려놓을 총(손 없이, 개조 파츠 장착). 쌍권총·석궁은 한 자루. 앞이 +X */
+const SHOWCASE = { rifle: () => rifleModel(), smg: () => smgModel(), sniper: () => sniperModel(), shotgun: () => shotgunModel(), pistol: () => pistolModel(), dual: () => pistolModel({ twoTone: true }), rpg: () => rpgModel(), crossbow: () => crossbowModel() };
+export function buildShowcase(weapon, equipped = {}) {
+  const model = applyMods((SHOWCASE[weapon] ?? SHOWCASE.rifle)(), equipped);
+  if (model.userData.warhead) model.userData.warhead.visible = true;
+  return model;
 }
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -764,45 +843,23 @@ export function createViewmodel() {
   let envReady = false;
   /** 금속이 실제처럼 비치도록 하늘빛·바닥빛·조명판이 있는 주변 환경 맵(한 번만 만든다) */
   function makeEnvironment(renderer) {
-    const env = new THREE.Scene();
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 256;
-    const g2 = c.getContext('2d');
-    const grad = g2.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, '#E8EEF8'); grad.addColorStop(0.45, '#8A94A8'); grad.addColorStop(0.55, '#4A4E58'); grad.addColorStop(1, '#1A1C22');
-    g2.fillStyle = grad; g2.fillRect(0, 0, 16, 256);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    env.add(new THREE.Mesh(new THREE.SphereGeometry(100, 24, 16), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide })));
-    const panel = new THREE.MeshBasicMaterial({ color: '#FFFFFF' });
-    for (const [x, y, z, w, h] of [[-40, 70, 40, 60, 20], [60, 40, -30, 20, 50], [0, 80, -60, 80, 14]]) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), panel);
-      m.position.set(x, y, z);
-      m.lookAt(0, 0, 0);
-      env.add(m);
-    }
-    // 화면 나누기용 가위 자르기(scissor)가 켜져 있으면 환경 맵 일부만 그려지므로 잠깐 끄고, 화면 칸 설정은 되돌린다
-    const vp = renderer.getViewport(new THREE.Vector4()), sc = renderer.getScissor(new THREE.Vector4());
-    const scissor = renderer.getScissorTest();
-    renderer.setScissorTest(false);
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(env, 0.02).texture;
-    renderer.setScissorTest(scissor);
-    renderer.setViewport(vp);
-    renderer.setScissor(sc);
+    scene.environment = environmentMap(renderer);
     scene.environmentIntensity = 0.9;
-    pmrem.dispose();
     envReady = true;
   }
   const state = {}; // 사람별: { weapon, swap, kick: [오른, 왼], flash: [..], shot, sway }
+  /** 무기 + 장착한 개조 파츠가 같으면 같은 모델. 바뀌면(작업실에서 장착) 새로 만들고 예전 것은 버린다 */
   const modelOf = (weapon) => {
-    if (!models.has(weapon)) {
-      const m = build(weapon);
+    const store = modStore();
+    const key = `${weapon}|${store.signature(weapon)}`;
+    if (!models.has(key)) {
+      for (const [k, m] of models) if (k.startsWith(`${weapon}|`)) { scene.remove(m); models.delete(k); }
+      const m = build(weapon, store.equipped(weapon));
       m.visible = false;
       scene.add(m);
-      models.set(weapon, m);
+      models.set(key, m);
     }
-    return models.get(weapon);
+    return models.get(key);
   };
   const flashOf = (i) => {
     while (flashes.length <= i) { const f = makeFlash(); scene.add(f); flashes.push(f); }
@@ -894,7 +951,7 @@ export function createViewmodel() {
             f.position.copy(tmpV);
             f.quaternion.copy(item.quaternion);
             f.rotateX(s.roll[h]);
-            const big = weapon === 'shotgun' || weapon === 'rpg' ? 1.8 : weapon === 'sniper' ? 1.5 : weapon === 'smg' ? 0.8 : 1;
+            const big = (weapon === 'shotgun' || weapon === 'rpg' ? 1.8 : weapon === 'sniper' ? 1.5 : weapon === 'smg' ? 0.8 : 1) * (item.userData.flashScale ?? 1); // 소음기면 작게
             const fl = Math.min(1.4, s.flash[h] / 0.05);
             f.scale.setScalar((6 + 4 * fl) * big);
             const color = FLASH_COLOR[weapon] ?? '#FFFFFF';
