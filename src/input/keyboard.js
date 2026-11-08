@@ -3,17 +3,17 @@
 export const KEYMAP = {
   P1: {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', turnLeft: 'KeyZ', turnRight: 'KeyC',
-    fire: 'KeyF', swap: 'KeyE', item: 'KeyQ',
+    fire: 'KeyF', swap: 'KeyE', item: 'KeyQ', jump: 'Space',
   },
   P2: {
     forward: 'ArrowUp', back: 'ArrowDown', left: 'Comma', right: 'Period', turnLeft: 'ArrowLeft', turnRight: 'ArrowRight',
-    fire: 'Enter', swap: 'ShiftRight', item: 'Slash',
+    fire: 'Enter', swap: 'ShiftRight', item: 'Slash', jump: 'ControlRight',
   },
 };
 const FIRE_HINT = '누르고 있으면 연사(RPG·저격총은 떼면 발사)';
 export const KEY_LABELS = {
-  P1: `W/S 앞뒤 · A/D 옆걸음 · 마우스(화면을 눌러 잠금) 또는 Z/C 고개 돌리기 · F·왼쪽 클릭 ${FIRE_HINT} · E·휠 무기 전환 · Q·오른쪽 클릭 수류탄`,
-  P2: `↑/↓ 앞뒤 · ←/→ 고개 돌리기 · ,/. 옆걸음 · Enter ${FIRE_HINT} · 오른쪽 Shift 무기 전환 · / 수류탄`,
+  P1: `W/S 앞뒤 · A/D 옆걸음 · 마우스(화면을 눌러 잠금) 또는 Z/C 고개 돌리기 · F·왼쪽 클릭 ${FIRE_HINT} · E·휠 무기 전환 · Q·오른쪽 클릭 수류탄 · Space 점프`,
+  P2: `↑/↓ 앞뒤 · ←/→ 고개 돌리기 · ,/. 옆걸음 · Enter ${FIRE_HINT} · 오른쪽 Shift 무기 전환 · / 수류탄 · 오른쪽 Ctrl 점프`,
 };
 /** 혼자 하면(사람 플레이어 1명) P1은 P2 키(방향키 등)로도 조작한다. */
 export const SOLO_LABEL = '혼자 할 때는 방향키·Enter 등 P2 키로도 조작할 수 있습니다.';
@@ -42,6 +42,8 @@ export function attachKeyboard(getInputs, onEscape) {
     held.add(e.code);
     const swapper = ownerOf(e.code, inputs, 'swap');
     if (swapper) swapper.swap = true;
+    const jumper = ownerOf(e.code, inputs, 'jump');
+    if (jumper) jumper.jump = true;
     const thrower = ownerOf(e.code, inputs, 'item');
     if (thrower) thrower.item = true;
     const shooter = ownerOf(e.code, inputs, 'fire');

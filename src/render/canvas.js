@@ -38,7 +38,7 @@ function hpColor(ratio) {
 }
 
 function drawHpBar(ctx, x, y, w, h, hp, max = MAX_HP) {
-  const ratio = hp / max;
+  const ratio = Math.min(1, hp / max);
   ctx.fillStyle = 'rgba(48,53,62,0.35)';
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, h / 2);

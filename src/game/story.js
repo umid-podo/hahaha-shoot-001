@@ -448,6 +448,7 @@ function setupCorridor(match) {
 function setupSky(match, { heal = true } = {}) {
   const story = match.story;
   story.stage = 'sky';
+  match.highs = [];
   Object.assign(story, { elevator: null, turrets: null, ceiling: null, carrier: null, jet: null, missile: null });
   match.covers = [];
   match.jet = null;
@@ -479,6 +480,7 @@ function setupSky(match, { heal = true } = {}) {
 function setupRoad(match, { heal = true } = {}) {
   const story = match.story;
   story.stage = 'road';
+  match.highs = [];
   Object.assign(story, { elevator: null, turrets: null, ceiling: null, carrier: null, jet: null, missile: null });
   match.players = match.players.filter((p) => p.team !== 'isb');
   story.brains = [];
@@ -509,6 +511,7 @@ function setupRoad(match, { heal = true } = {}) {
 function setupBridge(match, { heal = true } = {}) {
   const story = match.story;
   story.stage = 'bridge';
+  match.highs = [];
   Object.assign(story, {
     elevator: null, turrets: null, ceiling: null, carrier: null, jet: null, missile: null, bridge: { open: 0 }, sniper: null,
   });

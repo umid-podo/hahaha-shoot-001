@@ -118,8 +118,11 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       // 전용 무기 캐릭터는 주무기 하나뿐이고 아이템도 없다
       secondary.disabled = p.primaryOnly;
       item.disabled = p.primaryOnly;
-      actions.append(primary, secondary, item);
-      buttons[p.id] = { primary, secondary, item, slot: null, itemText: null };
+      const jump = actionButton('jump-btn', () => { frame.jump = true; });
+      jump.innerHTML = '<small>점프</small><span>▲</span>';
+      jump.setAttribute('aria-label', `${p.id} 점프`);
+      actions.append(primary, secondary, item, jump);
+      buttons[p.id] = { primary, secondary, item, jump, slot: null, itemText: null };
 
       const middle = document.createElement('div');
       middle.className = 'panel-mid';

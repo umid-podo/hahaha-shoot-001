@@ -1,13 +1,33 @@
 // 논리 단위는 1600×1000 경기장 기준 (docs/02-game-design.md 기본 수치)
 export const ARENA_WIDTH = 1600;
 export const ARENA_HEIGHT = 1000;
-// 팀이 처음 서는 줄(1인칭 3D에서도 시작 자리·연출 기준으로 쓴다). 경기 중에는 자기 진영(ZONE) 안에서 자유롭게 움직인다.
+// 팀이 처음 서는 줄(1인칭 3D에서도 시작 자리·연출 기준으로 쓴다). 경기 중에는 경기장 어디로든(상대 진영까지) 움직일 수 있다.
 export const RAIL_Y = { isb: 92, earth: 892 };
 /**
- * 팀 진영: 플레이어가 움직일 수 있는 앞뒤(Y) 범위. 가로(X)는 MIN_X~MAX_X. 가운데 띠(ZONE 사이)는 양 팀 모두 들어갈 수 없는
- * 무인 지대로, 가운데 엄폐물·전투기·탱크·배가 지나가는 자리다.
+ * 팀 진영: 경기장의 위(ISB)·아래(지구방위팀) 절반. 예전에는 이 안에서만 움직였지만 지금은 상대 진영·가운데로도 넘어갈 수 있고,
+ * AI가 주로 머무는 범위·전투기 미사일이 노리는 자리를 정할 때만 쓴다. 플레이어가 갈 수 있는 앞뒤 범위는 MIN_Y~MAX_Y.
  */
 export const ZONE = { isb: { minY: 50, maxY: 430 }, earth: { minY: 570, maxY: 950 } };
+export const MIN_Y = 50;
+export const MAX_Y = 950;
+/**
+ * 점프·고지대. jump: 뛰어오르는 첫 속도(초당), gravity: 중력(초당²) → 최고 높이 jump²/(2·gravity) ≈ 120.
+ * 높이(z)는 발바닥 높이. 엄폐물(높이 COVER_HEIGHT)은 그보다 높이 떠 있으면 넘어가고, 고지대는 그 높이 가까이 뛰어올라야 올라선다(step 이하 턱은 그냥 걸어 오름).
+ * 탄은 쏜 사람 발 높이(z)에서 날아가, 높이 차이가 hitBelow~hitAbove 안인 사람만 맞힌다(점프로 낮은 탄을 피할 수 있음).
+ * 쏜 자리가 coverClear보다 높으면(고지대·점프 중) 엄폐물 위로 넘어간다.
+ */
+export const JUMP = { jump: 620, gravity: 1600, step: 18, hitBelow: 100, hitAbove: 110, coverClear: 40 };
+export const COVER_HEIGHT = 84;
+/**
+ * 고지대: 올라설 수 있는 높은 단(경기장 위에서 본 사각형, h는 높이). 가운데 양옆 둘(상대 진영으로 넘어가는 길목)과
+ * 진영마다 하나씩(점대칭). 옥상·자유 대전·2인 대결·스토리 1~2스테이지에 있다.
+ */
+export const HIGHS = [
+  { id: 'high-west', x: 230, y: 500, w: 240, h: 170, height: 92 },
+  { id: 'high-east', x: 1370, y: 500, w: 240, h: 170, height: 92 },
+  { id: 'high-earth', x: 1380, y: 700, w: 200, h: 110, height: 64 },
+  { id: 'high-isb', x: 220, y: 300, w: 200, h: 110, height: 64 },
+];
 export const MIN_X = 80;
 export const MAX_X = 1520;
 export const MAX_SPEED = 300;

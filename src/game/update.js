@@ -1,5 +1,5 @@
 import {
-  ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, BULLET_RADIUS, ZONE,
+  ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MIN_Y, MAX_Y, BULLET_RADIUS, ZONE, JUMP, COVER_HEIGHT,
   MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, SHIP, COVER,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
@@ -69,6 +69,8 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
     splash, homing: weapon.homing,
     // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용). group이 있으면 그쪽에 기록한다.
     connected: false, group,
+    // z: 쏜 사람 발 높이(높이가 다른 사람은 hitBelow~hitAbove 안일 때만 맞고, coverClear보다 높으면 엄폐물 위로 지나감)
+    z: player.z ?? 0,
     // 던진 무기는 아무것에도 닿지 않고 조준 방향으로 RULES.throwRange만큼 날아가 터진다. startX·startY는 날아간 거리(포물선 높이)용.
     thrown: !!weapon.thrown, overCovers: !!weapon.thrown, startX: x, startY: y,
     ...(weapon.thrown ? { range: RULES.throwRange } : {}),
@@ -502,12 +504,22 @@ function updateResources(p, firing, dt) {
   }
 }
 
-/** 진영 z(ZONE의 한 팀) 안으로 Y를 자른다. 진영이 없는 팀(전투기 등)은 그대로. */
-export const clampY = (team, y) => (ZONE[team] ? Math.min(ZONE[team].maxY, Math.max(ZONE[team].minY, y)) : y);
+/** 경기장 앞뒤 범위(MIN_Y~MAX_Y) 안으로 Y를 자른다. 예전에는 자기 진영 안이었지만 지금은 상대 진영까지 갈 수 있다. */
+export const clampY = (team, y) => Math.min(MAX_Y, Math.max(MIN_Y, y));
+
+/** (x, y)의 바닥 높이: 그 자리를 덮는 고지대 중 가장 높은 것(없으면 0) */
+export function groundAt(match, x, y) {
+  let h = 0;
+  for (const g of match.highs ?? []) {
+    if (Math.abs(x - g.x) < g.w / 2 - 0.01 && Math.abs(y - g.y) < g.h / 2 - 0.01 && g.height > h) h = g.height;
+  }
+  return h;
+}
 
 /**
- * 이동 한 틱: 가로(ax)·세로(ay) 축 입력(-1~1, 합이 1을 넘으면 1로)대로 움직인다. 가로는 MIN_X~MAX_X, 세로는 자기 진영(ZONE) 안이고,
- * 부서지지 않은 엄폐물은 뚫고 지나가지 못한다(몸 반지름만큼 밀어낸다).
+ * 이동 한 틱: 가로(ax)·세로(ay) 축 입력(-1~1, 합이 1을 넘으면 1로)대로 움직인다. 가로는 MIN_X~MAX_X, 세로는 MIN_Y~MAX_Y(상대 진영까지),
+ * 부서지지 않은 엄폐물은 그보다 높이 떠 있지 않으면 뚫고 지나가지 못하고(몸 반지름만큼 밀어낸다), 고지대는 발이 그 높이(턱 JUMP.step 빼고)보다
+ * 낮으면 벽처럼 막는다(뛰어올라 올라선다).
  */
 export function move(match, p, ax, ay, dt) {
   const len = Math.hypot(ax, ay);
@@ -515,9 +527,14 @@ export function move(match, p, ax, ay, dt) {
   if (!ax && !ay) return;
   let x = Math.min(MAX_X, Math.max(MIN_X, p.x + ax * p.speed * dt));
   let y = clampY(p.team, p.y + ay * p.speed * dt);
-  for (const c of match.covers ?? []) {
-    if (c.hp <= 0) continue;
-    const hw = c.w / 2 + p.radius * 0.6, hh = c.h / 2 + p.radius * 0.6;
+  const z = p.z ?? 0;
+  const walls = [
+    ...(match.covers ?? []).filter((c) => c.hp > 0 && z < groundAt(match, c.x, c.y) + COVER_HEIGHT - 2).map((c) => ({ c, pad: p.radius * 0.6 })),
+    // 고지대 옆면: 가장자리 안쪽으로 발 중심이 들어가면 막음(그 위에 서면 바닥이 높아짐)
+    ...(match.highs ?? []).filter((g) => z < g.height - JUMP.step).map((g) => ({ c: g, pad: 0 })),
+  ];
+  for (const { c, pad } of walls) {
+    const hw = c.w / 2 + pad, hh = c.h / 2 + pad;
     const dx = x - c.x, dy = y - c.y;
     if (Math.abs(dx) >= hw || Math.abs(dy) >= hh) continue;
     // 덜 파고든 쪽으로 밀어낸다
@@ -527,6 +544,29 @@ export function move(match, p, ax, ay, dt) {
   }
   p.x = Math.min(MAX_X, Math.max(MIN_X, x));
   p.y = y;
+}
+
+/** 점프·떨어지기 한 틱: 땅(고지대 위 포함)에 있을 때 jump면 뛰어오르고, 공중이면 중력으로 떨어져 바닥 높이에 내려선다. */
+export function updateJump(match, p, jump, dt, events) {
+  p.z ??= 0; p.vz ??= 0;
+  let ground = groundAt(match, p.x, p.y);
+  // 막혀야 할 높은 단 위에 밀려 들어간 경우(가장자리 계산 오차)에는 순간 이동하지 않는다
+  if (ground > p.z + JUMP.step && p.vz <= 0 && p.z <= 0.5) ground = 0;
+  const onGround = p.z <= ground + 0.5 && p.vz <= 0;
+  if (jump && onGround && p.alive && !p.dash && !p.plane) {
+    p.vz = JUMP.jump;
+    events.push({ type: 'jump', playerId: p.id });
+  }
+  if (p.z > ground || p.vz > 0) {
+    p.vz -= JUMP.gravity * dt;
+    p.z += p.vz * dt;
+    if (p.z <= ground) {
+      if (p.vz < -200) events.push({ type: 'jump-land', playerId: p.id, x: p.x, y: p.y });
+      p.z = ground; p.vz = 0;
+    }
+  } else {
+    p.z = ground; p.vz = 0;
+  }
 }
 
 /**
@@ -595,6 +635,8 @@ export function step(match, inputs, dt = TICK) {
     }
     // rooted: 스토리 연출로 잠깐 멈춰 선 적(조준선을 긋는 존슨 요원)
     if (!p.rooted) move(match, p, input.moveAxis, input.moveY ?? 0, dt);
+    updateJump(match, p, input.jump && !p.rooted, dt, events);
+    input.jump = false;
     // 스토리가 대신 쏘는 적(존슨 요원의 조준선 저격)은 움직이기만 한다
     if (p.scripted) { input.item = false; p.wasAiming = false; continue; }
     if (input.item) {
@@ -634,12 +676,15 @@ export function step(match, inputs, dt = TICK) {
     b.life -= dt;
     let earliest = null;
     if (b.thrown) continue; // 던진 무기는 날아가는 동안 아무것에도 닿지 않는다
-    const coverHit = b.overCovers ? null : coverContact(match, b);
+    const coverHit = b.overCovers || (b.z ?? 0) > JUMP.coverClear ? null : coverContact(match, b);
     if (coverHit) earliest = { t: coverHit.t, projectile: b, victim: null, cover: coverHit.cover };
     // 전투기는 하늘 높이 날기 때문에 탄환은 그 밑으로 지나간다(막지 않음).
     for (const p of match.players) {
       // 단검 돌진 중(무적)인 플레이어는 탄이 그냥 지나간다
       if (!p.alive || p.team === b.team || invulnerable(p)) continue;
+      // 높이 차이: 탄보다 너무 높이 뛰었거나(점프로 피함) 너무 아래면 지나간다
+      const dz = (p.z ?? 0) - (b.z ?? 0);
+      if (b.z !== undefined && (dz > JUMP.hitAbove || dz < -JUMP.hitBelow)) continue;
       const t = segmentCircleTime(
         b.previousX - p.previousX, b.previousY - (p.previousY ?? p.y), b.x - p.x, b.y - p.y, p.radius + BULLET_RADIUS);
       if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, projectile: b, victim: p };

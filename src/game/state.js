@@ -1,6 +1,6 @@
 import {
   RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, JET, COVERS, COVER,
-  STEEL, STEEL_SPOTS,
+  STEEL, STEEL_SPOTS, HIGHS,
 } from './config.js';
 
 // 2인 전용. 자리(P1·P2)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
@@ -78,6 +78,8 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
     hp: maxHp, maxHp, alive: true, hurt: 0,
     // ammo: 무기별 남은 총알(없으면 가득), reload: 장전 중이면 { weapon, t(남은 초), total }
     ammo: {}, reload: null,
+    // z: 발 높이(점프·고지대), vz: 위로 가는 속도
+    z: 0, vz: 0,
     cooldown: 0, cooldowns: {}, dash: null, burstLeft: 0, burstTimer: 0, wasAiming: false,
     // entering: 스토리 모드에서 헬리콥터에서 내려오는 중(움직이지도 맞지도 않음) { t, duration, fromY }
     entering: null,
@@ -91,6 +93,8 @@ export function createMatchWith(players, seed = Date.now()) {
     phase: 'countdown', countdown: COUNTDOWN,
     players, projectiles: [], nextProjectileId: 1,
     covers: createCovers(players),
+    // highs: 고지대(올라설 수 있는 높은 단). 공중전·도로·대교 스테이지에서는 비운다
+    highs: HIGHS.map((h) => ({ ...h })),
     jet: null, jetTimer: between(rng, JET.firstDelay), rng,
     tick: 0, winner: null, stats: createStats(players),
   };
@@ -137,7 +141,7 @@ function steelCovers(players) {
 export function createInput(player) {
   return {
     moveAxis: 0, moveY: 0, fwd: 0, side: 0, touchFwd: 0, touchSide: 0, turn: 0, touchTurn: 0,
-    aim: initialAim(player.team), aiming: false, swap: false, select: null, item: false, kata: 0,
+    aim: initialAim(player.team), aiming: false, swap: false, select: null, item: false, kata: 0, jump: false,
   };
 }
 
@@ -149,6 +153,6 @@ export function createInputs(players) {
 export function cancelInputs(inputs) {
   for (const f of Object.values(inputs)) {
     f.moveAxis = 0; f.moveY = 0; f.fwd = 0; f.side = 0; f.touchFwd = 0; f.touchSide = 0; f.turn = 0; f.touchTurn = 0;
-    f.aiming = false; f.swap = false; f.select = null; f.item = false; f.kata = 0;
+    f.aiming = false; f.swap = false; f.select = null; f.item = false; f.kata = 0; f.jump = false;
   }
 }

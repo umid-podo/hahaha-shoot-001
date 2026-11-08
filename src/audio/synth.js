@@ -215,6 +215,8 @@ export function playEvents(events) {
     if (e.type === 'turret-fire') gunshot({ filter: 500, q: 0.6, decay: 0.3, thump: 110, volume: 1 });
     if (e.type === 'rumble') { gunshot({ filter: 120, q: 0.3, decay: 1.2, thump: 45, volume: 1.6 }); tone(40, 0.9, 'square', 0.05); }
     if (e.type === 'ceiling-break') { gunshot({ filter: 350, q: 0.4, decay: 0.9, thump: 70, volume: 1.8 }); tone(120, 0.3, 'sawtooth', 0.05); }
+    if (e.type === 'jump') tone(320, 0.06, 'triangle'); // 점프: 휙
+    if (e.type === 'jump-land') tone(110, 0.07, 'triangle'); // 착지: 툭
     if (e.type === 'land') gunshot({ filter: 200, q: 0.4, decay: 0.4, thump: 80, volume: 1.3 });
     if (e.type === 'taunt') [988, 1319, 988, 1319, 740].forEach((f, i) => tone(f, 0.09, 'square', i * 0.11));
     if (e.type === 'sigh') slide(500, 260, 0.6, 'triangle', 0.7);

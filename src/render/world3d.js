@@ -728,6 +728,7 @@ export function createWorld3D(canvas, wrap, assets) {
       if (onCar) h += CAR_ROOF;
       if (p.drone) h += 30 + (reducedMotion ? 0 : Math.sin(time * 5 + p.x * 0.01) * 6);
       if (p.jetpack && p.alive) h += 14 + (reducedMotion ? 0 : Math.sin(time * 4 + p.x * 0.01) * 4);
+      if (!aircraft) h += p.z ?? 0; // 점프·고지대 높이
       // 탈것 모델
       const model = setModel(a, aircraft);
       if (model) {
@@ -878,7 +879,7 @@ export function createWorld3D(canvas, wrap, assets) {
           aimLines.set(p.id, l);
         }
         live.add(p.id);
-        const h = GUN_Y + (stage === 'road' ? CAR_ROOF : 0);
+        const h = GUN_Y + (stage === 'road' ? CAR_ROOF : 0) + (p.z ?? 0);
         const sx = p.x + Math.cos(p.aim) * MUZZLE_OFFSET, sy = p.y + Math.sin(p.aim) * MUZZLE_OFFSET;
         const end = aimEnd(match, p, sx, sy);
         const len = Math.max(1, Math.hypot(end.x - sx, end.y - sy));
@@ -1048,7 +1049,7 @@ export function createWorld3D(canvas, wrap, assets) {
     if (b.thrown) return base + Math.sin(Math.PI * k) * 170;
     const from = { jet: JET_ALT, tank: 80, ship: -120, turret: 150 }[b.weapon];
     if (from !== undefined) return from + (16 - from) * k;
-    return base;
+    return base + (b.z ?? 0); // 쏜 사람 발 높이만큼(고지대·점프 중)
   }
   const smokeFrom = new Map();
   function placeShots(match, reducedMotion) {
@@ -1084,6 +1085,18 @@ export function createWorld3D(canvas, wrap, assets) {
 
   // ── 엄폐물 ──
   const covers = new Map();
+  // ── 고지대 ──
+  const highs = new Map();
+  function placeHighs(match) {
+    const live = new Set();
+    for (const g of match.highs ?? []) {
+      live.add(g.id);
+      let m = highs.get(g.id);
+      if (!m) { m = M.makeHigh(g); m.position.set(g.x, 0, g.y); scene.add(m); highs.set(g.id, m); }
+      m.visible = true;
+    }
+    for (const [id, m] of highs) if (!live.has(id)) m.visible = false;
+  }
   function placeCovers(match, time) {
     const road = match.story?.stage === 'road';
     const live = new Set();
@@ -1275,6 +1288,7 @@ export function createWorld3D(canvas, wrap, assets) {
     const stage = match.story?.stage;
     let h = p.plane ? PLANE_Y + 26 : EYE;
     if (stage === 'road' && !p.plane) h += CAR_ROOF;
+    if (!p.plane) h += p.z ?? 0; // 점프·고지대 높이
     if (p.drone || p.jetpack) h += 24;
     const moving = Math.hypot(p.x - p.previousX, p.y - (p.previousY ?? p.y)) > 0.5;
     const bob = reducedMotion || p.plane ? 0 : moving ? Math.sin(time * 11) * 3 : 0;
@@ -1515,7 +1529,7 @@ export function createWorld3D(canvas, wrap, assets) {
     if (!p || p.plane || p.aircraft || WEAPONS[e.weapon]?.thrown) return;
     const dx = Math.cos(p.aim), dz = Math.sin(p.aim);
     const x = p.x + dx * MUZZLE_OFFSET, y = p.y + dz * MUZZLE_OFFSET;
-    const h = (currentStage === 'sky' ? PLANE_Y : GUN_Y) + (currentStage === 'road' ? CAR_ROOF : 0);
+    const h = (currentStage === 'sky' ? PLANE_Y : GUN_Y) + (currentStage === 'road' ? CAR_ROOF : 0) + (p.z ?? 0);
     const big = ['shotgun', 'rpg', 'sniper', 'dualrpg', 'jsniper'].includes(e.weapon);
     const color = e.weapon === 'laser' ? '#FF3030' : e.weapon === 'instakill' ? '#FF4FA0' : null;
     addEffect('muzzle', { x, y, h, owner: p.id, color, size: big ? 70 : 46 });
@@ -1640,6 +1654,7 @@ export function createWorld3D(canvas, wrap, assets) {
       else for (const [id, m] of shots) { scene.remove(m); shots.delete(id); }
       placeAimLines(match);
       placeCovers(cut?.kind === 'drive' && !cut.switched ? { covers: [] } : match, time);
+      placeHighs(cut?.kind === 'drive' && !cut.switched ? { highs: [] } : match);
       hideUnused(seen);
       hideUnusedProps();
 
