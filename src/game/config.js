@@ -19,6 +19,11 @@ export const MAX_Y = 950;
 export const JUMP = { jump: 620, gravity: 1600, step: 18, hitBelow: 100, hitAbove: 110, coverClear: 40 };
 export const COVER_HEIGHT = 84;
 /**
+ * 넓은 맵(2인 대결·자유 대전): 원래 옥상 경기장(1600×1000)을 가운데에 두고 사방으로 크게 넓힌 건물 옥상(5000×4000, 원래의 12.5배).
+ * 시작 자리는 원래대로 가운데 근처이고, 둘레로 엄폐물·고지대·컨테이너·계단식 탑이 흩어져 있다. 스토리 모드는 원래 크기.
+ */
+export const FIELD = { minX: -1700, maxX: 3300, minY: -1500, maxY: 2500 };
+/**
  * 고지대: 올라설 수 있는 높은 단(경기장 위에서 본 사각형, h는 높이). 가운데 양옆 둘(상대 진영으로 넘어가는 길목)과
  * 진영마다 하나씩(점대칭). 옥상·자유 대전·2인 대결·스토리 1~2스테이지에 있다.
  */
@@ -28,8 +33,48 @@ export const HIGHS = [
   { id: 'high-earth', x: 1380, y: 700, w: 200, h: 110, height: 64 },
   { id: 'high-isb', x: 220, y: 300, w: 200, h: 110, height: 64 },
 ];
+/**
+ * 넓은 맵에만 있는 고지대: 북·남 계단식 탑(64 → 128 → 190, 한 칸씩 뛰어 올라감), 컨테이너(높이 92, 길쭉함),
+ * 네 귀퉁이 전망대(계단식 두 칸). 점대칭으로 놓아 양 팀이 공평하다.
+ */
+export const WIDE_HIGHS = [
+  { id: 'tower-n-1', x: 800, y: -620, w: 360, h: 260, height: 64 },
+  { id: 'tower-n-2', x: 800, y: -620, w: 210, h: 150, height: 128 },
+  { id: 'tower-n-3', x: 800, y: -620, w: 100, h: 90, height: 190 },
+  { id: 'tower-s-1', x: 800, y: 1620, w: 360, h: 260, height: 64 },
+  { id: 'tower-s-2', x: 800, y: 1620, w: 210, h: 150, height: 128 },
+  { id: 'tower-s-3', x: 800, y: 1620, w: 100, h: 90, height: 190 },
+  { id: 'box-1', x: -600, y: 150, w: 320, h: 100, height: 92, kind: 'container', color: '#B4472F' },
+  { id: 'box-2', x: 2200, y: 850, w: 320, h: 100, height: 92, kind: 'container', color: '#B4472F' },
+  { id: 'box-3', x: -300, y: 1300, w: 100, h: 320, height: 92, kind: 'container', color: '#2F6FB4' },
+  { id: 'box-4', x: 1900, y: -300, w: 100, h: 320, height: 92, kind: 'container', color: '#2F6FB4' },
+  { id: 'box-5', x: 2600, y: 1700, w: 320, h: 100, height: 92, kind: 'container', color: '#3E8A4A' },
+  { id: 'box-6', x: -1000, y: -700, w: 320, h: 100, height: 92, kind: 'container', color: '#3E8A4A' },
+  { id: 'box-7', x: 2500, y: -1000, w: 100, h: 320, height: 92, kind: 'container', color: '#C9A23A' },
+  { id: 'box-8', x: -900, y: 2000, w: 100, h: 320, height: 92, kind: 'container', color: '#C9A23A' },
+  { id: 'look-nw-1', x: -1350, y: -1150, w: 400, h: 400, height: 64 },
+  { id: 'look-nw-2', x: -1420, y: -1220, w: 220, h: 220, height: 128 },
+  { id: 'look-se-1', x: 2950, y: 2150, w: 400, h: 400, height: 64 },
+  { id: 'look-se-2', x: 3020, y: 2220, w: 220, h: 220, height: 128 },
+  { id: 'look-ne-1', x: 2950, y: -1150, w: 300, h: 300, height: 92 },
+  { id: 'look-sw-1', x: -1350, y: 2150, w: 300, h: 300, height: 92 },
+];
+/** 넓은 맵에만 있는 엄폐물(내구도는 COVER.hp, 중립 색). 길목·탑 주변·컨테이너 사이에 흩어 놓음(점대칭) */
+export const WIDE_COVERS = [
+  { id: 'w1', x: 300, y: -250, w: 180, h: 44 }, { id: 'w2', x: 1300, y: 1250, w: 180, h: 44 },
+  { id: 'w3', x: 1300, y: -250, w: 180, h: 44 }, { id: 'w4', x: 300, y: 1250, w: 180, h: 44 },
+  { id: 'w5', x: -250, y: 500, w: 44, h: 220 }, { id: 'w6', x: 1850, y: 500, w: 44, h: 220 },
+  { id: 'w7', x: 800, y: -1050, w: 260, h: 44 }, { id: 'w8', x: 800, y: 2050, w: 260, h: 44 },
+  { id: 'w9', x: -800, y: -150, w: 200, h: 44 }, { id: 'w10', x: 2400, y: 1150, w: 200, h: 44 },
+  { id: 'w11', x: 2300, y: 100, w: 44, h: 200 }, { id: 'w12', x: -700, y: 900, w: 44, h: 200 },
+  { id: 'w13', x: -1200, y: 500, w: 200, h: 44 }, { id: 'w14', x: 2800, y: 500, w: 200, h: 44 },
+  { id: 'w15', x: 1700, y: -900, w: 200, h: 44 }, { id: 'w16', x: -100, y: 1900, w: 200, h: 44 },
+  { id: 'w17', x: 400, y: -1300, w: 44, h: 200 }, { id: 'w18', x: 1200, y: 2300, w: 44, h: 200 },
+];
 export const MIN_X = 80;
 export const MAX_X = 1520;
+/** 원래 크기 경기장의 이동 범위(스토리 모드·건 카타 수련장) */
+export const ARENA_BOUNDS = { minX: MIN_X, maxX: MAX_X, minY: MIN_Y, maxY: MAX_Y };
 export const MAX_SPEED = 300;
 export const BODY_RADIUS = 30;
 export const SPRITE_SIZE = 128;

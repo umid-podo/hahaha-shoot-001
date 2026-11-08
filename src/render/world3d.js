@@ -149,7 +149,7 @@ export function createWorld3D(canvas, wrap, assets) {
     if (env.group) scene.remove(env.group);
     const group = new THREE.Group();
     scene.add(group);
-    const builders = { arena: buildRooftop, rooftop: buildRooftop, corridor: buildCorridor, sky: buildSky, road: buildRoad, bridge: buildBridge, drive: buildDrive };
+    const builders = { field: buildField, arena: buildRooftop, rooftop: buildRooftop, corridor: buildCorridor, sky: buildSky, road: buildRoad, bridge: buildBridge, drive: buildDrive };
     env = { key, group, update: () => {}, ...(builders[key] ?? buildRooftop)(group, match) };
   }
 
@@ -218,6 +218,97 @@ export function createWorld3D(canvas, wrap, assets) {
         door.position.x = cut?.kind === 'stairs' && !cut.switched ? -cut.door * 30 : 0;
       },
     };
+  }
+
+  /**
+   * 넓은 맵(2인 대결·자유 대전): 가운데에 원래 옥상 경기장 바닥을 두고, 둘레를 타일 바닥으로 크게 넓힌 거대한 옥상.
+   * 가장자리 난간·경고등, 물탱크·환풍기·안테나·태양광 판·헬기장 같은 장식(움직임을 막지 않는 바깥쪽), 더 먼 둘레의 밤 도시.
+   */
+  function buildField(group, match) {
+    const B = match.bounds;
+    const W = B.maxX - B.minX, D = B.maxY - B.minY, cx = (B.minX + B.maxX) / 2, cz = (B.minY + B.maxY) / 2;
+    scene.background = skyTexture([[0, '#0B1030'], [0.55, '#2A1E4A'], [0.8, '#7A3E5C'], [1, '#C9704A']]);
+    scene.fog = new THREE.Fog('#2A1E4A', 3800, 11000);
+    hemi.color.set('#C8D2FF'); hemi.groundColor.set('#4A3A44'); hemi.intensity = 1.5;
+    sun.color.set('#FFD9B0'); sun.intensity = 1.4;
+    // 둘레 타일 바닥(반복 무늬)
+    const tiles = canvasTexture(256, 256, (g, w, h) => {
+      g.fillStyle = '#9C9890'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#86827A'; g.lineWidth = 4;
+      for (let i = 0; i <= 256; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); }
+      g.fillStyle = 'rgba(0,0,0,0.06)';
+      for (let i = 0; i < 40; i++) g.fillRect((i * 97) % 256, (i * 53) % 256, 6, 6);
+    }, { repeat: [W / 256, D / 256] });
+    group.add(floorPlane(tiles, W + 400, D + 400, cx, cz, -0.5));
+    // 가운데: 원래 옥상 경기장 바닥(헬기장 표시 등)
+    const tex = new THREE.Texture(assets.arena.img);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    group.add(floorPlane(tex));
+    // 길 안내 줄(가운데에서 사방으로 노란 점선)
+    const lineMat = M.mat('#E8C24A', { rough: 0.8 });
+    const dashX = new THREE.BoxGeometry(70, 1, 10), dashZ = new THREE.BoxGeometry(10, 1, 70);
+    const dash = (geo, x, z) => { const d = new THREE.Mesh(geo, lineMat); d.position.set(x, 0.6, z); group.add(d); };
+    for (let x = B.minX + 100; x < B.maxX - 100; x += 140) if (x < -40 || x > ARENA_WIDTH + 40) dash(dashX, x, 500);
+    for (let z = B.minY + 100; z < B.maxY - 100; z += 140) if (z < -40 || z > ARENA_HEIGHT + 40) dash(dashZ, 800, z);
+    // 건물 몸통(옥상 아래)과 난간
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(W + 500, 80, D + 500), M.mat('#6E6A62', { rough: 1 }));
+    slab.position.set(cx, -41, cz);
+    group.add(slab);
+    const rail = M.mat('#5E6672', { metal: 0.5 });
+    const lamp = M.mat('#FF3B30', { emissive: '#FF2A1A' });
+    const m = 140;
+    for (const [x, z, w, d] of [[cx, B.minY - m, W + 2 * m, 14], [cx, B.maxY + m, W + 2 * m, 14], [B.minX - m, cz, 14, D + 2 * m], [B.maxX + m, cz, 14, D + 2 * m]]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 90, d), rail);
+      wall.position.set(x, 45, z);
+      group.add(wall);
+      const n = Math.floor(Math.max(w, d) / 400);
+      for (let i = 0; i <= n; i++) {
+        const l = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), lamp);
+        if (w > d) l.position.set(x - w / 2 + (i * w) / n, 96, z); else l.position.set(x, 96, z - d / 2 + (i * d) / n);
+        group.add(l);
+      }
+    }
+    // 바깥 둘레 장식: 물탱크·환풍기·안테나·태양광 판(움직이는 범위 밖, 난간 근처)
+    const tankMat = M.mat('#A9B0BC', { metal: 0.5 });
+    const fanMat = M.mat('#7A828E', { metal: 0.6, rough: 0.4 });
+    const solar = M.mat('#1E3A6A', { metal: 0.6, rough: 0.2, emissive: '#0A1A3A' });
+    const ring = (x, z) => [x, z];
+    const around = [];
+    for (let x = B.minX + 200; x < B.maxX; x += 700) { around.push(ring(x, B.minY - 70), ring(x + 350, B.maxY + 70)); }
+    for (let z = B.minY + 200; z < B.maxY; z += 700) { around.push(ring(B.minX - 70, z), ring(B.maxX + 70, z + 350)); }
+    around.forEach(([x, z], i) => {
+      const kind = i % 4;
+      if (kind === 0) {
+        const t = new THREE.Mesh(new THREE.CylinderGeometry(70, 70, 170, 20), tankMat);
+        t.position.set(x, 85, z);
+        group.add(t);
+        const legs = new THREE.Mesh(new THREE.CylinderGeometry(75, 75, 6, 20), M.mat('#3A3F47'));
+        legs.position.set(x, 172, z);
+        group.add(legs);
+      } else if (kind === 1) {
+        const f = new THREE.Mesh(new THREE.BoxGeometry(110, 60, 110), fanMat);
+        f.position.set(x, 30, z);
+        group.add(f);
+        const grill = new THREE.Mesh(new THREE.CylinderGeometry(40, 40, 4, 20), M.mat('#2A2E35'));
+        grill.position.set(x, 62, z);
+        group.add(grill);
+      } else if (kind === 2) {
+        const p = new THREE.Mesh(new THREE.BoxGeometry(160, 6, 90), solar);
+        p.position.set(x, 40, z);
+        p.rotation.x = -0.35;
+        group.add(p);
+      } else {
+        const a = new THREE.Mesh(new THREE.CylinderGeometry(3, 5, 260, 8), M.mat('#C9CED6', { metal: 0.8 }));
+        a.position.set(x, 130, z);
+        group.add(a);
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(6, 10, 8), lamp);
+        tip.position.set(x, 262, z);
+        group.add(tip);
+      }
+    });
+    skyline(group, { ring: Math.max(W, D) * 0.45, count: 48, minH: 1100, maxH: 3200 });
+    return {};
   }
 
   /** 복도(2스테이지): 본부 복도 그림 바닥, 사방 벽·천장 조명, 엘리베이터, 벽 포탑, 계단 문, 천장 구멍(R-10) */
@@ -1606,7 +1697,7 @@ export function createWorld3D(canvas, wrap, assets) {
       lastMatch = match;
       const cut = match.cutscene;
       currentStage = match.story?.stage ?? null;
-      const key = !match.story ? 'arena'
+      const key = !match.story ? (match.wide ? 'field' : 'arena')
         : cut?.kind === 'drive' && !cut.switched ? 'drive'
         : cut?.kind === 'lightning' && !cut.switched ? (cut.scene === 'roof' ? 'rooftop' : 'corridor')
         : match.story.stage;

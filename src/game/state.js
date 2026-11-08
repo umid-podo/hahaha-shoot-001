@@ -1,6 +1,6 @@
 import {
   RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, JET, COVERS, COVER,
-  STEEL, STEEL_SPOTS, HIGHS,
+  STEEL, STEEL_SPOTS, HIGHS, FIELD, ARENA_BOUNDS, WIDE_HIGHS, WIDE_COVERS,
 } from './config.js';
 
 // 2인 전용. 자리(P1·P2)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
@@ -95,6 +95,8 @@ export function createMatchWith(players, seed = Date.now()) {
     covers: createCovers(players),
     // highs: 고지대(올라설 수 있는 높은 단). 공중전·도로·대교 스테이지에서는 비운다
     highs: HIGHS.map((h) => ({ ...h })),
+    // bounds: 움직일 수 있는 범위(원래 크기). createMatch(2인 대결·자유 대전)는 넓은 맵으로 넓힌다
+    bounds: { ...ARENA_BOUNDS }, wide: false,
     jet: null, jetTimer: between(rng, JET.firstDelay), rng,
     tick: 0, winner: null, stats: createStats(players),
   };
@@ -104,8 +106,19 @@ export function createMatchWith(players, seed = Date.now()) {
  * @param {Record<string, {characterId: string, weapon: string}>} [loadout]
  * 자리별 선택(createPlayer의 pick)으로 P1·P2 경기를 만든다.
  */
-export function createMatch(loadout = defaultLoadout(), seed = Date.now()) {
-  return createMatchWith(SLOTS.map((slot) => createPlayer(slot, loadout[slot.id] ?? {})), seed);
+export function createMatch(loadout = defaultLoadout(), seed = Date.now(), { wide = false } = {}) {
+  const match = createMatchWith(SLOTS.map((slot) => createPlayer(slot, loadout[slot.id] ?? {})), seed);
+  if (wide) widen(match);
+  return match;
+}
+
+/** 넓은 맵으로: 이동 범위를 FIELD로 넓히고 둘레에 엄폐물·고지대를 더 놓는다(2인 대결·자유 대전) */
+export function widen(match) {
+  match.wide = true;
+  match.bounds = { ...FIELD };
+  match.covers.push(...WIDE_COVERS.map((c) => ({ ...c, hp: COVER.hp })));
+  match.highs.push(...WIDE_HIGHS.map((h) => ({ ...h })));
+  return match;
 }
 
 /** 경기 중에 들어온 플레이어(스토리 모드 적)의 통계 칸을 만든다. */

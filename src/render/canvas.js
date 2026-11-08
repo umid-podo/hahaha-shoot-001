@@ -2829,7 +2829,7 @@ export function createRenderer(canvas, wrap, assets) {
   function drawRadar(match, p, rect) {
     const r = Math.min(110, rect.w * 0.09);
     const cx = rect.x + r + 24, cy = rect.y + r + 24;
-    const range = 1300, k = r / range;
+    const range = match.wide ? 2000 : 1300, k = r / range;
     ctx.save();
     ctx.fillStyle = 'rgba(10,14,24,0.6)';
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
@@ -2845,7 +2845,19 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.strokeStyle = 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    [[0, 0], [ARENA_WIDTH, 0], [ARENA_WIDTH, ARENA_HEIGHT], [0, ARENA_HEIGHT]].forEach(([x, y], i) => {
+    const Bd = match.wide ? match.bounds : { minX: 0, maxX: ARENA_WIDTH, minY: 0, maxY: ARENA_HEIGHT };
+    // 고지대(옅은 네모)
+    ctx.fillStyle = 'rgba(255,214,94,0.28)';
+    for (const g of match.highs ?? []) {
+      ctx.beginPath();
+      [[g.x - g.w / 2, g.y - g.h / 2], [g.x + g.w / 2, g.y - g.h / 2], [g.x + g.w / 2, g.y + g.h / 2], [g.x - g.w / 2, g.y + g.h / 2]].forEach(([x, y], i) => {
+        const [sx, sy] = toScreen(x, y);
+        if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy);
+      });
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.beginPath();
+    [[Bd.minX, Bd.minY], [Bd.maxX, Bd.minY], [Bd.maxX, Bd.maxY], [Bd.minX, Bd.maxY]].forEach(([x, y], i) => {
       const [sx, sy] = toScreen(x, y);
       if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy);
     });

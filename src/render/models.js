@@ -300,6 +300,7 @@ export function makeChute(height = 180) {
  * 고지대: 올라설 수 있는 높은 단(철골 비계 위 철판 + 한쪽 계단 모양 옆면 + 노랑·검정 가장자리 줄). g는 { w, h(앞뒤 폭), height }.
  */
 export function makeHigh(g) {
+  if (g.kind === 'container') return makeContainer(g);
   const out = new THREE.Group();
   const H = g.height;
   const steel = mat('#5E6672', { metal: 0.7, rough: 0.4 });
@@ -328,6 +329,35 @@ export function makeHigh(g) {
   // 오르기 쉬운 쪽 표시: 낮은 받침 계단 두 칸(장식)
   out.add(at(box(40, H * 0.33, 24, mat('#8A847A', { rough: 0.9 })), -g.w / 2 + 30, H * 0.165, g.h / 2 + 12));
   out.add(at(box(40, H * 0.66, 12, mat('#8A847A', { rough: 0.9 })), -g.w / 2 + 30, H * 0.33, g.h / 2 + 6));
+  return out;
+}
+
+/** 화물 컨테이너(골판 옆면·문짝 쪽 막대·위 철판). g: { w, h, height, color } — 긴 쪽이 w(가로) 또는 h(세로) */
+export function makeContainer(g) {
+  const out = new THREE.Group();
+  const H = g.height;
+  const body = mat(g.color ?? '#B4472F', { metal: 0.4, rough: 0.55 });
+  const dark = mat('#2A2E35', { metal: 0.6, rough: 0.5 });
+  out.add(at(box(g.w, H, g.h, body), 0, H / 2, 0));
+  // 골판(긴 면을 따라 세로 홈)
+  const long = g.w >= g.h;
+  const L = long ? g.w : g.h, T = long ? g.h : g.w;
+  for (let i = -L / 2 + 8; i < L / 2 - 4; i += 12) {
+    for (const s of [-1, 1]) {
+      const rib = box(long ? 4 : 1.5, H - 10, long ? 1.5 : 4, body);
+      rib.position.set(long ? i : s * (T / 2 + 0.8), H / 2, long ? s * (T / 2 + 0.8) : i);
+      out.add(rib);
+    }
+  }
+  // 모서리 기둥·위 테두리
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) out.add(at(box(5, H + 1, 5, dark), sx * (g.w / 2 - 2), H / 2, sz * (g.h / 2 - 2)));
+  out.add(at(box(g.w + 1, 3, g.h + 1, dark), 0, H - 1, 0));
+  // 문짝 쪽(짧은 면) 잠금 막대
+  for (const s of [-1, 1]) for (const k of [-0.25, 0.25]) {
+    const bar = box(long ? 1.5 : 3, H - 14, long ? 3 : 1.5, mat('#C9CED6', { metal: 0.9, rough: 0.3 }));
+    bar.position.set(long ? s * (g.w / 2 + 1) : k * g.w, H / 2, long ? k * g.h : s * (g.h / 2 + 1));
+    out.add(bar);
+  }
   return out;
 }
 

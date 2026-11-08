@@ -1352,3 +1352,33 @@ test('장전: 쌍권총은 한 발마다 1씩, 장탄 수 0이면 무제한, 무
   run(s.match, s.inputs, 0.5);
   assert.equal(s.P1.reload, null, '기관단총은 기본 무제한(과열만)');
 });
+
+test('넓은 맵(2인 대결·자유 대전): 이동 범위가 크게 넓어지고 엄폐물·고지대가 더 있으며, 계단식 탑은 한 칸씩 뛰어 올라감', async () => {
+  const { FIELD, WIDE_HIGHS, WIDE_COVERS } = await import('../src/game/config.js');
+  const match = createMatch(undefined, 1, { wide: true });
+  match.phase = 'playing'; match.jetTimer = Infinity;
+  const inputs = createInputs(match.players);
+  const [P1] = match.players;
+  assert.ok((FIELD.maxX - FIELD.minX) * (FIELD.maxY - FIELD.minY) >= 10 * 1600 * 1000, '원래의 10배 넘는 넓이');
+  assert.equal(match.covers.length, COVERS.length + WIDE_COVERS.length);
+  assert.equal(match.highs.length, 4 + WIDE_HIGHS.length);
+  P1.x = P1.previousX = -1000; P1.y = P1.previousY = 400;
+  inputs.P1.moveAxis = -1;
+  run(match, inputs, 3);
+  assert.equal(P1.x, FIELD.minX, '원래 경기장 밖 멀리까지');
+  // 북쪽 탑: 64 → 128 → 190
+  const t1 = match.highs.find((h) => h.id === 'tower-n-1');
+  P1.x = P1.previousX = t1.x; P1.y = P1.previousY = t1.y + t1.h / 2 + 30; inputs.P1.moveAxis = 0;
+  // 뛰면서 조금씩 앞으로(한 칸 올라설 만큼만)
+  for (let i = 0; i < 4 && P1.z < 190; i++) {
+    inputs.P1.jump = true; inputs.P1.moveY = -1;
+    run(match, inputs, i === 0 ? 0.45 : 0.3);
+    inputs.P1.moveY = 0;
+    run(match, inputs, 0.6);
+  }
+  assert.equal(P1.z, 190, '탑 꼭대기');
+  // 탄은 넓은 맵 끝까지 날아감(원래 경기장 밖에서도 사라지지 않음)
+  const b = spawnProjectile(match, P1, Math.PI);
+  step(match, inputs);
+  assert.ok(match.projectiles.includes(b));
+});

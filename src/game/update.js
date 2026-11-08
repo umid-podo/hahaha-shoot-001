@@ -10,6 +10,11 @@ import {
 import { needsGunKata, startGunKata, updateGunKata, kataOn } from './gunkata.js';
 
 const OUT_MARGIN = 40;
+/** 경기의 이동 범위(넓은 맵이면 FIELD, 아니면 원래 경기장) */
+const boundsOf = (match) => match.bounds ?? { minX: MIN_X, maxX: MAX_X, minY: MIN_Y, maxY: MAX_Y };
+/** 탄이 사라지는 바깥 경계: 원래 경기장, 넓은 맵이면 그 둘레(난간)까지 */
+const fieldOf = (match) => (match.wide ? { x0: match.bounds.minX - 60, x1: match.bounds.maxX + 60, y0: match.bounds.minY - 60, y1: match.bounds.maxY + 60 }
+  : { x0: 0, x1: ARENA_WIDTH, y0: 0, y1: ARENA_HEIGHT });
 const HURT_TIME = 0.2;
 // 0.1초 같은 간격이 1/60초 틱의 부동소수 오차로 한 틱 밀리지 않도록 쓰는 여유
 const EPS = 1e-9;
@@ -168,7 +173,7 @@ function steer(match, b, turnRate, dt) {
  * 아무것도 맞히지 못한 폭발탄(RPG·수류탄·전투기 미사일)이 경로 끝에 닿았는지. 목표 거리(range)만큼 날아간 지점,
  * 경기장 밖으로 나간 지점(벽), 수명이 다한 지점 중 먼저인 곳의 좌표를 돌려준다. 아직이면 null.
  */
-export function rocketEnd(b) {
+export function rocketEnd(b, match = null) {
   if (b.range !== undefined) {
     const sx = b.startX ?? b.previousX, sy = b.startY ?? b.previousY;
     const before = Math.hypot(b.previousX - sx, b.previousY - sy), after = Math.hypot(b.x - sx, b.y - sy);
@@ -177,9 +182,10 @@ export function rocketEnd(b) {
       return { x: b.previousX + (b.x - b.previousX) * t, y: b.previousY + (b.y - b.previousY) * t };
     }
   }
-  const out = b.x < 0 || b.x > ARENA_WIDTH || b.y < 0 || b.y > ARENA_HEIGHT;
+  const f = match ? fieldOf(match) : { x0: 0, x1: ARENA_WIDTH, y0: 0, y1: ARENA_HEIGHT };
+  const out = b.x < f.x0 || b.x > f.x1 || b.y < f.y0 || b.y > f.y1;
   if (out || b.life <= 0) {
-    return { x: Math.max(0, Math.min(ARENA_WIDTH, b.x)), y: Math.max(0, Math.min(ARENA_HEIGHT, b.y)) };
+    return { x: Math.max(f.x0, Math.min(f.x1, b.x)), y: Math.max(f.y0, Math.min(f.y1, b.y)) };
   }
   return null;
 }
@@ -433,7 +439,7 @@ function updateDash(match, p, dt, events) {
     if (t !== null && t > 0 && (!best || t < best.t)) best = { t, cover: c };
   }
   const t = best ? best.t : 1;
-  p.x = Math.min(MAX_X, Math.max(MIN_X, x0 + (x1 - x0) * t));
+  p.x = Math.min(boundsOf(match).maxX, Math.max(boundsOf(match).minX, x0 + (x1 - x0) * t));
   p.y = y0 + (y1 - y0) * t;
   if (best?.victim) {
     damage(match, best.victim, d.damage, d.shot, events);
@@ -444,7 +450,8 @@ function updateDash(match, p, dt, events) {
   }
   // 최대 거리만큼 가거나 경기장 끝·옆 벽에 닿으면 돌아온다
   const far = Math.hypot(p.x - d.homeX, p.y - d.homeY) >= RULES.dashRange;
-  if (far || p.x <= MIN_X || p.x >= MAX_X || p.y < 0 || p.y > ARENA_HEIGHT) d.returning = true;
+  const B = boundsOf(match);
+  if (far || p.x <= B.minX || p.x >= B.maxX || p.y < B.minY - 50 || p.y > B.maxY + 50) d.returning = true;
 }
 
 /** 장탄 수가 정해진 무기(mag > 0)인지 */
@@ -525,8 +532,10 @@ export function move(match, p, ax, ay, dt) {
   const len = Math.hypot(ax, ay);
   if (len > 1) { ax /= len; ay /= len; }
   if (!ax && !ay) return;
-  let x = Math.min(MAX_X, Math.max(MIN_X, p.x + ax * p.speed * dt));
-  let y = clampY(p.team, p.y + ay * p.speed * dt);
+  const B = boundsOf(match);
+  const cy = (v) => Math.min(B.maxY, Math.max(B.minY, v));
+  let x = Math.min(B.maxX, Math.max(B.minX, p.x + ax * p.speed * dt));
+  let y = cy(p.y + ay * p.speed * dt);
   const z = p.z ?? 0;
   const walls = [
     ...(match.covers ?? []).filter((c) => c.hp > 0 && z < groundAt(match, c.x, c.y) + COVER_HEIGHT - 2).map((c) => ({ c, pad: p.radius * 0.6 })),
@@ -540,9 +549,9 @@ export function move(match, p, ax, ay, dt) {
     // 덜 파고든 쪽으로 밀어낸다
     const px = hw - Math.abs(dx), py = hh - Math.abs(dy);
     if (px < py) x = c.x + Math.sign(dx || ax || 1) * hw;
-    else y = clampY(p.team, c.y + Math.sign(dy || ay || 1) * hh);
+    else y = cy(c.y + Math.sign(dy || ay || 1) * hh);
   }
-  p.x = Math.min(MAX_X, Math.max(MIN_X, x));
+  p.x = Math.min(B.maxX, Math.max(B.minX, x));
   p.y = y;
 }
 
@@ -707,7 +716,7 @@ export function step(match, inputs, dt = TICK) {
   // 빗나간 RPG·전투기 미사일은 경로 끝에서 터져 주변에 폭발 피해를 준다.
   for (const b of match.projectiles) {
     if (removed.has(b) || !b.splash) continue;
-    const end = rocketEnd(b);
+    const end = rocketEnd(b, match);
     if (!end) continue;
     removed.add(b);
     explode(match, b, end.x, end.y, null, null, events);
@@ -728,7 +737,7 @@ export function step(match, inputs, dt = TICK) {
 
   match.projectiles = match.projectiles.filter((b) =>
     !removed.has(b) && b.life > 0 &&
-    b.x > -OUT_MARGIN && b.x < ARENA_WIDTH + OUT_MARGIN && b.y > -OUT_MARGIN && b.y < ARENA_HEIGHT + OUT_MARGIN);
+    (({ x0, x1, y0, y1 }) => b.x > x0 - OUT_MARGIN && b.x < x1 + OUT_MARGIN && b.y > y0 - OUT_MARGIN && b.y < y1 + OUT_MARGIN)(fieldOf(match)));
 
   // 팀 전원이 쓰러지면 패배. 같은 틱에 양 팀이 모두 쓰러지면 무승부.
   // 스토리 모드는 사람 주인공이 모두 쓰러지면 AI 동료가 남아 있어도 진다
