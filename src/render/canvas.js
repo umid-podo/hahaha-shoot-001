@@ -2750,11 +2750,10 @@ export function createRenderer(canvas, wrap, assets) {
   }
 
   /* ───────── 1인칭 3D 화면 위 HUD(2D 캔버스, 3D 화면 위에 겹쳐 그림) ─────────
-   * 화면 칸(view)마다: 이름표·체력(3D에서 투영한 위치), 조준점·명중 표시, 맞은 방향 표시, 손에 든 무기(또는 라이트닝 조종석),
+   * 화면 칸(view)마다: 이름표·체력(3D에서 투영한 위치), 조준점·명중 표시, 맞은 방향 표시, 라이트닝 조종석(손에 든 총은 3D로 guns.js가 그림),
    * 왼쪽 아래 내 체력, 오른쪽 아래 무기·쿨타임, 왼쪽 위 레이더(위에서 본 작은 지도, 내가 보는 쪽이 위).
    */
   const hud = { hitMarker: {}, hurtFrom: {}, kick: {} };
-  const SKIN = '#F2C9A0';
 
   function hudEvents(events, match) {
     for (const e of events) {
@@ -2765,79 +2764,6 @@ export function createRenderer(canvas, wrap, assets) {
       const from = owner ? { x: owner.x, y: owner.y } : null;
       if (e.victimId) hud.hurtFrom[e.victimId] = { from, age: 0 };
     }
-  }
-
-  /** 총 모양 하나: 길이 len, 몸통 굵기 h, 색 color. (x, y)는 손잡이 자리, 총구는 왼쪽 위(화면 가운데) 쪽 */
-  function gunShape(x, y, s, { len = 260, h = 46, color = '#2A2E35', barrel = 120, mag = true, scope = false, stock = true, accent = null }) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(-0.32);
-    ctx.scale(s, s);
-    ctx.fillStyle = color;
-    ctx.strokeStyle = '#0D0F14';
-    ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.roundRect(-len, -h / 2, len, h, 10); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.roundRect(-len - barrel, -h / 5, barrel, h / 2.5, 4); ctx.fill(); ctx.stroke();
-    if (mag) { ctx.beginPath(); ctx.roundRect(-len * 0.55, h / 2 - 4, 34, h * 1.1, 6); ctx.fill(); ctx.stroke(); }
-    if (scope) {
-      ctx.fillStyle = '#15171C';
-      ctx.beginPath(); ctx.roundRect(-len * 0.75, -h / 2 - 34, len * 0.5, 30, 12); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#7FB2E6';
-      ctx.beginPath(); ctx.arc(-len * 0.75 + 8, -h / 2 - 19, 9, 0, Math.PI * 2); ctx.fill();
-    }
-    if (stock) { ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(-10, -h / 2, 80, h * 0.9, 12); ctx.fill(); ctx.stroke(); }
-    if (accent) { ctx.fillStyle = accent; ctx.fillRect(-len + 20, -h / 2 + 6, len - 60, 6); }
-    // 손
-    ctx.fillStyle = SKIN;
-    ctx.beginPath(); ctx.ellipse(-20, h / 2 + 10, 34, 26, 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(-len * 0.72, h / 2 + 4, 28, 20, 0.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.restore();
-  }
-
-  /** 손에 든 무기(화면 오른쪽 아래). kick(0~1)이면 뒤로 튄다 */
-  function drawViewmodel(p, rect, kick, time, reducedMotion, moving) {
-    const bob = reducedMotion ? 0 : moving ? Math.sin(time * 11) * 8 : Math.sin(time * 2) * 3;
-    const x = rect.x + rect.w * 0.82 + kick * 18, y = rect.y + rect.h * 0.97 + bob + kick * 26;
-    const s = Math.min(rect.w / 1600, rect.h / 1000) * 1.9 * (rect.w < 1000 ? 1.3 : 1);
-    const w = p.weapon;
-    const team = TEAM_COLOR[p.team];
-    if (w === 'pistol') gunShape(x - 40 * s, y - 40 * s, s, { len: 120, h: 40, barrel: 30, mag: false, stock: false, accent: team });
-    else if (w === 'dual' || w === 'dualrpg') {
-      gunShape(x - 40 * s, y - 40 * s, s, { len: 120, h: 40, barrel: 30, mag: false, stock: false, accent: team });
-      ctx.save(); ctx.translate(rect.x + rect.w, 0); ctx.scale(-1, 1); ctx.translate(-rect.x, 0);
-      gunShape(rect.x + rect.w * 0.7 - 40 * s + kick * 18, y - 50 * s, s, { len: 120, h: 40, barrel: 30, mag: false, stock: false, accent: team });
-      ctx.restore();
-    } else if (w === 'rifle') gunShape(x, y - 30 * s, s, { len: 280, h: 50, barrel: 110, accent: team });
-    else if (w === 'smg') gunShape(x, y - 30 * s, s, { len: 200, h: 48, barrel: 60, accent: '#8E6BD6' });
-    else if (w === 'sniper') gunShape(x, y - 30 * s, s, { len: 320, h: 42, barrel: 170, scope: true, mag: false, accent: team });
-    else if (w === 'shotgun') gunShape(x, y - 30 * s, s, { len: 260, h: 56, barrel: 120, mag: false, color: '#5A3A22', accent: '#2A2E35' });
-    else if (w === 'rpg') {
-      ctx.save();
-      ctx.translate(x, y - 120 * s);
-      ctx.rotate(-0.25);
-      ctx.scale(s, s);
-      ctx.fillStyle = '#4E6B3A'; ctx.strokeStyle = '#0D0F14'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.roundRect(-420, -34, 520, 68, 14); ctx.fill(); ctx.stroke();
-      if (p.cooldown <= 0) ctx.drawImage(assets.rocket.img, -500, -40, 110, 80);
-      ctx.fillStyle = SKIN;
-      ctx.beginPath(); ctx.ellipse(-120, 50, 34, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.restore();
-    } else if (w === 'crossbow') {
-      const { img } = assets['akimbo-crossbow'];
-      const size = 360 * s;
-      ctx.drawImage(img, x - size * 0.9, y - size * 0.75, size, size * 0.75);
-    } else if (w === 'dagger') {
-      ctx.save();
-      ctx.translate(x - 60 * s, y - 60 * s);
-      ctx.rotate(-0.6);
-      ctx.scale(s, s);
-      ctx.fillStyle = '#C9CED6'; ctx.strokeStyle = '#0D0F14'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(-200, 0); ctx.lineTo(0, -16); ctx.lineTo(0, 16); ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#5A3A22'; ctx.fillRect(0, -12, 70, 24);
-      ctx.fillStyle = SKIN; ctx.beginPath(); ctx.ellipse(36, 18, 34, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.restore();
-    } else if (w === 'instakill') gunShape(x, y - 40 * s, s * 1.2, { len: 300, h: 80, barrel: 90, color: '#3A1E2A', accent: '#FF3B6B', mag: false });
-    else gunShape(x, y - 30 * s, s, { len: 240, h: 48, barrel: 90, accent: team });
   }
 
   /** 라이트닝 조종석: 캐노피 틀과 계기판 */
@@ -3027,10 +2953,8 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
     for (const t of [...v.tags].sort((a, b) => b.dist - a.dist)) drawTag(t);
     const kick = hud.kick[p.id] ?? 0;
-    const moving = Math.hypot(p.x - p.previousX, p.y - (p.previousY ?? p.y)) > 0.5;
     if (p.alive) {
       if (p.plane) drawCockpit(p, rect, time, reducedMotion);
-      else drawViewmodel(p, rect, kick, time, reducedMotion, moving);
       const weapon = WEAPONS[p.weapon];
       const reloading = (weapon.trigger === 'release' && p.cooldown > 0) || (weapon.ownCooldown && (p.cooldowns[weapon.id] ?? 0) > 0)
         || (weapon.battery && p.battery <= 0) || (weapon.heat && p.overheat > 0);
@@ -3055,6 +2979,41 @@ export function createRenderer(canvas, wrap, assets) {
   }
 
   /** 떠오르는 글자(피해 숫자·MISS·퍽!) */
+  /** 3D 화면 위 말풍선(꼬리가 아래 말하는 사람을 가리킴) */
+  function drawBubble(b) {
+    ctx.font = 'bold 34px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(b.text).width + 40, h = 58;
+    const bx = Math.max(10, Math.min(ARENA_WIDTH - w - 10, b.x - w / 2)), by = Math.max(30, b.y - h - 26);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(bx, by, w, h, 14); ctx.fill(); ctx.stroke();
+    const tx = Math.max(bx + 18, Math.min(bx + w - 18, b.x));
+    ctx.beginPath(); ctx.moveTo(tx - 10, by + h - 1); ctx.lineTo(tx, by + h + 18); ctx.lineTo(tx + 10, by + h - 1); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(tx - 10, by + h); ctx.lineTo(tx, by + h + 18); ctx.lineTo(tx + 10, by + h); ctx.stroke();
+    ctx.fillStyle = INK;
+    ctx.fillText(b.text, bx + w / 2, by + h / 2 + 1);
+  }
+
+  /** 컷씬 중 사람 플레이어 체력(왼쪽 위, 위 검은 띠 아래) */
+  function drawCinematicHp(players) {
+    players.filter((p) => !p.ai).forEach((p, i) => {
+      const x = 24, y = 34 + i * 58;
+      ctx.fillStyle = 'rgba(10,14,24,0.6)';
+      ctx.beginPath(); ctx.roundRect(x, y, 300, 50, 12); ctx.fill();
+      ctx.font = 'bold 16px system-ui, sans-serif';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = p.team === 'earth' ? '#8FD0FF' : '#FFB060';
+      ctx.fillText(`${p.id} ${p.name}`, x + 12, y + 14);
+      drawHpBar(ctx, x + 12, y + 27, 210, 14, p.hp, p.maxHp);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 18px system-ui, sans-serif';
+      ctx.fillText(`${Math.max(0, Math.round(p.hp))}`, x + 232, y + 34);
+    });
+  }
+
   function drawLabels(v) {
     ctx.save();
     ctx.beginPath(); ctx.rect(v.rect.x, v.rect.y, v.rect.w, v.rect.h); ctx.clip();
@@ -3108,12 +3067,22 @@ export function createRenderer(canvas, wrap, assets) {
     const cut = match.cutscene, killcam = match.killcam;
     for (const v of views) {
       if (!v.cinematic) drawFpsView(match, v, inputs, time, reducedMotion, dt);
+      else {
+        // 처치 컷씬: 이름표·체력바와 말풍선(무전·도발)도 보인다
+        ctx.save();
+        ctx.beginPath(); ctx.rect(v.rect.x, v.rect.y, v.rect.w, v.rect.h); ctx.clip();
+        for (const t of [...v.tags].sort((a, b) => b.dist - a.dist)) drawTag(t);
+        if (v.bubble) drawBubble(v.bubble);
+        ctx.restore();
+      }
       drawLabels(v);
     }
     if (views.length > 1) {
       ctx.fillStyle = '#0D0F14';
       ctx.fillRect(ARENA_WIDTH / 2 - 3, 0, 6, ARENA_HEIGHT);
     }
+    // 컷씬·처치 컷씬 동안에도 사람 플레이어의 체력바를 왼쪽 위에 보여 준다
+    if ((killcam || cut) && views.every((v) => v.cinematic)) drawCinematicHp(match.players);
     if (killcam) {
       drawKillcamOverlay(killcam, time, reducedMotion);
     } else if (cut) {

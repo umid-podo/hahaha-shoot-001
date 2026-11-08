@@ -43,6 +43,7 @@ let match = null;
 let inputs = null;
 let controls = null;
 let renderer = null;
+const worldCanvas = document.querySelector('#world');
 // 1인칭 3D 화면(three.js). renderer(2D 캔버스)는 그 위에 HUD·자막·건 카타를 그린다.
 let world = null;
 let ai = null;
@@ -367,7 +368,8 @@ function frame(now) {
   kataKeys.sync(match?.phase === 'gunkata' ? glowingKey(match.gunkata) : null);
   if (match) {
     if (world) {
-      // 건 카타(옆에서 본 2D 화면) 동안은 3D를 그리지 않는다
+      // 건 카타(옆에서 본 2D 화면) 동안은 3D를 그리지 않고 3D 화면도 숨긴다(2D 화면만 보인다)
+      worldCanvas.style.visibility = match.gunkata ? 'hidden' : '';
       const views = match.gunkata ? [] : world.draw(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion, humans.map((p) => p.id));
       renderer.drawOverlay(match, inputs, frameMs / 1000, now / 1000, settings.reducedMotion, views, { mouseHint: !mouse.locked() && match.phase === 'playing' && !isTouch });
     } else {
@@ -389,7 +391,7 @@ async function boot() {
     renderer = createRenderer(document.querySelector('#arena'), document.querySelector('#arena-wrap'), assets);
     // WebGL을 쓸 수 없는 기기는 예전처럼 위에서 내려다본 2D 화면으로 그린다
     try {
-      world = createWorld3D(document.querySelector('#world'), document.querySelector('#arena-wrap'), assets);
+      world = createWorld3D(worldCanvas, document.querySelector('#arena-wrap'), assets);
     } catch (error) {
       console.warn('3D 화면을 만들 수 없어 2D 화면으로 그립니다.', error);
       world = null;

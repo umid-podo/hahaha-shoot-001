@@ -1204,7 +1204,7 @@ test('라이트닝 컷씬: R-10을 물리치면 옥상에서 본부에 라이트
   assert.equal(match.story.turrets, null);
 });
 
-test('공중전: 적은 건쉽, 아이템은 미사일(유도 없음), 보조무기 과냉각은 5초 동안 연사력을 크게 올림(한 발 피해 1)', () => {
+test('공중전: 적은 건쉽, 아이템은 미사일(유도 없음), 보조무기 과냉각은 5초 동안 연사력을 크게 올림(한 발 피해 3)', () => {
   const { match, inputs } = sky();
   const [P1] = match.players;
   assert.equal(P1.hp, 400, '이어하기는 저장한 체력 그대로');
@@ -1243,7 +1243,7 @@ test('공중전: 적은 건쉽, 아이템은 미사일(유도 없음), 보조무
   match.projectiles = [];
   const boosted = shots(2);
   const boostedShots = match.projectiles.filter((b) => b.weapon === 'lightning' && b.ownerId === 'P1');
-  assert.ok(boostedShots.length > 0 && boostedShots.every((b) => b.damage === 1), '과냉각 중 한 발 피해 1');
+  assert.ok(boostedShots.length > 0 && boostedShots.every((b) => b.damage === WEAPONS.overcool.boost.damage && b.damage === 3), '과냉각 중 한 발 피해 3');
   assert.ok(boosted >= normal * 2.5, `과냉각 ${boosted}발 vs 평소 ${normal}발`);
   inputs.P1.select = 'secondary';
   shots(4);
@@ -1582,7 +1582,7 @@ test('대교 2웨이브: 4명이 4대의 차에 내려앉고(쉬움 3·보통 1)
   assert.ok(enemies(match).every((p) => diff(p) === '쉬움'));
 });
 
-test('대교 배: 다리 가운데가 벌어지고 배가 지나가며 위아래로 대포(명중 20·폭발 8), 지나가면 다리가 닫힘', () => {
+test('대교 배: 다리 가운데가 벌어지고 배가 지나가며 위아래로 대포(명중 5·폭발 2), 지나가면 다리가 닫힘', () => {
   const { match, inputs } = bridge(17);
   untilFight(match, inputs);
   for (const p of match.players) { p.hp = p.maxHp = 99999; }
@@ -1595,7 +1595,7 @@ test('대교 배: 다리 가운데가 벌어지고 배가 지나가며 위아래
   assert.equal(match.jet.y, SHIP.y);
   const balls = match.projectiles.filter((b) => b.weapon === 'ship');
   assert.equal(balls.length, 2);
-  assert.ok(balls.every((b) => b.team === 'jet' && b.damage === 20 && b.splash.damage === 8));
+  assert.ok(balls.every((b) => b.team === 'jet' && b.damage === 5 && b.splash.damage === 2));
   assert.deepEqual(balls.map((b) => Math.sign(b.vy)).sort(), [-1, 1]);
   match.jet.x = 99999; // 화면 밖으로
   for (let t = 0; t < SHIP.openTime + 0.2; t += TICK) step(match, inputs);
@@ -1753,6 +1753,6 @@ test('건 카타 시간 조절: 밸런스의 버튼 시간제한·쉬는 시간�
   while (match.gunkata.attack) step(match, inputs);
   assert.ok(Math.abs(match.gunkata.gap - 2 * 0.97) < 1e-9, '쉬는 시간 2초(수련장은 연속 1번이라 3% 짧게)');
   resetAll();
-  assert.equal(KATA.warn, 0.5);
-  assert.deepEqual(KATA.gap, [0.55, 1.1]);
+  assert.equal(KATA.warn, 1.5);
+  assert.deepEqual(KATA.gap, [0.55, 0.55]);
 });

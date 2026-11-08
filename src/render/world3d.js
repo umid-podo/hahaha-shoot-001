@@ -1,11 +1,12 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {
-  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, SPRITE_SIZE, TEAM_COLOR, CHARACTERS, JET, TANK, SHIP, TURRETS, WEAPONS,
+  ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, SPRITE_SIZE, TEAM_COLOR, CHARACTERS, JET, TANK, SHIP, TURRETS, WEAPONS, MUZZLE_OFFSET,
 } from '../game/config.js';
 import {
   ELEVATOR, CEILING_X, ROOF_STAIRS, CORRIDOR_STAIRS, DRIVE_ROAD, DRIVE_Y, CARRIER_Y,
 } from '../game/story.js';
 import * as M from './models.js';
+import { createViewmodel, makeBullet, makeArrow, sharedShotGeometries, getFlashTexture, getSmokeTexture, vmFov } from './guns.js';
 
 /**
  * 1인칭 3D 화면(three.js). 게임 상태(경기장 위에서 본 2D 좌표)를 그대로 읽어 3D로 그린다.
@@ -871,7 +872,7 @@ export function createWorld3D(canvas, wrap, assets) {
   const shots = new Map();
   const bulletGeo = new THREE.BoxGeometry(30, 3, 3);
   const bulletColor = (b) => (b.weapon === 'laser' ? '#FF2A2A' : b.weapon === 'jsniper' ? '#FF3B30'
-    : b.weapon === 'lightning' ? '#9FE0FF' : b.team === 'earth' ? '#8FD0FF' : '#FFB060');
+    : b.weapon === 'lightning' ? '#9FE0FF' : b.team === 'earth' ? '#6FB8FF' : '#FFA040');
   // 탄·효과 도형은 한 번만 만들어 함께 쓴다(탄마다 새로 만들면 GPU 메모리가 샌다)
   const GEO = {
     rocketBody: new THREE.CylinderGeometry(5, 5, 34, 10),
@@ -903,10 +904,18 @@ export function createWorld3D(canvas, wrap, assets) {
     }
     const rockets = { rpg: '#4E6B3A', missile: '#C9CED6', dsmissile: '#3FAE4A', dualrpg: '#7A4A2A', jet: '#D9443A', tank: '#2A2E35', ship: '#2A2E35', turret: '#2A2E35' };
     if (rockets[b.weapon]) return makeRocket(rockets[b.weapon]);
-    const m = new THREE.Mesh(bulletGeo, M.mat(bulletColor(b), { basic: true }));
-    if (b.weapon === 'laser' || b.weapon === 'jsniper') m.scale.set(1.6, 2.4, 2.4);
-    if (b.weapon === 'shotgun' || b.weapon === 'flak') m.scale.set(0.4, 3, 3);
-    return m;
+    // 레이저는 빛 덩어리, 석궁은 화살, 나머지는 진짜 총알 모양(구리 탄두·놋쇠 몸통, 뒤로 옅은 빛줄기)
+    if (b.weapon === 'laser') {
+      const m = new THREE.Mesh(bulletGeo, M.mat(bulletColor(b), { basic: true }));
+      m.scale.set(1.6, 2.4, 2.4);
+      return m;
+    }
+    if (b.weapon === 'crossbow') return makeArrow();
+    const trail = bulletColor(b);
+    if (b.weapon === 'shotgun' || b.weapon === 'flak') return makeBullet({ kind: 'pellet', trail, trailLen: 40 });
+    if (b.weapon === 'sniper' || b.weapon === 'jsniper') return makeBullet({ trail, scale: 1.25, trailLen: 120 });
+    if (b.weapon === 'lightning' || b.weapon === 'gunship') return makeBullet({ trail, scale: 1.5, trailLen: 90 });
+    return makeBullet({ trail });
   }
   /** 탄의 높이: 보통은 총 높이, 던진 수류탄은 포물선, 전투기·포탑 폭탄은 쏜 높이에서 목표 바닥으로 */
   function shotHeight(b, stage) {
@@ -988,6 +997,10 @@ export function createWorld3D(canvas, wrap, assets) {
   // ── 효과(폭발·불꽃·연기·파편·레이저) ──
   let effects = [];
   const sparkTex = (() => { const t = new THREE.Texture(assets['hit-spark'].img); t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; return t; })();
+  // 총구 불꽃용 점광원: 늘 장면에 두고 세기만 바꾼다(빛 개수가 바뀌면 재질을 다시 컴파일해 끊긴다)
+  const muzzleLights = Array.from({ length: 3 }, () => { const l = new THREE.PointLight('#FFB050', 0, 320, 1.6); scene.add(l); return l; });
+  let muzzleLightNext = 0;
+  const viewmodel = createViewmodel();
   const labels = []; // 화면에 띄울 글자(피해 숫자·MISS·퍽!): { text, x, y, h, color, age, life, rise }
   function addEffect(kind, e) {
     const stageH = currentStage === 'sky' ? PLANE_Y : 0;
@@ -1018,6 +1031,39 @@ export function createWorld3D(canvas, wrap, assets) {
         m.scale.setScalar(size * (0.6 + k * 1.8));
         m.material.opacity = (e.dense ? 0.6 : 0.45) * (1 - k);
         m.position.y += dt * 20;
+      } });
+      return;
+    }
+    if (kind === 'muzzle') {
+      // 다른 사람이 쏠 때 총구 불꽃: 잠깐 번쩍이는 빛과 주변을 밝히는 점광원(미리 만든 빛을 돌려 쓴다)
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: getFlashTexture(), color: e.color ?? '#FFFFFF', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      s.position.set(e.x, e.h, e.y);
+      s.material.rotation = Math.random() * Math.PI * 2;
+      scene.add(s);
+      const light = muzzleLights[muzzleLightNext++ % muzzleLights.length];
+      light.position.set(e.x, e.h + 10, e.y);
+      light.color.set(e.color ?? '#FFB050');
+      const size = e.size ?? 46;
+      effects.push({ obj: s, owner: e.owner, age: 0, life: 0.07, update(k) {
+        s.scale.setScalar(size * (1 - k * 0.4));
+        s.material.opacity = 1 - k;
+        light.intensity = 2600 * (1 - k);
+      } });
+      return;
+    }
+    if (kind === 'gunsmoke') {
+      // 총구 연기: 옅은 연기가 피어올라 퍼지며 사라진다
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: getSmokeTexture(), color: '#D8DADF', transparent: true, depthWrite: false, opacity: 0.6 }));
+      s.position.set(e.x, e.h, e.y);
+      s.material.rotation = Math.random() * Math.PI * 2;
+      scene.add(s);
+      const s0 = e.size ?? 8, vx = (e.vx ?? 0), vz = (e.vz ?? 0);
+      effects.push({ obj: s, owner: null, age: 0, life: e.life ?? 1.1, update(k, dt) {
+        s.scale.setScalar(s0 * (0.5 + k * 2.4));
+        s.material.opacity = (e.opacity ?? 0.5) * (1 - k) * Math.min(1, k * 8 + 0.3);
+        s.position.x += vx * dt * (1 - k);
+        s.position.z += vz * dt * (1 - k);
+        s.position.y += dt * (e.rise ?? 16);
       } });
       return;
     }
@@ -1085,9 +1131,9 @@ export function createWorld3D(canvas, wrap, assets) {
       if (fx.age < fx.life) return true;
       scene.remove(fx.obj);
       // 효과마다 따로 만든 것(공용 도형·재질이 아닌 것)만 버린다
-      const shared = new Set(Object.values(GEO));
+      const shared = new Set([...Object.values(GEO), ...sharedShotGeometries()]);
       fx.obj.traverse?.((o) => {
-        if (o.geometry && !shared.has(o.geometry) && o.geometry !== bulletGeo) o.geometry.dispose();
+        if (o.geometry && !o.isSprite && !shared.has(o.geometry) && o.geometry !== bulletGeo) o.geometry.dispose(); // 판(Sprite) 도형은 three.js가 함께 쓴다
         if (o.material && !o.material.userData.shared) o.material.dispose();
       });
       return false;
@@ -1175,7 +1221,7 @@ export function createWorld3D(canvas, wrap, assets) {
         const flyH = cut.kicked && fallH === 0 ? Math.min(160, Math.max(0, cut.kickFrom?.y - s.y) * 0.4) : 0;
         cutSprite('smith', { characterId: 'isb-agent-1', weapon: 'pistol', scale: cut.bossScale, x: s.x, y: s.y, h: flyH + fallH, alpha: s.alpha, spin: s.angle, aim: Math.PI / 2 }, seen);
         cut.bullets.forEach((b, i) => {
-          const m = prop(`cut-bullet:${i}`, () => new THREE.Mesh(bulletGeo, M.mat('#8FD0FF', { basic: true })));
+          const m = prop(`cut-bullet:${i}`, () => makeBullet({ trail: '#6FB8FF' }));
           m.position.set(b.x, GUN_Y, b.y);
           m.rotation.set(0, -Math.atan2(b.vy, b.vx), 0);
         });
@@ -1338,6 +1384,37 @@ export function createWorld3D(canvas, wrap, assets) {
   }
   let lastMatch = null;
   let lastScene = null;
+  const NO_FLASH = new Set(['grenade', 'dagger', 'crossbow', 'overcool']);
+  /** 쏜 사람의 총구(경기장 좌표)에 불꽃·연기. 1인칭으로 보는 내 화면에서는 불꽃을 숨기고(손에 든 총이 따로 번쩍인다) 연기는 보인다 */
+  function muzzleFx(match, e) {
+    if (!match || NO_FLASH.has(e.weapon) || match.gunkata || match.cutscene) return;
+    const p = match.players.find((q) => q.id === e.playerId);
+    if (!p || p.plane || p.aircraft || WEAPONS[e.weapon]?.thrown) return;
+    const dx = Math.cos(p.aim), dz = Math.sin(p.aim);
+    const x = p.x + dx * MUZZLE_OFFSET, y = p.y + dz * MUZZLE_OFFSET;
+    const h = (currentStage === 'sky' ? PLANE_Y : GUN_Y) + (currentStage === 'road' ? CAR_ROOF : 0);
+    const big = ['shotgun', 'rpg', 'sniper', 'dualrpg', 'jsniper'].includes(e.weapon);
+    const color = e.weapon === 'laser' ? '#FF3030' : e.weapon === 'instakill' ? '#FF4FA0' : null;
+    addEffect('muzzle', { x, y, h, owner: p.id, color, size: big ? 70 : 46 });
+    if (p.ai) { // 사람 플레이어의 연기는 손에 든 총구 자리에서 띄운다(ownSmoke)
+      addEffect('gunsmoke', { x: x + dx * 6, y: y + dz * 6, h: h + 4, size: big ? 16 : 10, vx: dx * 30, vz: dz * 30 });
+    }
+  }
+  /** 내 화면의 총구 연기: 뷰모델 카메라 기준 자리(cm)를 1인칭 카메라 기준 경기장 좌표로 옮긴다 */
+  function ownSmoke(cam, positions, p) {
+    const vmScale = Math.tan((cam.fov / 2) * Math.PI / 180) / Math.tan((vmFov(cam.aspect) / 2) * Math.PI / 180);
+    for (const v of positions) {
+      const local = new THREE.Vector3(v.x * vmScale * 0.75, v.y * vmScale * 0.75, v.z * 0.75);
+      const w = cam.localToWorld(local);
+      const big = ['shotgun', 'rpg', 'sniper'].includes(p.weapon);
+      for (let i = 0; i < (big ? 3 : 2); i++) {
+        addEffect('gunsmoke', {
+          x: w.x + Math.cos(p.aim) * i * 4, y: w.z + Math.sin(p.aim) * i * 4, h: w.y + 1, size: big ? 6 : 3.6,
+          vx: Math.cos(p.aim) * 14, vz: Math.sin(p.aim) * 14, rise: 7, opacity: big ? 0.45 : 0.32, life: big ? 1.3 : 0.9,
+        });
+      }
+    }
+  }
 
   /** 화면 좌표: view의 카메라로 (x, h, y)를 투영해 HUD 좌표(1600×1000 중 그 화면 칸)로. 카메라 뒤면 null */
   const tmp = new THREE.Vector3();
@@ -1351,7 +1428,12 @@ export function createWorld3D(canvas, wrap, assets) {
     addEvents(events, match) {
       lastMatch = match ?? lastMatch;
       for (const e of events) {
-        if (e.type === 'fire') { recoil[e.playerId] = RECOIL_TIME; viewKick[e.playerId] = Math.min(1, (viewKick[e.playerId] ?? 0) + 0.35); }
+        if (e.type === 'fire') {
+          recoil[e.playerId] = RECOIL_TIME;
+          viewKick[e.playerId] = Math.min(1, (viewKick[e.playerId] ?? 0) + 0.35);
+          viewmodel.fire(e.playerId, e.weapon);
+          muzzleFx(lastMatch, e);
+        }
         const h = lastMatch ? heightOf(lastMatch, e.x, e.y) : GUN_Y;
         if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, h: currentStage === 'sky' ? PLANE_Y : currentStage === 'road' ? CAR_ROOF : 0 });
         if (e.type === 'hit') { addEffect('spark', { x: e.x, y: e.y, h }); label(`-${e.damage}`, e.x, e.y, h + 80, '#FF5A4A'); }
@@ -1368,6 +1450,8 @@ export function createWorld3D(canvas, wrap, assets) {
       }
     },
     reset() {
+      viewmodel.reset();
+      for (const l of muzzleLights) l.intensity = 0;
       for (const fx of effects) scene.remove(fx.obj);
       effects = [];
       labels.length = 0;
@@ -1395,7 +1479,6 @@ export function createWorld3D(canvas, wrap, assets) {
 
       const seen = new Set();
       let views;
-      const cinematicMode = !!cut || !!match.killcam;
       // 장면이 바뀌면(컷씬 종류·킬캠) 카메라를 새 자리로 바로 옮긴다
       const sceneKey = cut ? `${cut.kind}:${cut.switched ?? ''}` : match.killcam ? 'killcam' : 'fps';
       if (sceneKey !== lastScene) { camState.ready = false; lastScene = sceneKey; }
@@ -1472,14 +1555,27 @@ export function createWorld3D(canvas, wrap, assets) {
           const d = Math.hypot(a.sprite.position.x - cam.position.x, a.sprite.position.z - cam.position.z);
           if (d < 170) { faded.push([a, a.material.opacity]); a.material.opacity *= Math.max(0.12, (d - 50) / 120); }
         }
+        // 내가 쏜 총구 불꽃은 내 화면에서 숨긴다(손에 든 3D 총이 번쩍인다)
+        const ownFx = viewer ? effects.filter((fx) => fx.owner === viewer.id && fx.obj.visible) : [];
+        for (const fx of ownFx) fx.obj.visible = false;
         renderer.setViewport(px, 0, pw, ph);
         renderer.setScissor(px, 0, pw, ph);
         renderer.render(scene, cam);
+        for (const fx of ownFx) fx.obj.visible = true;
+        // 손에 든 총(3D): 장착한 무기 모양 그대로, 쌍권총·석궁은 양손에 하나씩
+        if (viewer?.alive && !viewer.plane && !v.target) {
+          const smoke = viewmodel.render(renderer, viewer, pw / ph, {
+            time, dt, reducedMotion, paused: match.phase === 'paused',
+            moving: Math.hypot(viewer.x - viewer.previousX, viewer.y - (viewer.previousY ?? viewer.y)) > 0.5,
+            lights: { hemi, sun },
+          });
+          if (smoke.length && !reducedMotion) ownSmoke(cam, smoke, viewer);
+        }
         if (own) { own.sprite.visible = ownVisible[0]; if (own.model) own.model.visible = !!ownVisible[1]; }
         for (const [a, opacity] of faded) a.material.opacity = opacity;
         // HUD용 이름표·떠오르는 글자 위치
         const tags = [];
-        if (!cinematicMode) {
+        if (!cut) {
           for (const p of match.players) {
             if (viewer && p.id === viewer.id) continue;
             if (p.entering && p.entering.t < 0) continue;
@@ -1497,7 +1593,15 @@ export function createWorld3D(canvas, wrap, assets) {
           const s = project(cam, v.rect, l.x, l.h + (reducedMotion ? 0 : l.age * 60), l.y);
           if (s) words.push({ ...l, sx: s.x, sy: s.y });
         }
-        out.push({ id: v.id, rect: v.rect, cinematic: !!v.target, viewer, tags, labels: words, cameraYaw: viewer?.aim ?? 0 });
+        // 처치 컷씬의 말풍선(무전·도발): 쓰러진 요원 머리 위
+        let bubble = null;
+        const k = match.killcam;
+        if (k?.shot.bubble && v.target) {
+          const stageH = match.story?.stage === 'road' ? CAR_ROOF : 0;
+          const s = project(cam, v.rect, k.victim.x, stageH + 70, k.victim.y);
+          if (s) bubble = { text: k.shot.bubble, x: s.x, y: s.y };
+        }
+        out.push({ id: v.id, rect: v.rect, cinematic: !!v.target, viewer, tags, labels: words, bubble, cameraYaw: viewer?.aim ?? 0 });
       }
       return out;
     },

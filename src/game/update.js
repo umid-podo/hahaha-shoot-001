@@ -548,6 +548,8 @@ export function step(match, inputs, dt = TICK) {
       if (!p.primaryOnly) swapWeapon(p, events);
     }
     const weapon = WEAPONS[p.weapon];
+    // 누르고 있는 연사는 남은 시간(음수)을 다음 발로 넘겨, 틱(1/60초)보다 짧은 발사 간격도 평균으로 지킨다
+    const carry = Math.min(0, p.cooldown - dt);
     p.cooldown = Math.max(0, p.cooldown - dt);
     updateResources(p, weapon.heat && input.aiming, dt);
     p.aim = input.aim;
@@ -579,7 +581,7 @@ export function step(match, inputs, dt = TICK) {
       fire(match, p, events);
       // 단검·샷건은 그 무기 쿨타임만 돌고, 다른 무기는 바로 쓸 수 있다.
       if (weapon.ownCooldown) p.cooldowns[weapon.id] = weapon.interval;
-      else p.cooldown = weapon.interval * fireRate(p);
+      else p.cooldown = weapon.interval * fireRate(p) + (weapon.trigger !== 'release' && p.wasAiming ? carry : 0);
       p.burstLeft = weapon.burst - 1;
       p.burstTimer = weapon.burstGap ?? 0;
     }
