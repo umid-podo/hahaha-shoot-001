@@ -243,7 +243,7 @@ function damage(match, victim, amount, shot, events) {
   const dealt = Math.min(victim.hp, amount);
   victim.hp = Math.max(0, victim.hp - amount);
   victim.hurt = HURT_TIME;
-  events.push({ type: 'hit', x: victim.x, y: victim.y, team: shot.team, damage: amount, victimId: victim.id, ownerId: shot.ownerId });
+  events.push({ type: 'hit', x: victim.x, y: victim.y, team: shot.team, damage: amount, victimId: victim.id, ownerId: shot.ownerId, weapon: shot.weapon });
   const ws = weaponStats(match, shot.ownerId, shot.weapon);
   // 샷건·석궁처럼 여러 발이 함께 나가면 한 번이라도 맞은 방아쇠 한 번을 명중 1로 센다.
   const tracker = shot.group ?? shot;
