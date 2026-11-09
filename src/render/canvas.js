@@ -31,29 +31,78 @@ const SMOKE_TIME = 1.1;   // 로켓 연기가 퍼지며 사라지는 시간
 const SMOKE_STEP = 26;    // 연기 덩이 사이 거리
 // 오른쪽 팀 체력판. 상단은 윗변, 하단은 아랫변 기준으로 캐릭터·체력바와 겹치지 않게 둔다.
 const TEAM_BOX = { isbTop: RAIL_Y.isb + 98, earthBottom: RAIL_Y.earth - 102, w: 190, right: 20 };
-const HP_BAR = { w: 88, h: 10 };
+const HP_BAR = { w: 124, h: 16 };
 
 function hpColor(ratio) {
-  return ratio > 0.5 ? '#3FAE4A' : ratio > 0.25 ? '#F2B233' : '#D9443A';
+  return ratio > 0.5 ? '#36D14A' : ratio > 0.25 ? '#FFC21A' : '#FF3B30';
 }
 
-function drawHpBar(ctx, x, y, w, h, hp, max = MAX_HP) {
-  const ratio = Math.min(1, hp / max);
-  ctx.fillStyle = 'rgba(48,53,62,0.35)';
+/**
+ * 체력바: 어떤 배경에서도 잘 보이도록 흰 테두리 + 진한 바탕, 25%마다 눈금, 위쪽 광택.
+ * 높이가 14px 이상이면 막대 안에 남은 체력 숫자를 함께 쓴다(showText=false면 생략).
+ */
+function drawHpBar(ctx, x, y, w, h, hp, max = MAX_HP, showText = h >= 14) {
+  const ratio = Math.max(0, Math.min(1, hp / max));
+  const r = Math.min(h / 2, 6);
+  ctx.save();
+  // 바깥 흰 테두리(밝은 바탕) + 검은 그림자(어두운 바탕)
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, h / 2);
+  ctx.roundRect(x - 2, y - 2, w + 4, h + 4, r + 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#15181F';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
   ctx.fill();
   if (ratio > 0) {
-    ctx.fillStyle = hpColor(ratio);
+    ctx.save();
     ctx.beginPath();
-    ctx.roundRect(x, y, Math.max(h, w * ratio), h, h / 2);
-    ctx.fill();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.clip();
+    const fill = hpColor(ratio);
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, y, w * ratio, h);
+    // 위쪽 광택
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(x, y, w * ratio, h * 0.38);
+    // 위험할 때 막대 끝을 밝게
+    if (ratio <= 0.25) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(x + w * ratio - 2, y, 2, h);
+    }
+    ctx.restore();
   }
+  // 25% 눈금
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (const k of [0.25, 0.5, 0.75]) {
+    ctx.moveTo(x + w * k, y + 2);
+    ctx.lineTo(x + w * k, y + h - 2);
+  }
+  ctx.stroke();
   ctx.strokeStyle = INK;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, h / 2);
+  ctx.roundRect(x, y, w, h, r);
   ctx.stroke();
+  if (showText && Number.isFinite(hp)) {
+    ctx.font = `900 ${Math.round(h * 0.78)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    const text = `${Math.max(0, Math.round(hp))}`;
+    ctx.strokeText(text, x + w / 2, y + h / 2 + 1);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(text, x + w / 2, y + h / 2 + 1);
+  }
+  ctx.restore();
 }
 
 // 엄폐물 금: 크기에 대한 비율 좌표 폴리라인. 내구도가 75%·50%·25% 아래로 내려갈 때마다 한 줄씩 늘어난다.
@@ -2709,7 +2758,7 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(`${hero.id} ${hero.name}`, 60, 100);
-    drawHpBar(ctx, 60, 125, 380, 22, hero.hp, hero.maxHp);
+    drawHpBar(ctx, 60, 125, 380, 22, hero.hp, hero.maxHp, false);
     ctx.fillText(k.training ? '체력 ∞ (무한)' : `${hero.hp} / ${hero.maxHp}`, 60, 175);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#FF8A80';
@@ -2968,10 +3017,10 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillStyle = TEAM_COLOR[p.team] === TEAM_COLOR.earth ? '#8FD0FF' : '#FFB060';
     ctx.fillText(`${p.id} ${p.name}`, bx + 14, by + 18);
-    drawHpBar(ctx, bx + 14, by + 36, 200, 20, p.hp, p.maxHp);
+    drawHpBar(ctx, bx + 14, by + 34, 196, 28, p.hp, p.maxHp, false);
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 24px system-ui, sans-serif';
-    ctx.fillText(`${Math.max(0, Math.round(p.hp))}`, bx + 226, by + 47);
+    ctx.font = '900 26px system-ui, sans-serif';
+    ctx.fillText(`${Math.max(0, Math.round(p.hp))}`, bx + 222, by + 49);
     // 무기: 체력 칸 위
     const weapon = WEAPONS[p.weapon];
     const wx = bx, wy = by - 92;
@@ -3066,7 +3115,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillStyle = p.team === 'earth' ? '#8FD0FF' : '#FFB060';
       ctx.fillText(`${p.id} ${p.name}`, x + 12, y + 14);
-      drawHpBar(ctx, x + 12, y + 27, 210, 14, p.hp, p.maxHp);
+      drawHpBar(ctx, x + 12, y + 27, 210, 14, p.hp, p.maxHp, false);
       ctx.fillStyle = '#FFFFFF';
       ctx.font = 'bold 18px system-ui, sans-serif';
       ctx.fillText(`${Math.max(0, Math.round(p.hp))}`, x + 232, y + 34);
