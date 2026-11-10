@@ -223,7 +223,16 @@
           <div id="mod-weapons" class="mod-weapons" role="group" aria-label="개조할 총"></div>
         </div>
         <div class="mod-side">
-          <div class="mod-gacha">
+          <div id="mod-tabs" class="mod-tabs" role="group" aria-label="뽑기·상점">
+            <button type="button" data-tab="gacha" aria-pressed="true">랜덤 뽑기</button>
+            <button type="button" data-tab="shop" aria-pressed="false">상점 (구매)</button>
+          </div>
+          <div id="mod-shop" class="mod-shop" hidden>
+            <p class="hint">레어·엘리트 총기 60가지를 골라서 살 수 있어요(레어 3코인 · 엘리트 8코인). 모양만 바뀌고 수치는 그대로예요. 산 총기는 영구 보관되고(분해 불가) 언제든 다시 장착할 수 있어요. 카드를 누르면 책상 위에서 미리 봐요.</p>
+            <div id="mod-shop-filter" class="mod-filter" role="group" aria-label="상점 고르기"></div>
+            <div id="mod-shop-list" class="mod-bag mod-shop-list"></div>
+          </div>
+          <div class="mod-gacha" id="mod-gacha">
             <button id="mod-draw-btn" class="primary" type="button">랜덤 뽑기 (1코인)</button>
             <button id="mod-draw10-btn" type="button">10연속 뽑기 (10코인)</button>
             <p id="mod-odds" class="hint"></p>

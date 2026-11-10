@@ -168,6 +168,37 @@ export function rollItem(rng = Math.random, slot = null) {
   return item;
 }
 
+// ── 상점: 레어·엘리트 총기 스킨 60가지(코인으로 구매) ──
+/** 상점 가격(코인) */
+export const SHOP_PRICE = { rare: 3, elite: 8 };
+const SHOP_WEAPON_NAME = {
+  rifle: '돌격소총', smg: '기관단총', sniper: '저격총', shotgun: '샷건', pistol: '권총', dual: '쌍권총', rpg: 'RPG', crossbow: '아킴보 석궁',
+};
+const SHOP_THEMES = {
+  rare: ['코발트', '스펙터', '사이클론', '블루 팬서', '썬더', '아이스 울프', '나이트 오울', '스톰 이글', '딥 오션', '바이퍼',
+    '레드 호크', '실버 팽', '퍼플 헤이즈', '그린 맘바', '스틸 레인', '블랙 미스트', '아틱 폭스', '코럴 리프', '샌드 스톰', '앰버 라이트',
+    '네온 캣', '크림슨 테일', '나이트 시프트', '프로스트 바이트', '골든 아워', '체리 블라섬', '하이 볼트', '오션 웨이브', '블루 문', '스모크 레인'],
+  elite: ['황금 용', '피닉스', '오메가', '프레데터', '레전드', '드래곤 하트', '이클립스', '블레이즈 킹', '노바', '타이탄',
+    '헬파이어', '스타더스트', '크라운', '엠퍼러', '아크엔젤', '블랙 홀', '썬 플레어', '갤럭시', '레퀴엠', '발할라',
+    '라그나로크', '사무라이', '그리폰', '키메라', '레비아탄', '오로라', '임페리얼', '세라핌', '카오스', '이터널'],
+};
+/**
+ * 상점 목록: 총마다 그 총에 붙는 모든 칸(개머리판·총구·스코프·탄창·총 색깔)의 파츠를 한 벌로 맞춘 완성형 총기 스킨.
+ * 레어 30·엘리트 30, 8가지 총에 골고루. 모양만 바꾸고 수치는 그대로다. 디자인은 고정 seed라 늘 같다.
+ */
+export const SHOP = ['rare', 'elite'].flatMap((grade, g) => SHOP_THEMES[grade].map((theme, i) => {
+  const weapons = Object.keys(MOD_WEAPONS);
+  const weapon = weapons[(i + g * 3) % weapons.length];
+  const rng = seededRng(0x5a0b + g * 1000 + i * 7919);
+  const parts = MOD_WEAPONS[weapon].map((slot) => {
+    const part = { slot, grade, seed: Math.floor(rng() * 2 ** 32) >>> 0 };
+    return { ...part, name: `${theme} ${KIND_NAME[designOf(part).kind]}` };
+  });
+  const n = g * 30 + i + 1;
+  return { id: `shop-${String(n).padStart(2, '0')}`, weapon, grade, name: `${theme} ${SHOP_WEAPON_NAME[weapon]}`, price: SHOP_PRICE[grade], parts };
+}));
+export const SHOP_BY_ID = Object.fromEntries(SHOP.map((g) => [g.id, g]));
+
 // ── 배낭·장착 저장 ──
 const KEY = 'haha2.mods.v1';
 /** localStorage를 쓸 수 없는 곳(테스트·사생활 보호 모드)에서는 메모리에만 둔다 */
@@ -182,7 +213,7 @@ function defaultStorage() {
  * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws, coins }
  */
 export function createModStore(storage = defaultStorage()) {
-  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0 };
+  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [] };
   try {
     const saved = JSON.parse(storage.getItem(KEY));
     if (saved && Array.isArray(saved.items)) {
@@ -192,6 +223,7 @@ export function createModStore(storage = defaultStorage()) {
         nextId: Number.isFinite(saved.nextId) ? saved.nextId : 1,
         draws: Number.isFinite(saved.draws) ? saved.draws : 0,
         coins: Number.isFinite(saved.coins) && saved.coins > 0 ? Math.floor(saved.coins) : 0,
+        owned: Array.isArray(saved.owned) ? saved.owned.filter((id) => SHOP_BY_ID[id]) : [],
       };
       state.nextId = Math.max(state.nextId, ...state.items.map((i) => i.id + 1), 1);
     }
@@ -229,6 +261,40 @@ export function createModStore(storage = defaultStorage()) {
       save();
       return got;
     },
+    /** 상점에서 산 총기 스킨 id 목록 */
+    get owned() { return state.owned; },
+    owns(shopId) { return state.owned.includes(shopId); },
+    canBuy(shopId) { const g = SHOP_BY_ID[shopId]; return !!g && !this.owns(shopId) && state.coins >= g.price; },
+    /**
+     * 상점 구매: 코인을 내고 그 총기 스킨의 파츠 한 벌을 배낭에 넣는다(영구 보관, 분해 불가). 산 총에 바로 장착한다.
+     * 이미 샀거나 코인이 모자라면 아무것도 하지 않고 [].
+     */
+    buy(shopId) {
+      const g = SHOP_BY_ID[shopId];
+      if (!this.canBuy(shopId)) return [];
+      state.coins -= g.price;
+      state.owned.push(shopId);
+      const got = g.parts.map((part) => ({ id: state.nextId++, ...part, shop: shopId }));
+      state.items.push(...got);
+      state.equips[g.weapon] = { ...state.equips[g.weapon], ...Object.fromEntries(got.map((i) => [i.slot, i.id])) };
+      save();
+      return got;
+    },
+    /** 산 총기 스킨을 그 총에 한 번에 장착 */
+    equipShop(shopId) {
+      const g = SHOP_BY_ID[shopId];
+      const got = state.items.filter((i) => i.shop === shopId);
+      if (!g || !got.length) return false;
+      state.equips[g.weapon] = { ...state.equips[g.weapon], ...Object.fromEntries(got.map((i) => [i.slot, i.id])) };
+      save();
+      return true;
+    },
+    /** 그 총기 스킨이 지금 그 총에 모두 장착돼 있는지 */
+    shopEquipped(shopId) {
+      const g = SHOP_BY_ID[shopId];
+      const got = state.items.filter((i) => i.shop === shopId);
+      return !!g && got.length > 0 && got.every((i) => state.equips[g.weapon]?.[i.slot] === i.id);
+    },
     /** 총에 파츠 장착(그 칸에 붙일 수 없는 총이면 false) */
     equip(weapon, itemId) {
       const item = byId(itemId);
@@ -244,8 +310,9 @@ export function createModStore(storage = defaultStorage()) {
       state.equips[weapon] = next;
       save();
     },
-    /** 파츠 분해(배낭에서 지움). 장착한 총에서도 떨어진다 */
+    /** 파츠 분해(배낭에서 지움). 장착한 총에서도 떨어진다. 상점에서 산 파츠는 영구 보관이라 분해할 수 없다 */
     remove(itemId) {
+      if (byId(itemId)?.shop) return;
       state.items = state.items.filter((i) => i.id !== itemId);
       for (const w of Object.keys(state.equips)) {
         for (const [slot, id] of Object.entries(state.equips[w])) if (id === itemId) delete state.equips[w][slot];

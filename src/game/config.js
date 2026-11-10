@@ -90,7 +90,7 @@ export const TICK = 1 / 60;
  * 무기표 (손글씨 메모 2장). 기본은 조준(스틱 드래그·발사키 누름)을 유지하는 동안 interval마다 자동 발사.
  * trigger: 'release'인 무기는 조준한 뒤 손을 뗄 때 한 발 쏘고, interval은 발사 후 쿨타임이다.
  * burst는 한 번에 나가는 발 수, burstGap은 점사 사이 간격. splash는 RPG 폭발 범위 피해.
- * homing.turnRate(rad/s)는 가장 가까운 적을 향해 초당 꺾을 수 있는 최대 각도. RPG는 빗나가도 적 레일 선·경기장 끝·수명 끝에서 터진다.
+ * RPG는 유도 없이 똑바로 날아가고, 빗나가도 적 레일 선·경기장 끝·수명 끝에서 터진다.
  * battery: battery.shots발을 쏘면 방전되고, 마지막 발사 후 battery.recharge초가 지나면 가득 찬다(R-10 레이저 캐논).
  * mag·reload: 탄창에 든 총알 수(0이면 무제한)와 탄창을 갈아 끼우는 시간(초). 다 쏘면 그 무기를 든 채 reload초 동안 장전한 뒤 다시 가득 찬다.
  *   장전 중에 다른 무기로 바꾸면 장전이 끊기고, 다시 들면 처음부터 장전한다. 점사(쌍권총)는 한 발마다 1씩 쓴다.
@@ -124,7 +124,7 @@ export const WEAPONS = {
   },
   rpg: {
     id: 'rpg', name: 'RPG', interval: 1, damage: 40, speed: 900, burst: 1, trigger: 'release', mag: 1, reload: 1,
-    splash: { damage: 10, radius: 120 }, homing: { turnRate: 0.8 },
+    splash: { damage: 10, radius: 120 }, // 유도 없이 똑바로 날아간다
   },
   // 아킴보 석궁(숨겨진 무기): 권총 손잡이가 달린 작은 석궁 두 자루. 연사는 조금 느리지만 탄속이 빠르고 화살 2개가 나란히 날아간다.
   // 무기 선택에서 쌍권총 버튼을 빠르게 2번 누르면 나타난다.

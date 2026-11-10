@@ -2831,32 +2831,146 @@ export function createRenderer(canvas, wrap, assets) {
     }
   }
 
-  /** 라이트닝 조종석: 캐노피 틀과 계기판 */
+  /**
+   * 라이트닝 조종석: 화면을 조종실 안처럼 덮고 창문(앞 유리·좌우 옆창)으로만 바깥이 보인다(적도 창문으로 보임).
+   * 창틀 기둥·지붕·고무 테두리·유리 반사, 아래에는 계기판(눈부심 가리개·원형 계기·다기능 화면·경고등·조종간).
+   */
   function drawCockpit(p, rect, time, reducedMotion) {
     const { x, y, w, h } = rect;
+    const P = (u, v) => [x + w * u, y + h * v];
+    // 창문(화면 비율 좌표): 앞 유리, 왼쪽·오른쪽 옆창
+    const front = [P(0.28, 0.07), P(0.72, 0.07), P(0.79, 0.62), P(0.21, 0.62)];
+    const left = [P(0, 0.17), P(0.235, 0.07), P(0.17, 0.62), P(0, 0.68)];
+    const right = [P(1, 0.17), P(0.765, 0.07), P(0.83, 0.62), P(1, 0.68)];
+    const windows = [front, left, right];
+    const poly = (pts) => { ctx.moveTo(...pts[0]); for (const q of pts.slice(1)) ctx.lineTo(...q); ctx.closePath(); };
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    ctx.strokeStyle = 'rgba(40,46,58,0.95)';
-    ctx.lineWidth = 18;
-    ctx.beginPath();
-    ctx.moveTo(x + w * 0.5, y + h * 0.05); ctx.lineTo(x + w * 0.5, y + h * 0.16);
-    ctx.moveTo(x + w * 0.05, y + h * 0.2); ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.05, x + w * 0.95, y + h * 0.2);
-    ctx.moveTo(x + w * 0.02, y + h * 0.75); ctx.lineTo(x + w * 0.22, y + h * 0.18);
-    ctx.moveTo(x + w * 0.98, y + h * 0.75); ctx.lineTo(x + w * 0.78, y + h * 0.18);
-    ctx.stroke();
-    const dash = ctx.createLinearGradient(0, y + h * 0.78, 0, y + h);
-    dash.addColorStop(0, '#2A2E38'); dash.addColorStop(1, '#14171E');
-    ctx.fillStyle = dash;
-    ctx.beginPath();
-    ctx.moveTo(x, y + h); ctx.lineTo(x, y + h * 0.84); ctx.quadraticCurveTo(x + w / 2, y + h * 0.74, x + w, y + h * 0.84); ctx.lineTo(x + w, y + h);
-    ctx.closePath(); ctx.fill();
-    for (let i = 0; i < 4; i++) {
-      const cx = x + w * (0.3 + i * 0.13), cy = y + h * 0.9;
-      ctx.fillStyle = '#0B0F1A'; ctx.beginPath(); ctx.arc(cx, cy, 24, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = p.boost > 0 ? '#5AAAFF' : '#9FE0FF'; ctx.lineWidth = 3;
-      const a = (reducedMotion ? 0 : time * (i + 1)) + i;
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * 18, cy + Math.sin(a) * 18); ctx.stroke();
+
+    // 유리: 살짝 푸른 빛과 비스듬한 반사 줄
+    for (const win of windows) {
+      ctx.save();
+      ctx.beginPath(); poly(win); ctx.clip();
+      ctx.fillStyle = 'rgba(120,170,220,0.07)';
+      ctx.fillRect(x, y, w, h);
+      const shift = reducedMotion ? 0 : (time * 12) % 80;
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 26;
+      for (let k = -2; k < 4; k++) {
+        const sx = win[0][0] + k * w * 0.12 + shift;
+        ctx.beginPath(); ctx.moveTo(sx, win[0][1]); ctx.lineTo(sx - h * 0.35, win[2][1]); ctx.stroke();
+      }
+      ctx.restore();
     }
+
+    // 조종실 몸체: 화면 전체에서 창문만 뚫는다(even-odd)
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    for (const win of windows) poly(win);
+    const body = ctx.createLinearGradient(0, y, 0, y + h);
+    body.addColorStop(0, '#2E3440');
+    body.addColorStop(0.5, '#1D222B');
+    body.addColorStop(1, '#0F1218');
+    ctx.fillStyle = body;
+    ctx.fill('evenodd');
+
+    // 창틀 고무 테두리 + 안쪽 금속 테
+    ctx.lineJoin = 'round';
+    for (const win of windows) {
+      ctx.beginPath(); poly(win);
+      ctx.strokeStyle = '#07090D'; ctx.lineWidth = 12; ctx.stroke();
+      ctx.strokeStyle = '#59606C'; ctx.lineWidth = 3; ctx.stroke();
+    }
+    // 창틀 나사(리벳)
+    ctx.fillStyle = '#7A828F';
+    for (const win of windows) {
+      for (let i = 0; i < win.length; i++) {
+        const [ax, ay] = win[i], [bx, by] = win[(i + 1) % win.length];
+        const len = Math.hypot(bx - ax, by - ay), n = Math.floor(len / 70);
+        for (let k = 1; k < n; k++) {
+          const t = k / n;
+          ctx.beginPath(); ctx.arc(ax + (bx - ax) * t, ay + (by - ay) * t, 2.6, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    // 지붕 손잡이·백미러
+    ctx.fillStyle = '#3A414D';
+    ctx.beginPath(); ctx.roundRect(x + w * 0.42, y + h * 0.012, w * 0.16, h * 0.035, 8); ctx.fill();
+    ctx.fillStyle = 'rgba(160,190,220,0.35)';
+    ctx.beginPath(); ctx.roundRect(x + w * 0.435, y + h * 0.018, w * 0.13, h * 0.022, 5); ctx.fill();
+
+    // 계기판: 눈부심 가리개(둥근 윗변) + 판
+    const top = y + h * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(x, top + h * 0.08);
+    ctx.quadraticCurveTo(x + w * 0.5, top - h * 0.05, x + w, top + h * 0.08);
+    ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    const dash = ctx.createLinearGradient(0, top, 0, y + h);
+    dash.addColorStop(0, '#2A2F38'); dash.addColorStop(0.12, '#161A21'); dash.addColorStop(1, '#0B0E13');
+    ctx.fillStyle = dash; ctx.fill();
+    ctx.strokeStyle = '#4A515D'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, top + h * 0.08); ctx.quadraticCurveTo(x + w * 0.5, top - h * 0.05, x + w, top + h * 0.08); ctx.stroke();
+
+    // 가운데 다기능 화면 2개(레이더 쓸기·지평선)
+    const mfd = (cx, kind) => {
+      const mw = w * 0.11, mh = h * 0.13, mx = cx - mw / 2, my = y + h * 0.7;
+      ctx.fillStyle = '#05080B'; ctx.beginPath(); ctx.roundRect(mx - 6, my - 6, mw + 12, mh + 12, 8); ctx.fill();
+      ctx.fillStyle = '#071A10'; ctx.fillRect(mx, my, mw, mh);
+      ctx.strokeStyle = 'rgba(90,255,150,0.75)'; ctx.lineWidth = 2;
+      if (kind === 'radar') {
+        const rx = mx + mw / 2, ry = my + mh * 0.9, rr = mh * 0.8;
+        for (const k of [0.35, 0.7, 1]) { ctx.beginPath(); ctx.arc(rx, ry, rr * k, Math.PI, Math.PI * 2); ctx.stroke(); }
+        const a = Math.PI + (reducedMotion ? 0.5 : (time * 1.6) % 1) * Math.PI;
+        ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx + Math.cos(a) * rr, ry + Math.sin(a) * rr); ctx.stroke();
+      } else {
+        const roll = reducedMotion ? 0 : Math.sin(time * 0.8) * 0.12;
+        ctx.save(); ctx.beginPath(); ctx.rect(mx, my, mw, mh); ctx.clip();
+        ctx.translate(mx + mw / 2, my + mh / 2); ctx.rotate(roll);
+        ctx.fillStyle = 'rgba(60,140,255,0.35)'; ctx.fillRect(-mw, -mh, mw * 2, mh);
+        ctx.fillStyle = 'rgba(150,100,40,0.35)'; ctx.fillRect(-mw, 0, mw * 2, mh);
+        ctx.beginPath(); ctx.moveTo(-mw, 0); ctx.lineTo(mw, 0); ctx.stroke();
+        ctx.restore();
+        ctx.beginPath(); ctx.moveTo(mx + mw * 0.3, my + mh / 2); ctx.lineTo(mx + mw * 0.7, my + mh / 2); ctx.stroke();
+      }
+    };
+    mfd(x + w * 0.42, 'radar');
+    mfd(x + w * 0.58, 'horizon');
+
+    // 원형 계기(속도·고도·연료·엔진): 바늘이 천천히 흔들린다
+    const gauges = [[0.31, 0.74], [0.69, 0.74], [0.31, 0.89], [0.69, 0.89]];
+    gauges.forEach(([u, v], i) => {
+      const [cx, cy] = P(u, v), r = Math.min(w, h) * 0.045;
+      ctx.fillStyle = '#05070A'; ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#6A717D'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = 'rgba(230,236,245,0.7)'; ctx.lineWidth = 1.5;
+      for (let k = 0; k < 10; k++) {
+        const a = Math.PI * 0.75 + (k / 9) * Math.PI * 1.5;
+        ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r * 0.78, cy + Math.sin(a) * r * 0.78); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke();
+      }
+      const a = Math.PI * 0.75 + (0.35 + 0.3 * (reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(time * (0.7 + i * 0.4) + i))) * Math.PI * 1.5;
+      ctx.strokeStyle = p.boost > 0 ? '#5AAAFF' : '#FFB347'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r * 0.85, cy + Math.sin(a) * r * 0.85); ctx.stroke();
+    });
+
+    // 경고등 줄: 체력이 낮으면 빨강이 깜빡임
+    const low = p.hp <= p.maxHp * 0.25;
+    for (let k = 0; k < 6; k++) {
+      const [lx, ly] = P(0.4 + k * 0.04, 0.665);
+      const on = k === 0 ? low && (reducedMotion || Math.sin(time * 8) > 0) : k === 5 ? p.boost > 0 : true;
+      ctx.fillStyle = k === 0 ? (on ? '#FF3B30' : '#4A1512') : k === 5 ? (on ? '#5AAAFF' : '#14304A') : '#2FCB5A';
+      ctx.beginPath(); ctx.roundRect(lx - 9, ly - 5, 18, 10, 3); ctx.fill();
+    }
+
+    // 조종간(아래 가운데)
+    const [sx, sy] = P(0.5, 0.97);
+    const lean = Math.max(-1, Math.min(1, (p.x - (p.previousX ?? p.x)) * 0.2));
+    ctx.save();
+    ctx.translate(sx, sy); ctx.rotate(lean * 0.25);
+    ctx.fillStyle = '#20242C'; ctx.fillRect(-9, -h * 0.12, 18, h * 0.14);
+    ctx.fillStyle = '#2C313B'; ctx.beginPath(); ctx.roundRect(-34, -h * 0.17, 68, h * 0.07, 14); ctx.fill();
+    ctx.fillStyle = '#C0392B'; ctx.beginPath(); ctx.arc(-18, -h * 0.15, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
     ctx.restore();
   }
 
@@ -3091,10 +3205,11 @@ export function createRenderer(canvas, wrap, assets) {
     const rect = v.rect;
     ctx.save();
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+    // 조종실은 먼저 그리고, 창문으로 보이는 적의 이름표·체력바는 그 위에(창틀에 가려도 체력은 보이게)
+    if (p.alive && p.plane) drawCockpit(p, rect, time, reducedMotion);
     for (const t of [...v.tags].sort((a, b) => b.dist - a.dist)) drawTag(t);
     const kick = hud.kick[p.id] ?? 0;
     if (p.alive) {
-      if (p.plane) drawCockpit(p, rect, time, reducedMotion);
       const weapon = WEAPONS[p.weapon];
       const reloading = (weapon.trigger === 'release' && p.cooldown > 0) || (weapon.ownCooldown && (p.cooldowns[weapon.id] ?? 0) > 0)
         || (weapon.battery && p.battery <= 0) || (weapon.heat && p.overheat > 0);
