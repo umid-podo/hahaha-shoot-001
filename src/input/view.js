@@ -41,7 +41,7 @@ export function applyView(inputs, players, dt, { drive = false } = {}) {
 
 /**
  * 마우스로 P1(사람 플레이어 첫째)의 고개를 돌리고 쏜다. 게임 화면을 누르면 마우스 포인터를 잠그고(Esc로 풀림),
- * 잠긴 동안 좌우로 움직이면 고개를 돌리고 왼쪽 버튼 발사, 오른쪽 버튼 수류탄, 휠 무기 전환.
+ * 잠긴 동안 좌우로 움직이면 고개를 돌리고 왼쪽 버튼 발사, 오른쪽 버튼 수류탄, 휠 무기 전환, 휠 클릭 회피.
  * getFrame()은 경기 중이면 P1 입력 프레임, 아니면 null. 터치로 누른 것은 포인터를 잠그지 않는다.
  */
 export function attachMouse(element, getFrame) {
@@ -55,6 +55,7 @@ export function attachMouse(element, getFrame) {
     const frame = getFrame();
     if (e.button === 0) frame.aiming = true;
     if (e.button === 2) frame.item = true;
+    if (e.button === 1) { e.preventDefault(); frame.evade = true; }
   });
   window.addEventListener('pointerup', (e) => {
     if (e.pointerType !== 'mouse' || e.button !== 0) return;

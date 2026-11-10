@@ -1,4 +1,4 @@
-import { DEADZONE, TEAM_NAME, WEAPONS, SLOT_NAME } from '../game/config.js';
+import { DEADZONE, TEAM_NAME, WEAPONS, SLOT_NAME, EVADE } from '../game/config.js';
 
 /** 축 하나(스틱 한 방향 변위): 데드존 안은 0, 바깥은 ±1까지 선형 보간. */
 export function moveAxisFromDrag(dx, radius) {
@@ -121,8 +121,12 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       const jump = actionButton('jump-btn', () => { frame.jump = true; });
       jump.innerHTML = '<small>점프</small><span>▲</span>';
       jump.setAttribute('aria-label', `${p.id} 점프`);
-      actions.append(primary, secondary, item, jump);
-      buttons[p.id] = { primary, secondary, item, jump, slot: null, itemText: null };
+      const evade = actionButton('evade-btn', () => { frame.evade = true; });
+      evade.innerHTML = '<small>회피</small><span></span>';
+      evade.setAttribute('aria-label', `${p.id} 회피(빠른 돌진, 2번 연속)`);
+      evade.disabled = !!p.plane;
+      actions.append(primary, secondary, item, jump, evade);
+      buttons[p.id] = { primary, secondary, item, jump, evade, slot: null, itemText: null, evadeText: null };
 
       const middle = document.createElement('div');
       middle.className = 'panel-mid';
@@ -188,6 +192,15 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
           b.secondary.lastChild.textContent = secondaryText;
           b.secondary.classList.toggle('cooling', left > 0);
         }
+        // 회피: 남은 횟수를 점으로(●●), 다 쓰면 다시 채워질 때까지 회색
+        const charges = p.evadeCharges ?? EVADE.charges;
+        const evadeText = '●'.repeat(charges) + '○'.repeat(Math.max(0, EVADE.charges - charges));
+        if (b.evadeText !== evadeText) {
+          b.evadeText = evadeText;
+          b.evade.lastChild.textContent = evadeText;
+          b.evade.classList.toggle('cooling', charges <= 0);
+        }
+        b.evade.disabled = !!p.plane;
         const ready = p.alive && p.grenadeCooldown <= 0;
         const text = p.primaryOnly ? '없음' : ready ? WEAPONS[p.item ?? 'grenade'].name : `${Math.ceil(p.grenadeCooldown)}초`;
         if (b.itemText !== text) {

@@ -28,6 +28,8 @@ const JET_ALT = 360;              // 전투기 높이
 const COVER_H = 84;               // 엄폐물 높이(눈높이 아래라 넘어 보인다)
 const CHAR_SCALE = 1.75;          // 캐릭터 그림 크기(2D 그림 크기 대비)
 const FOV = 74;
+/** 화면 칸별 회피 시야 넓힘 정도(0~1) */
+const evadeKick = new Map();
 const RECOIL_TIME = 0.12;
 const DS_SCALE = 1.6;             // 데스스타 모델 크기(거대 비행선)
 
@@ -1767,7 +1769,11 @@ export function createWorld3D(canvas, wrap, assets) {
         camState.center = { x: cam.position.x, z: cam.position.z };
         const px = (v.rect.x / 1600) * cssW, pw = (v.rect.w / 1600) * cssW, ph = (v.rect.h / 1000) * cssH;
         cam.aspect = pw / ph;
-        cam.fov = v.target ? 58 : FOV;
+        // 회피(돌진) 중에는 시야를 살짝 넓혀 빠르게 튀어 나가는 느낌(동작 줄이기면 생략)
+        const kickTo = viewer?.evade && !reducedMotion ? 1 : 0;
+        const kick = (evadeKick.get(v.id) ?? 0) + (kickTo - (evadeKick.get(v.id) ?? 0)) * Math.min(1, dt * 20);
+        evadeKick.set(v.id, kick);
+        cam.fov = v.target ? 58 : FOV + kick * 9;
         cam.updateProjectionMatrix();
         // 내 몸(판·비행기)은 내 화면에서 숨긴다(쓰러지면 내려다보는 내 몸은 보인다)
         const own = viewer?.alive && actors.get(viewer.id);

@@ -283,13 +283,13 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 .panel-head { color: var(--team); font-size: 14px; font-weight: 700; text-align: center; white-space: nowrap; }
 .actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   width: 100%;
   max-width: 400px;
 }
 /* 무기 선택·아이템 버튼: 누르는 즉시 반응. 든 무기는 팀 색으로 채운다. */
-.weapon-btn, .item-btn, .jump-btn {
+.weapon-btn, .item-btn, .jump-btn, .evade-btn {
   display: grid;
   place-items: center;
   min-width: 0;
@@ -303,7 +303,9 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
   touch-action: none;
 }
 .jump-btn { border-color: var(--team); color: var(--team); background: #eef6ff; font-weight: 800; }
-.weapon-btn small, .item-btn small, .jump-btn small { font-size: 10px; font-weight: 400; opacity: 0.8; }
+.evade-btn { border-color: var(--team); color: var(--team); background: #f0fff4; font-weight: 800; letter-spacing: 1px; }
+.evade-btn.cooling { color: var(--muted); border-color: var(--line); background: #f2f2f2; }
+.weapon-btn small, .item-btn small, .jump-btn small, .evade-btn small { font-size: 10px; font-weight: 400; opacity: 0.8; letter-spacing: 0; }
 .weapon-btn span, .item-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weapon-btn[aria-pressed="true"] { background: var(--team); color: #fff; }
 .item-btn { border-style: dashed; background: #fffbea; }
@@ -312,9 +314,14 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 /* 가운데 칸이 좁으면(작은 화면) 버튼을 세로 한 줄로 쌓는다. */
 @container (max-width: 230px) {
   .panel-head { font-size: 12px; }
-  .actions { grid-template-columns: 1fr; gap: 3px; }
-  .weapon-btn, .item-btn, .jump-btn { min-height: 28px; font-size: 12px; }
+  .actions { grid-template-columns: 1fr 1fr; gap: 3px; }
+  /* 무기·아이템은 한 줄씩, 점프·회피는 마지막 줄에 나란히 */
+  .weapon-btn, .item-btn { grid-column: 1 / -1; }
+  .weapon-btn, .item-btn, .jump-btn, .evade-btn { min-height: 28px; font-size: 12px; }
   .weapon-btn small, .item-btn small, .jump-btn small { display: none; }
+  /* 좁은 칸: 점만으로는 무슨 버튼인지 모르니 '회피' 글자를 점 앞에 */
+  .evade-btn { grid-auto-flow: column; gap: 4px; }
+  .evade-btn small { font-size: 11px; font-weight: 800; opacity: 1; }
 }
 .stick {
   position: relative;

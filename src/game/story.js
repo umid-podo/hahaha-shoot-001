@@ -468,7 +468,7 @@ function setupSky(match, { heal = true } = {}) {
   list.forEach((p, i) => Object.assign(p, {
     plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', item: 'missile', slot: 'primary',
     primaryOnly: !!p.ai, drone: false, jetpack: null, scale: 1,
-    speed: MAX_SPEED_BASE * SKY.planeSpeed, hurt: 0, dash: null,
+    speed: MAX_SPEED_BASE * SKY.planeSpeed, hurt: 0, dash: null, evade: null,
     // 이어하기(heal: false)는 저장한 체력·쓰러짐을 그대로 둔다
     ...(heal ? { hp: p.maxHp, alive: true } : {}),
     x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
@@ -496,7 +496,7 @@ function setupRoad(match, { heal = true } = {}) {
     if (p.ground) Object.assign(p, p.ground);
     delete p.ground;
     Object.assign(p, {
-      plane: false, item: 'grenade', slot: 'primary', hurt: 0, dash: null,
+      plane: false, item: 'grenade', slot: 'primary', hurt: 0, dash: null, evade: null,
       ...(heal ? { hp: p.maxHp, alive: true } : {}),
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,
@@ -529,7 +529,7 @@ function setupBridge(match, { heal = true } = {}) {
     if (p.ground) Object.assign(p, p.ground);
     delete p.ground;
     Object.assign(p, {
-      plane: false, item: 'grenade', slot: 'primary', hurt: 0, dash: null,
+      plane: false, item: 'grenade', slot: 'primary', hurt: 0, dash: null, evade: null,
       ...(heal ? { hp: p.maxHp, alive: true } : {}),
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth, carX: xs[i],
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,

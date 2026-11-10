@@ -8,9 +8,9 @@ import { KATA_PAD } from './kata.js';
  * 키보드·터치와 함께 받는다. 브라우저는 컨트롤러 버튼을 한 번 누른 뒤에야 컨트롤러를 알려 준다.
  * 1인칭: 왼쪽 스틱 앞뒤·옆걸음, 오른쪽 스틱 좌우로 고개 돌리기, 십자키 ↑/↓ 앞뒤·←/→ 고개 돌리기.
  */
-// 표준 배치 버튼 번호: 0 A(×) · 1 B(○) · 2 X(□) · 4 LB · 5 RB · 6 LT · 7 RT · 9 Start · 12~15 십자키 위·아래·왼쪽·오른쪽
-export const PAD_BUTTONS = { fire: [7, 0], swap: [5, 2], item: [4, 1], jump: [3, 10], pause: [9], up: [12], down: [13], left: [14], right: [15] };
-export const PAD_LABEL = '컨트롤러: 왼쪽 스틱 앞뒤·옆걸음 · 오른쪽 스틱 고개 돌리기 · 십자키 ↑/↓ 앞뒤·←/→ 고개 돌리기 · RT/A 발사 · RB/X 무기 전환 · LB/B 수류탄 · Start 일시정지';
+// 표준 배치 버튼 번호: 0 A(×) · 1 B(○) · 2 X(□) · 3 Y(△) · 4 LB · 5 RB · 6 LT · 7 RT · 9 Start · 10·11 왼쪽·오른쪽 스틱 누르기 · 12~15 십자키
+export const PAD_BUTTONS = { fire: [7, 0], swap: [5, 2], item: [4, 1], jump: [3, 10], evade: [6, 11], pause: [9], up: [12], down: [13], left: [14], right: [15] };
+export const PAD_LABEL = '컨트롤러: 왼쪽 스틱 앞뒤·옆걸음 · 오른쪽 스틱 고개 돌리기 · 십자키 ↑/↓ 앞뒤·←/→ 고개 돌리기 · RT/A 발사 · RB/X 무기 전환 · LB/B 수류탄 · LT/오른쪽 스틱 누르기 회피 · Start 일시정지';
 
 const pressed = (pad, list) => list.some((i) => pad.buttons[i]?.pressed);
 const clamp1 = (v) => Math.min(1, Math.max(-1, v));
@@ -28,6 +28,7 @@ export function readPad(pad) {
     swap: pressed(pad, PAD_BUTTONS.swap),
     item: pressed(pad, PAD_BUTTONS.item),
     jump: pressed(pad, PAD_BUTTONS.jump),
+    evade: pressed(pad, PAD_BUTTONS.evade),
     pause: pressed(pad, PAD_BUTTONS.pause),
     // 건 카타 버튼: A·B·X·Y → 1·2·3·4 (누르지 않았으면 0)
     kata: KATA_PAD[Object.keys(KATA_PAD).find((i) => pad.buttons[i]?.pressed)] ?? 0,
@@ -67,6 +68,7 @@ export function pollGamepads(players, inputs, onPause) {
     if (s.swap && !before.swap) frame.swap = true;
     if (s.item && !before.item) frame.item = true;
     if (s.jump && !before.jump) frame.jump = true;
+    if (s.evade && !before.evade) frame.evade = true;
     if (s.fire !== !!before.fire) frame.aiming = s.fire;
     if (s.kata && s.kata !== before.kata) frame.kata = s.kata; // 건 카타 1~4(A·B·X·Y)
   });

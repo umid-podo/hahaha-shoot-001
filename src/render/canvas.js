@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, RAIL_Y, MIN_X, MAX_X, SPRITE_SIZE, TEAM_COLOR, TEAM_NAME,
-  MAX_HP, WEAPONS, COVER, TICK, CHARACTERS, TANK, SHIP, KATA,
+  MAX_HP, WEAPONS, COVER, TICK, CHARACTERS, TANK, SHIP, KATA, EVADE,
 } from '../game/config.js';
 import {
   WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel,
@@ -31,7 +31,7 @@ const SMOKE_TIME = 1.1;   // 로켓 연기가 퍼지며 사라지는 시간
 const SMOKE_STEP = 26;    // 연기 덩이 사이 거리
 // 오른쪽 팀 체력판. 상단은 윗변, 하단은 아랫변 기준으로 캐릭터·체력바와 겹치지 않게 둔다.
 const TEAM_BOX = { isbTop: RAIL_Y.isb + 98, earthBottom: RAIL_Y.earth - 102, w: 190, right: 20 };
-const HP_BAR = { w: 124, h: 16 };
+const HP_BAR = { w: 100, h: 10 };
 
 function hpColor(ratio) {
   return ratio > 0.5 ? '#36D14A' : ratio > 0.25 ? '#FFC21A' : '#FF3B30';
@@ -150,7 +150,7 @@ export function createRenderer(canvas, wrap, assets) {
   }
   const recoil = {};
   // HUD 확대 배율: 휴대폰처럼 게임 화면이 작게 줄어들면 조준점·체력바도 같이 작아져 안 보인다.
-  // 화면에 보이는 크기가 원래의 0.8배쯤은 되도록 HUD만 따로 키운다(최대 2.4배).
+  // 화면에 보이는 크기가 원래 크기(1600×1000을 꽉 채운 화면 기준)만큼은 되도록 HUD만 따로 키운다(최대 3배).
   let uiScale = 1;
   /** (ax, ay)를 기준점으로 HUD 조각을 k배 키워 그린다 */
   function scaled(ax, ay, k, draw) {
@@ -169,7 +169,7 @@ export function createRenderer(canvas, wrap, assets) {
     canvas.style.height = `${ARENA_HEIGHT * scale}px`;
     canvas.width = Math.max(1, Math.round(ARENA_WIDTH * scale * dpr));
     canvas.height = Math.max(1, Math.round(ARENA_HEIGHT * scale * dpr));
-    uiScale = scale > 0 ? Math.max(1, Math.min(2.4, 0.8 / scale)) : 1;
+    uiScale = scale > 0 ? Math.max(1, Math.min(3, 1 / scale)) : 1;
   }
   new ResizeObserver(resize).observe(wrap);
   resize();
@@ -2974,48 +2974,71 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.restore();
   }
 
-  /** 조준점: 팀 색 십자. 쏠 수 없는 동안(쿨타임·방전·과열)은 회색, 내 탄이 맞으면 X 표시 */
+  /**
+   * 조준점: 작은 형광 연두 십자 + 가운데 점, 검은 테두리로 밤하늘·회색 바닥·붉은 조준선 어디서든 또렷하게.
+   * 쏠 수 없는 동안(쿨타임·장전·방전·과열)은 흰색, 내 탄이 맞으면 붉은 X 표시.
+   */
   function drawCrosshair(p, rect, reloading, kick, hitT) {
     const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.scale(uiScale, uiScale);
-    const gap = 9 + kick * 14, len = 18;
-    const color = reloading ? '#B4B8BF' : '#FF2A2A';
+    const k = crosshairScale();
+    ctx.scale(k, k);
+    const gap = 5 + kick * 10, len = 9;
+    const color = reloading ? '#F2F4F7' : '#3DFF5A';
     const arms = () => {
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         ctx.beginPath(); ctx.moveTo(dx * gap, dy * gap); ctx.lineTo(dx * (gap + len), dy * (gap + len)); ctx.stroke();
       }
     };
     ctx.lineCap = 'round';
-    // 어떤 배경에서도 보이게: 검은 테두리 → 흰 테두리 → 색 십자
-    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-    ctx.lineWidth = 9;
-    arms();
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 6;
-    arms();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.shadowColor = reloading ? 'transparent' : 'rgba(255,40,40,0.9)';
-    ctx.shadowBlur = 8;
+    // 바깥쪽 옅은 그림자 → 검은 테두리 → 색 십자
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 3;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 5;
     arms();
     ctx.shadowBlur = 0;
     ctx.shadowColor = 'transparent';
-    // 가운데 점: 검은 테두리 + 흰 고리 + 색 점
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    arms();
+    // 가운데 점: 검은 테두리 + 색 점
+    ctx.fillStyle = '#000000';
+    ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, 2, 0, Math.PI * 2); ctx.fill();
     if (hitT > 0) {
       const a = Math.min(1, hitT * 5);
-      for (const [w, c] of [[7, `rgba(0,0,0,${0.8 * a})`], [4, `rgba(255,255,255,${a})`]]) {
+      for (const [w, c] of [[5, `rgba(0,0,0,${0.85 * a})`], [2.5, `rgba(255,60,50,${a})`]]) {
         ctx.strokeStyle = c;
         ctx.lineWidth = w;
-        for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(dx * 12, dy * 12); ctx.lineTo(dx * 24, dy * 24); ctx.stroke(); }
+        for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(dx * 8, dy * 8); ctx.lineTo(dx * 16, dy * 16); ctx.stroke(); }
       }
+    }
+    ctx.restore();
+  }
+
+  /** 조준점 확대 배율: 작은 화면에서도 조금만 키운다 */
+  const crosshairScale = () => Math.min(uiScale, 1.6);
+
+  /** 회피(돌진) 중: 화면 가장자리에서 가운데로 빨려 드는 속도선 */
+  function drawEvadeLines(p, rect, time, reducedMotion) {
+    if (!p.evade || reducedMotion) return;
+    const k = Math.max(0, Math.min(1, p.evade.t / EVADE.time));
+    const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+    const R = Math.hypot(rect.w, rect.h) / 2;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 28; i++) {
+      const a = i * 2.39996 + Math.floor(time * 30) * 0.7;
+      const r0 = R * (0.55 + 0.25 * ((i * 37) % 10) / 10);
+      ctx.strokeStyle = `rgba(255,255,255,${0.55 * k})`;
+      ctx.lineWidth = 3 + (i % 3) * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -3083,20 +3106,21 @@ export function createRenderer(canvas, wrap, assets) {
   /** 이름표: 이름·체력바(멀수록 작게). 보스는 붉게 */
   function drawTag(t) {
     const p = t.player;
-    const s = Math.min(2, Math.max(0.55, Math.min(1.15, 700 / Math.max(200, t.dist))) * Math.min(uiScale, 1.8));
+    const s = Math.min(1.4, Math.max(0.55, Math.min(1, 700 / Math.max(200, t.dist))) * Math.min(uiScale, 1.4));
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.scale(s, s);
-    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.font = 'bold 14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const label = p.boss ? `BOSS ${p.name}` : p.name;
-    const w = ctx.measureText(label).width + 16;
+    const w = ctx.measureText(label).width + 12;
     ctx.fillStyle = p.boss ? '#B3261E' : TEAM_COLOR[p.team];
-    ctx.globalAlpha = p.alive ? 0.92 : 0.5;
-    ctx.beginPath(); ctx.roundRect(-w / 2, -36, w, 24, 12); ctx.fill();
+    ctx.globalAlpha = p.alive ? 0.95 : 0.5;
+    ctx.beginPath(); ctx.roundRect(-w / 2, -30, w, 18, 9); ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.fillText(p.alive ? label : `${label} · KO`, 0, -23);
+    ctx.fillText(p.alive ? label : `${label} · KO`, 0, -20);
+    ctx.globalAlpha = 1;
     if (p.alive) drawHpBar(ctx, -HP_BAR.w / 2, -8, HP_BAR.w, HP_BAR.h, p.hp, p.maxHp);
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -3156,17 +3180,28 @@ export function createRenderer(canvas, wrap, assets) {
   /** 왼쪽 아래 내 체력, 오른쪽 아래 무기 안내 */
   function drawStatus(p, rect) {
     const pad = 22;
-    const bx = rect.x + pad, by = rect.y + rect.h - 96;
-    ctx.fillStyle = 'rgba(10,14,24,0.6)';
-    ctx.beginPath(); ctx.roundRect(bx, by, 300, 74, 14); ctx.fill();
-    ctx.font = 'bold 18px system-ui, sans-serif';
+    // 내 체력: 진한 판 위에 막대와 숫자. 체력이 25% 아래면 판 테두리가 붉게
+    const bx = rect.x + pad, by = rect.y + rect.h - 80;
+    const low = p.alive && p.hp <= p.maxHp * 0.25;
+    ctx.fillStyle = 'rgba(8,10,18,0.78)';
+    ctx.strokeStyle = low ? '#FF3B30' : 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(bx, by, 300, 60, 12); ctx.fill(); ctx.stroke();
+    ctx.font = 'bold 15px system-ui, sans-serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillStyle = TEAM_COLOR[p.team] === TEAM_COLOR.earth ? '#8FD0FF' : '#FFB060';
-    ctx.fillText(`${p.id} ${p.name}`, bx + 14, by + 18);
-    drawHpBar(ctx, bx + 14, by + 34, 196, 28, p.hp, p.maxHp, false);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 26px system-ui, sans-serif';
-    ctx.fillText(`${Math.max(0, Math.round(p.hp))}`, bx + 222, by + 49);
+    ctx.fillText(`${p.id} ${p.name}`, bx + 12, by + 15);
+    // 회피 남은 횟수: 이름 줄 오른쪽에 점(●)으로, 쿨타임 중이면 회색 점
+    drawEvadePips(p, bx + 288, by + 15);
+    drawHpBar(ctx, bx + 12, by + 30, 200, 18, p.hp, p.maxHp, false);
+    ctx.font = '900 22px system-ui, sans-serif';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#000';
+    const hpText = `${Math.max(0, Math.round(p.hp))}`;
+    ctx.strokeText(hpText, bx + 224, by + 40);
+    ctx.fillStyle = low ? '#FF6A5A' : '#FFFFFF';
+    ctx.fillText(hpText, bx + 224, by + 40);
     // 무기: 체력 칸 위
     const weapon = WEAPONS[p.weapon];
     const wx = bx, wy = by - 92;
@@ -3198,6 +3233,26 @@ export function createRenderer(canvas, wrap, assets) {
     }
   }
 
+  /** 회피 남은 횟수 점(오른쪽 끝이 (x, y)). 다 쓰면 다시 채워질 때까지 회색 점 */
+  function drawEvadePips(p, x, y) {
+    if (p.plane) return;
+    const left = p.evadeCharges ?? EVADE.charges;
+    ctx.save();
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < EVADE.charges; i++) {
+      const px = x - 6 - i * 15;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(px, y, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = EVADE.charges - 1 - i < left ? '#3DFF5A' : '#5A606B';
+      ctx.beginPath(); ctx.arc(px, y, 4.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillStyle = left > 0 ? '#C9F7D0' : '#9AA0AA';
+    ctx.fillText('회피', x - EVADE.charges * 15 - 4, y + 1);
+    ctx.restore();
+  }
+
   /** 1인칭 화면 칸 하나의 HUD */
   function drawFpsView(match, v, inputs, time, reducedMotion, dt) {
     const p = v.viewer;
@@ -3207,6 +3262,7 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
     // 조종실은 먼저 그리고, 창문으로 보이는 적의 이름표·체력바는 그 위에(창틀에 가려도 체력은 보이게)
     if (p.alive && p.plane) drawCockpit(p, rect, time, reducedMotion);
+    drawEvadeLines(p, rect, time, reducedMotion);
     for (const t of [...v.tags].sort((a, b) => b.dist - a.dist)) drawTag(t);
     const kick = hud.kick[p.id] ?? 0;
     if (p.alive) {
@@ -3217,7 +3273,7 @@ export function createRenderer(canvas, wrap, assets) {
       // 떼면 쏘는 무기를 조준 중이면 '떼면 발사'
       if (weapon.trigger === 'release' && inputs?.[p.id]?.aiming) {
         ctx.font = 'bold 18px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFD45E';
-        ctx.fillText('떼면 발사', rect.x + rect.w / 2, rect.y + rect.h / 2 + 46);
+        ctx.fillText('떼면 발사', rect.x + rect.w / 2, rect.y + rect.h / 2 + 34 * crosshairScale());
       }
     } else {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -3229,7 +3285,7 @@ export function createRenderer(canvas, wrap, assets) {
     }
     drawHurt(p, rect, hud.hurtFrom[p.id], time, reducedMotion);
     drawRadar(match, p, rect);
-    scaled(rect.x, rect.y + rect.h, Math.max(1, Math.min(uiScale, 1.6, rect.w / 560)), () => drawStatus(p, rect));
+    scaled(rect.x, rect.y + rect.h, Math.max(1, Math.min(uiScale, 1.3, rect.w / 560)), () => drawStatus(p, rect));
     ctx.restore();
   }
 
@@ -3353,7 +3409,7 @@ export function createRenderer(canvas, wrap, assets) {
       drawLetterbox(cut);
     } else {
       if (views.length === 1) {
-        scaled(ARENA_WIDTH - 20, 20, Math.min(uiScale, 1.8), () => {
+        scaled(ARENA_WIDTH - 20, 20, Math.min(uiScale, 1.3), () => {
           drawTeamBox('isb', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20);
           drawTeamBox('earth', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20 + 52 + match.players.filter((p) => p.team === 'isb').length * 30);
         });
