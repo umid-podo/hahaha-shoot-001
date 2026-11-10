@@ -16,6 +16,7 @@ export function unlock() {
   if (!AudioCtx) return;
   ctx ??= new AudioCtx();
   ctx.resume();
+  renderAll();
 }
 
 export function setMuted(value) {
@@ -103,40 +104,53 @@ const SHOT = {
 };
 
 // ── 실감 효과음: 실제 총성·장전·칼날 소리를 여러 겹으로 합성한다 ──
+// 소리 하나하나를 실시간으로 합성하면 연사 때 노드가 수백 개씩 생겨 오디오가 끊긴다.
+// 그래서 처음 한 번만 OfflineAudioContext로 녹음(렌더링)해 두고, 경기 중에는 녹음본만 재생한다.
+// 아래 레시피 함수들은 렌더링 중인 컨텍스트 ac에 0초부터 소리를 깐다.
+let ac = null;
 let bus = null;
 let room = null;
+let irBuf = null;
+const T0 = 0.005;
 
-/** 총성·금속음 전용 출력: 압축기로 큰 소리를 눌러 찢어지지 않게 하고, 방 울림(잔향)을 보낸다. */
+/** 잔향 임펄스: 지수적으로 줄어드는 소음(실내·골목 메아리). 한 번 만들어 모든 렌더링이 같이 쓴다. */
+function impulse() {
+  if (irBuf) return irBuf;
+  const len = Math.floor(ctx.sampleRate * 1.4);
+  irBuf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = irBuf.getChannelData(c);
+    for (let i = 0; i < len; i++) {
+      const t = i / ctx.sampleRate;
+      const early = t < 0.06 && Math.random() < 0.004 ? 3 : 0; // 초기 반사
+      d[i] = (Math.random() * 2 - 1) * (Math.exp(-t * 3.6) + early) * 0.5;
+    }
+  }
+  return irBuf;
+}
+
+/** 렌더링 출력: 압축기 + 잔향 */
 function realBus() {
-  if (bus) return bus;
-  const comp = ctx.createDynamicsCompressor();
+  return bus;
+}
+
+function setupRender(c) {
+  ac = c;
+  const comp = c.createDynamicsCompressor();
   comp.threshold.value = -14;
   comp.knee.value = 6;
   comp.ratio.value = 6;
   comp.attack.value = 0.002;
   comp.release.value = 0.15;
-  comp.connect(ctx.destination);
-  // 잔향: 지수적으로 줄어드는 소음으로 만든 2초짜리 임펄스(실내·골목 메아리)
-  const len = Math.floor(ctx.sampleRate * 2);
-  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) {
-    const d = ir.getChannelData(c);
-    for (let i = 0; i < len; i++) {
-      const t = i / ctx.sampleRate;
-      // 초기 반사(첫 60ms에 몇 번 튕김) + 긴 꼬리
-      const early = t < 0.06 && Math.random() < 0.004 ? 3 : 0;
-      d[i] = (Math.random() * 2 - 1) * (Math.exp(-t * 3.2) + early) * 0.5;
-    }
-  }
-  const verb = ctx.createConvolver();
-  verb.buffer = ir;
-  const verbLow = ctx.createBiquadFilter();
+  comp.connect(c.destination);
+  const verb = c.createConvolver();
+  verb.buffer = impulse();
+  const verbLow = c.createBiquadFilter();
   verbLow.type = 'lowpass';
   verbLow.frequency.value = 3500;
   verb.connect(verbLow).connect(comp);
   room = verb;
   bus = comp;
-  return bus;
 }
 
 let drive = null;
@@ -153,24 +167,24 @@ function driveCurve() {
 
 /** 소음 한 덩이를 filters를 거쳐 env 모양으로 낸다. wet은 잔향으로 보낼 양 */
 function noiseHit(start, filters, peak, attack, decay, wet = 0, out = realBus()) {
-  const src = ctx.createBufferSource();
+  const src = ac.createBufferSource();
   src.buffer = noiseBuffer();
   let node = src;
   for (const f of filters) {
-    const b = ctx.createBiquadFilter();
+    const b = ac.createBiquadFilter();
     b.type = f.type;
     b.frequency.setValueAtTime(f.freq, start);
     if (f.to) b.frequency.exponentialRampToValueAtTime(f.to, start + (f.time ?? decay));
     if (f.q) b.Q.value = f.q;
     node = node.connect(b);
   }
-  const g = ctx.createGain();
+  const g = ac.createGain();
   g.gain.setValueAtTime(0.0001, start);
   g.gain.linearRampToValueAtTime(peak, start + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, start + attack + decay);
   node.connect(g).connect(out);
   if (wet > 0) {
-    const send = ctx.createGain();
+    const send = ac.createGain();
     send.gain.value = wet;
     g.connect(send).connect(room);
   }
@@ -184,8 +198,8 @@ function metalClick(start, { pitch = 1, volume = 1, ring = 0.05 } = {}) {
   const out = realBus();
   noiseHit(start, [{ type: 'highpass', freq: 1800 * pitch }, { type: 'peaking', freq: 4200 * pitch, q: 2 }], GAIN * 5 * volume, 0.0008, 0.018, 0.08);
   for (const [f, a] of [[2350, 1], [3870, 0.7], [5630, 0.5], [7410, 0.3]]) {
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
     osc.type = 'sine';
     osc.frequency.value = f * pitch * (0.98 + Math.random() * 0.04);
     g.gain.setValueAtTime(GAIN * 0.9 * a * volume, start);
@@ -223,37 +237,37 @@ const REAL = {
 function realShot(p, delay = 0) {
   if (!ctx || muted) return;
   const out = realBus();
-  const start = ctx.currentTime + delay;
+  const start = T0 + delay;
   const v = p.volume * (0.92 + Math.random() * 0.16);
   const tune = 0.94 + Math.random() * 0.12;
   // ① crack: 아주 짧고 밝은 충격
   noiseHit(start, [{ type: 'highpass', freq: 2500 * tune }], GAIN * 6 * p.crack * v, 0.0005, 0.012, 0.2);
   // ② blast: 찌그러뜨린 광대역 소음, 저역 통과 필터가 빠르게 닫힘
-  const src = ctx.createBufferSource();
+  const src = ac.createBufferSource();
   src.buffer = noiseBuffer();
-  const lp = ctx.createBiquadFilter();
+  const lp = ac.createBiquadFilter();
   lp.type = 'lowpass';
   lp.frequency.setValueAtTime(p.body * tune, start);
   lp.frequency.exponentialRampToValueAtTime(260, start + p.decay);
   lp.Q.value = 0.7;
-  const pre = ctx.createGain();
+  const pre = ac.createGain();
   pre.gain.value = 2.5;
-  const shaper = ctx.createWaveShaper();
+  const shaper = ac.createWaveShaper();
   shaper.curve = driveCurve();
-  const env = ctx.createGain();
+  const env = ac.createGain();
   env.gain.setValueAtTime(0.0001, start);
   env.gain.linearRampToValueAtTime(GAIN * 5 * v, start + 0.001);
   env.gain.exponentialRampToValueAtTime(GAIN * 1.2 * v, start + p.decay * 0.25);
   env.gain.exponentialRampToValueAtTime(0.0001, start + p.decay);
   src.connect(pre).connect(shaper).connect(lp).connect(env).connect(out);
-  const send = ctx.createGain();
+  const send = ac.createGain();
   send.gain.value = p.wet;
   env.connect(send).connect(room);
   src.start(start, Math.random() * 0.5);
   src.stop(start + p.decay + 0.05);
   // ③ boom: 아래로 떨어지는 저음
-  const osc = ctx.createOscillator();
-  const body = ctx.createGain();
+  const osc = ac.createOscillator();
+  const body = ac.createGain();
   osc.type = 'sine';
   osc.frequency.setValueAtTime(p.boom * tune, start);
   osc.frequency.exponentialRampToValueAtTime(35, start + p.decay * 1.2);
@@ -278,7 +292,7 @@ function realShot(p, delay = 0) {
 /** 장전 시작: 탄창 멈치 '딸깍' → 빈 탄창이 빠지는 '스륵·툭' */
 function reloadOut() {
   if (!ctx || muted) return;
-  const t = ctx.currentTime;
+  const t = T0;
   metalClick(t, { pitch: 1.2, volume: 0.55, ring: 0.03 });
   metalSlide(t + 0.05, 0.12, 0.7);
   noiseHit(t + 0.2, [{ type: 'lowpass', freq: 700 }], GAIN * 2, 0.002, 0.06); // 탄창이 떨어져 툭
@@ -288,7 +302,7 @@ function reloadOut() {
 /** 장전 끝: 새 탄창을 끼우는 '철컥' → 노리쇠(슬라이드)를 당겼다 놓는 '철-컥!' */
 function reloadIn() {
   if (!ctx || muted) return;
-  const t = ctx.currentTime;
+  const t = T0;
   metalSlide(t, 0.06, 0.6);
   metalClick(t + 0.05, { pitch: 0.85, volume: 1 });           // 탄창 삽입: 철
   metalClick(t + 0.08, { pitch: 1.05, volume: 0.7 });          //          컥
@@ -300,7 +314,7 @@ function reloadIn() {
 /** 무기 교체: 총을 꺼내며 '철컥' */
 function weaponSwap() {
   if (!ctx || muted) return;
-  const t = ctx.currentTime;
+  const t = T0;
   metalSlide(t, 0.05, 0.5);
   metalClick(t + 0.04, { pitch: 1, volume: 0.8 });
   metalClick(t + 0.09, { pitch: 1.2, volume: 0.5, ring: 0.04 });
@@ -309,30 +323,30 @@ function weaponSwap() {
 /** 칼날이 공기를 가르는 '쉭': 공진 주파수가 올라갔다 내려가는 소음 + 날의 '스앵' 울림 */
 function knifeSwing() {
   if (!ctx || muted) return;
-  const t = ctx.currentTime;
+  const t = T0;
   const out = realBus();
-  const src = ctx.createBufferSource();
+  const src = ac.createBufferSource();
   src.buffer = noiseBuffer();
-  const band = ctx.createBiquadFilter();
+  const band = ac.createBiquadFilter();
   band.type = 'bandpass';
   band.Q.value = 4;
   band.frequency.setValueAtTime(700, t);
   band.frequency.exponentialRampToValueAtTime(3800, t + 0.11);
   band.frequency.exponentialRampToValueAtTime(1200, t + 0.26);
-  const g = ctx.createGain();
+  const g = ac.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(GAIN * 4.5, t + 0.1);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
   src.connect(band).connect(g).connect(out);
-  const pan = ctx.createGain();
+  const pan = ac.createGain();
   pan.gain.value = 0.15;
   g.connect(pan).connect(room);
   src.start(t, Math.random() * 0.6);
   src.stop(t + 0.3);
   // 칼집에서 뽑히듯 날이 우는 '스앵'(비정수배 금속 배음)
   for (const [f, a] of [[3150, 1], [4730, 0.6], [6820, 0.35]]) {
-    const osc = ctx.createOscillator();
-    const og = ctx.createGain();
+    const osc = ac.createOscillator();
+    const og = ac.createGain();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(f * 0.9, t);
     osc.frequency.linearRampToValueAtTime(f, t + 0.08);
@@ -348,12 +362,12 @@ function knifeSwing() {
 /** 칼에 베이는 '써걱': 날카롭게 찢는 고음 소음 + 둔탁한 살 소리 */
 function knifeSlash() {
   if (!ctx || muted) return;
-  const t = ctx.currentTime;
+  const t = T0;
   noiseHit(t, [{ type: 'bandpass', freq: 5200, to: 2200, q: 1.5, time: 0.09 }], GAIN * 5, 0.002, 0.09, 0.2);
   noiseHit(t + 0.01, [{ type: 'highpass', freq: 3000 }, { type: 'lowpass', freq: 9000 }], GAIN * 3, 0.003, 0.05);
   noiseHit(t, [{ type: 'lowpass', freq: 450 }], GAIN * 4, 0.003, 0.11); // 퍽
-  const osc = ctx.createOscillator();
-  const g = ctx.createGain();
+  const osc = ac.createOscillator();
+  const g = ac.createGain();
   osc.frequency.setValueAtTime(160, t);
   osc.frequency.exponentialRampToValueAtTime(60, t + 0.12);
   g.gain.setValueAtTime(GAIN * 3, t);
@@ -361,6 +375,93 @@ function knifeSlash() {
   osc.connect(g).connect(realBus());
   osc.start(t);
   osc.stop(t + 0.15);
+}
+
+/** 녹음해 둘 소리: 이름 → [길이(초), 레시피, 변형 수]. 변형마다 높낮이·세기가 조금씩 다르다. */
+const RECIPES = {
+  ...Object.fromEntries(Object.entries(REAL).map(([k, p]) => [
+    `shot-${k}`, [p.decay * 1.3 + (p.mech ? p.mech + (p.pump ? 0.4 : 0.1) : 0) + 1.2, () => realShot(p), 3],
+  ])),
+  'reload-out': [1.2, reloadOut, 1],
+  'reload-in': [1.6, reloadIn, 1],
+  swap: [0.9, weaponSwap, 1],
+  'knife-swing': [0.9, knifeSwing, 2],
+  'knife-slash': [0.9, knifeSlash, 2],
+};
+// 기본 무기(권총·쌍권총)·장전부터 먼저 녹음
+const RENDER_ORDER = ['shot-pistol', 'shot-dual', 'reload-out', 'reload-in', 'swap', 'shot-rifle', 'shot-smg',
+  'knife-swing', 'knife-slash', 'shot-shotgun', 'shot-sniper'];
+const recorded = {};
+let rendering = false;
+
+async function renderAll() {
+  if (rendering || typeof OfflineAudioContext === 'undefined') return;
+  rendering = true;
+  const keys = [...new Set([...RENDER_ORDER, ...Object.keys(RECIPES)])];
+  for (const key of keys) {
+    const [seconds, recipe, variants] = RECIPES[key];
+    const list = [];
+    for (let i = 0; i < variants; i++) {
+      try {
+        const c = new OfflineAudioContext(2, Math.ceil(ctx.sampleRate * seconds), ctx.sampleRate);
+        setupRender(c);
+        recipe();
+        ac = null;
+        list.push(await c.startRendering());
+      } catch { ac = null; }
+    }
+    if (list.length) recorded[key] = list;
+  }
+}
+
+// 재생: 같은 소리가 다시 나면 앞 소리의 꼬리를 빠르게 줄여(초크) 동시에 울리는 소리 수를 묶어 둔다.
+const MAX_VOICES = 14;
+const voices = new Set();
+const lastVoice = {};
+let master = null;
+
+/** 녹음본을 재생. 아직 녹음 전이면 false */
+function playRecorded(key, volume = 1) {
+  const list = recorded[key];
+  if (!ctx || muted) return true;
+  if (!list) return false;
+  if (!master) {
+    master = ctx.createDynamicsCompressor();
+    master.threshold.value = -10;
+    master.ratio.value = 8;
+    master.attack.value = 0.002;
+    master.release.value = 0.12;
+    master.connect(ctx.destination);
+  }
+  const now = ctx.currentTime;
+  const prev = lastVoice[key];
+  if (prev) {
+    // 너무 촘촘하면(기관단총 연사) 건너뛴다: 귀로는 구분이 안 되고 처리량만 는다
+    if (now - prev.at < 0.045) return true;
+    prev.gain.gain.cancelScheduledValues(now);
+    prev.gain.gain.setTargetAtTime(0, now, 0.03);
+    prev.src.stop(now + 0.15);
+  }
+  if (voices.size >= MAX_VOICES) {
+    const oldest = voices.values().next().value;
+    oldest.src.stop();
+    voices.delete(oldest);
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = list[Math.floor(Math.random() * list.length)];
+  src.playbackRate.value = 0.97 + Math.random() * 0.06;
+  const gain = ctx.createGain();
+  gain.gain.value = volume;
+  src.connect(gain).connect(master);
+  const v = { src, gain, at: now };
+  voices.add(v);
+  lastVoice[key] = v;
+  src.onended = () => {
+    voices.delete(v);
+    if (lastVoice[key] === v) delete lastVoice[key];
+  };
+  src.start();
+  return true;
 }
 
 /** 레이저: 높은 음에서 빠르게 떨어지는 톱니파 '피융' */
@@ -436,25 +537,25 @@ export function playEvents(events) {
     if (e.type === 'megalaser') { gunshot({ filter: 300, q: 0.4, decay: 1.2, thump: 50, volume: 1.8 }); [880, 660, 440, 220].forEach((f, i) => tone(f, 0.25, 'sawtooth', i * 0.06)); }
     if (e.type === 'fire' && e.weapon === 'instakill') { /* 소리는 megalaser에서 */ }
     else if (e.type === 'fire' && e.weapon === 'laser') laserZap();
-    else if (e.type === 'fire' && e.weapon === 'dagger') knifeSwing();
-    else if (e.type === 'fire' && REAL[e.weapon]) realShot(REAL[e.weapon]);
+    else if (e.type === 'fire' && e.weapon === 'dagger') { if (!playRecorded('knife-swing')) gunshot(SHOT.dagger); }
+    else if (e.type === 'fire' && REAL[e.weapon] && playRecorded(`shot-${e.weapon}`)) { /* 녹음본 재생 */ }
     else if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
     // 장전: 탄창 빼는 소리 → 끼우는 소리(철컥)
-    if (e.type === 'reload') reloadOut();
-    if (e.type === 'reloaded') reloadIn();
+    if (e.type === 'reload' && !playRecorded('reload-out')) { tone(420, 0.04, 'square'); tone(260, 0.05, 'square', 0.08); }
+    if (e.type === 'reloaded' && !playRecorded('reload-in')) { tone(900, 0.03, 'square'); tone(1300, 0.04, 'square', 0.06); }
     if (e.type === 'overheat') [700, 500, 300].forEach((f, i) => tone(f, 0.08, 'sawtooth', i * 0.07)); // 과열 경고
     if (e.type === 'jet-fire') gunshot(SHOT.jet); // 미사일 발사음
     if (e.type === 'tank-fire') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 130, volume: 1.4 }); tone(70, 0.2, 'square', 0.02); } // 탱크 포성
     if (e.type === 'ship-fire') { gunshot({ filter: 350, q: 0.5, decay: 0.6, thump: 100, volume: 1.5 }); tone(55, 0.3, 'square', 0.02); } // 배 대포
     if (e.type === 'sniper-aim') [1760, 1760].forEach((f, i) => tone(f, 0.05, 'square', i * 0.12)); // 조준선: 삑삑
-    if (e.type === 'johnson-shot') realShot(REAL.jsniper);
+    if (e.type === 'johnson-shot' && !playRecorded('shot-jsniper')) gunshot(SHOT.jsniper);
     if (e.type === 'bump') { gunshot({ filter: 260, q: 0.4, decay: 0.3, thump: 90, volume: 1.2 }); tone(80, 0.15, 'square'); } // 구멍: 덜컹
     if (e.type === 'drift') gunshot({ filter: 3000, q: 0.3, decay: 0.35, thump: 0, volume: 0.7 }); // 눈더미: 퍽(눈보라)
     if (e.type === 'splash') { gunshot({ filter: 900, q: 0.3, decay: 0.9, thump: 60, volume: 1.4 }); slide(500, 120, 0.6, 'sine', 0.6); } // 풍덩
     if (e.type === 'jump') slide(900, 250, 0.6, 'triangle', 0.6); // 뛰어내림
     if (e.type === 'chute') { gunshot({ filter: 1800, q: 0.6, decay: 0.25, thump: 0, volume: 0.8 }); slide(300, 180, 0.4, 'sine', 0.5); } // 낙하산 펴짐(펄럭)
-    if (e.type === 'swap') weaponSwap(); // 철컥
-    if (e.type === 'hit' && e.weapon === 'dagger') knifeSlash(); // 써걱
+    if (e.type === 'swap' && !playRecorded('swap')) { tone(1200, 0.03, 'square'); tone(900, 0.04, 'square', 0.05); } // 철컥
+    if (e.type === 'hit' && e.weapon === 'dagger') { if (!playRecorded('knife-slash')) tone(880, 0.07, 'square'); } // 써걱
     else if (e.type === 'hit') tone(880, 0.07, 'square');
     if (e.type === 'block') tone(300, 0.05, 'triangle');
     if (e.type === 'explode') { gunshot({ filter: 250, q: 0.4, decay: 0.6, thump: 90, volume: 1.4 }); tone(60, 0.4, 'square', 0.05); }
@@ -476,7 +577,7 @@ export function playEvents(events) {
     if (e.type === 'hero-pose') [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12, 'triangle', i * 0.07));
     // 스토리 2스테이지(복도): 엘리베이터 딩동, 포탑 포성, 천장 울림·붕괴, R-10 착지·도발, 스테이지 전환·회복
     if (e.type === 'elevator') { tone(1319, 0.35, 'sine'); tone(1047, 0.5, 'sine', 0.3); }
-    if (e.type === 'turret-fire') realShot(REAL.turret);
+    if (e.type === 'turret-fire' && !playRecorded('shot-turret')) gunshot({ filter: 500, q: 0.6, decay: 0.3, thump: 110, volume: 1 });
     if (e.type === 'rumble') { gunshot({ filter: 120, q: 0.3, decay: 1.2, thump: 45, volume: 1.6 }); tone(40, 0.9, 'square', 0.05); }
     if (e.type === 'ceiling-break') { gunshot({ filter: 350, q: 0.4, decay: 0.9, thump: 70, volume: 1.8 }); tone(120, 0.3, 'sawtooth', 0.05); }
     if (e.type === 'jump') tone(320, 0.06, 'triangle'); // 점프: 휙

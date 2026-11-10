@@ -468,28 +468,14 @@ test('전투기 미사일은 진영마다 가장 가까운 플레이어가 있�
   assert.ok(booms.some((e) => Math.hypot(e.x - spot.x, e.y - spot.y) < 1e-6), 'P2가 있던 자리에서 터짐');
 });
 
-test('RPG 유도: 비껴 쏴도 가장 가까운 적 쪽으로 휘어 직격', () => {
+test('RPG는 유도 없이 똑바로: 비껴 쏘면 옆의 적을 맞히지 못함', () => {
+  assert.equal(WEAPONS.rpg.homing, undefined);
   const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'rpg' } });
   P1.x = P1.previousX = 300; P2.x = P2.previousX = 450; // 정면이 아니라 150px 옆의 적
-  spawnProjectile(match, P1, UP); // 똑바로 위로
+  const b = spawnProjectile(match, P1, UP); // 똑바로 위로
+  assert.ok(!b.homing);
   const events = run(match, inputs, 1);
-  assert.equal(P2.hp, MAX_HP - WEAPONS.rpg.damage);
-  assert.ok(events.some((e) => e.type === 'hit' && e.victimId === 'P2'));
-
-  // 유도 없는 권총은 같은 조건에서 빗나감
-  const other = playing({ P1: { weapon: 'pistol' } });
-  other.P1.x = other.P1.previousX = 300; other.P2.x = other.P2.previousX = 450;
-  spawnProjectile(other.match, other.P1, UP);
-  run(other.match, other.inputs, 2);
-  assert.equal(other.P2.hp, MAX_HP);
-});
-
-test('RPG 유도는 한도가 있어 너무 먼 적은 못 맞힘', () => {
-  const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'rpg' } });
-  P1.x = P1.previousX = 200; P2.x = P2.previousX = 800; // 600px 옆은 유도로 못 따라가고 폭발 범위 밖
-  spawnProjectile(match, P1, UP);
-  run(match, inputs, 2);
-  assert.equal(P2.hp, MAX_HP);
+  assert.ok(!events.some((e) => e.type === 'hit' && e.victimId === 'P2'), '직격 없음');
 });
 
 test('빗나간 RPG는 벽(경기장 끝)에서 터져 근처 적에게 폭발 피해', () => {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GRADES, PART_SLOTS, MOD_WEAPONS, canMount, seededRng, rollGrade, rollItem, designOf, nameOf, createModStore } from '../src/game/mods.js';
+import { GRADES, PART_SLOTS, MOD_WEAPONS, canMount, seededRng, rollGrade, rollItem, designOf, nameOf, createModStore, SHOP, SHOP_BY_ID, SHOP_PRICE } from '../src/game/mods.js';
 
 const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) }; };
 
@@ -71,4 +71,49 @@ test('개조 배낭: 깨진 저장은 버리고 빈 배낭으로 시작', () => 
   const s = createModStore(storage);
   assert.equal(s.items.length, 1);
   assert.ok(s.items[0].name);
+});
+
+test('상점: 레어 30·엘리트 30 총기 스킨 60가지, 이름이 모두 다르고 그 총에 붙는 칸을 한 벌로 갖춤', () => {
+  assert.equal(SHOP.length, 60);
+  assert.equal(SHOP.filter((g) => g.grade === 'rare').length, 30);
+  assert.equal(SHOP.filter((g) => g.grade === 'elite').length, 30);
+  assert.equal(new Set(SHOP.map((g) => g.name)).size, 60);
+  assert.equal(new Set(SHOP.map((g) => g.id)).size, 60);
+  assert.deepEqual(SHOP_PRICE, { rare: 3, elite: 8 });
+  for (const g of SHOP) {
+    assert.equal(g.price, SHOP_PRICE[g.grade]);
+    assert.deepEqual(g.parts.map((p) => p.slot), MOD_WEAPONS[g.weapon]);
+    assert.ok(g.parts.every((p) => p.grade === g.grade && Number.isFinite(p.seed)));
+  }
+  assert.deepEqual(new Set(SHOP.map((g) => g.weapon)), new Set(Object.keys(MOD_WEAPONS)), '8가지 총에 골고루');
+});
+
+test('상점 구매: 코인을 내고 파츠 한 벌을 받아 바로 장착, 다시 열어도 보관, 분해 불가, 다시 장착 가능', () => {
+  const storage = memory();
+  const store = createModStore(storage);
+  const rare = SHOP.find((g) => g.grade === 'rare'), elite = SHOP.find((g) => g.grade === 'elite');
+  assert.deepEqual(store.buy(rare.id), [], '코인이 없으면 못 삼');
+  store.addCoins(10);
+  const got = store.buy(rare.id);
+  assert.equal(got.length, rare.parts.length);
+  assert.equal(store.coins, 7);
+  assert.ok(store.owns(rare.id) && store.shopEquipped(rare.id));
+  assert.deepEqual(store.buy(rare.id), [], '같은 총기는 한 번만');
+  assert.equal(store.canBuy(elite.id), false, '7코인으로는 엘리트(8코인)를 못 삼');
+  store.addCoins(1);
+  assert.equal(store.buy(elite.id).length, elite.parts.length);
+  assert.equal(store.coins, 0);
+  // 분해해도 그대로(영구 보관), 장착을 풀었다가 다시 한 번에 장착
+  store.remove(got[0].id);
+  assert.ok(store.items.some((i) => i.id === got[0].id));
+  store.unequip(rare.weapon, got[0].slot);
+  assert.equal(store.shopEquipped(rare.id), false);
+  assert.ok(store.equipShop(rare.id));
+  assert.ok(store.shopEquipped(rare.id));
+  // 다시 열어도(다음 접속) 산 총기·파츠·장착이 남음
+  const again = createModStore(storage);
+  assert.deepEqual(again.owned, [rare.id, elite.id]);
+  assert.ok(again.shopEquipped(rare.id));
+  assert.equal(again.items.filter((i) => i.shop).length, rare.parts.length + elite.parts.length);
+  assert.equal(SHOP_BY_ID[rare.id], rare);
 });

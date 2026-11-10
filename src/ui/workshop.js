@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { WEAPONS } from '../game/config.js';
-import { GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, canMount, modStore } from '../game/mods.js';
+import { GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, SHOP, SHOP_BY_ID, SHOP_PRICE, canMount, modStore } from '../game/mods.js';
 import { buildShowcase, environmentMap } from '../render/guns.js';
 import { makePartPreview } from '../render/parts.js';
 
@@ -19,6 +19,9 @@ export function createWorkshop({ show, onClose }) {
   let weapon = 'rifle';
   let filter = 'all';
   let selected = null; // 배낭에서 눌러 본 파츠 id
+  let tab = 'gacha'; // 'gacha'(랜덤 뽑기) · 'shop'(상점)
+  let shopFilter = 'all'; // 'all' · 'rare' · 'elite' · 'weapon'(지금 고른 총만)
+  let previewShop = null; // 상점에서 눌러 본 총기 스킨 id(책상 위 총에 미리 붙여 보여 줌)
   let three = null; // 3D 장면(처음 열 때 만든다)
   let running = false;
 
@@ -199,10 +202,11 @@ export function createWorkshop({ show, onClose }) {
   /** 책상 위 총: 무기·장착이 바뀌면 다시 만든다. 길이를 맞춰(권총은 크게) 받침 위에 옆모습이 보이게 */
   function syncGun() {
     const s = three;
-    const key = `${weapon}|${store.signature(weapon)}`;
+    const shop = previewShop && SHOP_BY_ID[previewShop].weapon === weapon ? SHOP_BY_ID[previewShop] : null;
+    const key = shop ? `${weapon}|shop:${shop.id}` : `${weapon}|${store.signature(weapon)}`;
     if (s.gunKey === key) return;
     if (s.gun) { s.scene.remove(s.gun); dispose(s.gun); }
-    const model = buildShowcase(weapon, store.equipped(weapon));
+    const model = buildShowcase(weapon, shop ? Object.fromEntries(shop.parts.map((p) => [p.slot, p])) : store.equipped(weapon));
     const holder = new THREE.Group();
     const bb = new THREE.Box3().setFromObject(model);
     const size = bb.getSize(new THREE.Vector3()), center = bb.getCenter(new THREE.Vector3());
@@ -282,7 +286,7 @@ export function createWorkshop({ show, onClose }) {
       const b = el('button', 'mod-weapon', WEAPONS[id].name);
       b.type = 'button';
       b.setAttribute('aria-pressed', String(id === weapon));
-      b.addEventListener('click', () => { weapon = id; renderAll(); });
+      b.addEventListener('click', () => { weapon = id; previewShop = null; renderAll(); });
       return b;
     }));
   }
@@ -345,8 +349,11 @@ export function createWorkshop({ show, onClose }) {
       equip.disabled = !on && !fits;
       equip.setAttribute('aria-label', `${item.name} ${on ? '장착 해제' : '장착'}`);
       equip.addEventListener('click', () => { if (on) store.unequip(weapon, item.slot); else store.equip(weapon, item.id); });
-      const scrap = el('button', 'small', '분해');
+      if (item.shop) meta.append(el('span', 'shop-tag', '상점'));
+      // 상점에서 산 파츠는 영구 보관(분해 불가)
+      const scrap = el('button', 'small', item.shop ? '영구 보관' : '분해');
       scrap.type = 'button';
+      scrap.disabled = !!item.shop;
       scrap.addEventListener('click', () => {
         if (scrap.dataset.confirm) { if (selected === item.id) selected = null; store.remove(item.id); syncPreview(); return; }
         scrap.dataset.confirm = '1';
@@ -367,8 +374,70 @@ export function createWorkshop({ show, onClose }) {
       ? '코인이 없어요. 스토리 모드에서 스테이지를 깰 때마다 코인 1개를 받아요(중간에 그만둬도 받은 코인은 남아요).'
       : `뽑기 1번에 ${DRAW_COST}코인. 코인은 스토리 모드 스테이지를 깰 때마다 1개씩 받아요.`;
   }
-  function renderAll() { renderCoins(); renderWeapons(); renderSlots(); renderFilter(); renderBag(); }
-  store.onChange(() => { if (running) { renderCoins(); renderSlots(); renderBag(); } });
+  // ── 상점 ──
+  function renderTabs() {
+    for (const b of document.querySelectorAll('#mod-tabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
+    $('#mod-gacha').hidden = tab !== 'gacha';
+    $('#mod-shop').hidden = tab !== 'shop';
+  }
+  function renderShopFilter() {
+    const opts = [['all', '전체'], ['rare', `레어 (${SHOP_PRICE.rare}코인)`], ['elite', `엘리트 (${SHOP_PRICE.elite}코인)`], ['weapon', `${WEAPONS[weapon].name}만`]];
+    $('#mod-shop-filter').replaceChildren(...opts.map(([id, name]) => {
+      const b = el('button', 'small', name);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(shopFilter === id));
+      b.addEventListener('click', () => { shopFilter = id; renderShop(); });
+      return b;
+    }));
+  }
+  function renderShop() {
+    renderShopFilter();
+    const list = SHOP.filter((g) => shopFilter === 'all' || g.grade === shopFilter || (shopFilter === 'weapon' && g.weapon === weapon));
+    $('#mod-shop-list').replaceChildren(...list.map((g) => {
+      const owned = store.owns(g.id);
+      const card = el('div', `mod-item shop-item grade-border-${g.grade}${previewShop === g.id ? ' previewing' : ''}`);
+      const view = el('button', 'mod-item-view');
+      view.type = 'button';
+      view.setAttribute('aria-label', `${GRADE[g.grade].name} ${g.name} 미리 보기`);
+      view.append(el('span', 'slot-icon', '🔫'), el('span', 'mod-item-name', g.name));
+      const meta = el('span', 'mod-item-meta');
+      meta.append(gradeChip(g.grade), el('span', 'shop-weapon', `${WEAPONS[g.weapon].name} · 파츠 ${g.parts.length}개`));
+      view.append(meta);
+      view.addEventListener('click', () => {
+        previewShop = previewShop === g.id ? null : g.id;
+        if (previewShop) weapon = g.weapon;
+        renderWeapons(); renderSlots(); renderShop();
+      });
+      const actions = el('div', 'mod-item-actions');
+      let btn;
+      if (!owned) {
+        btn = el('button', 'small primary', `구매 🪙${g.price}`);
+        btn.disabled = !store.canBuy(g.id);
+        btn.addEventListener('click', () => {
+          if (!store.buy(g.id).length) return;
+          weapon = g.weapon; previewShop = null;
+          renderAll();
+        });
+      } else if (store.shopEquipped(g.id)) {
+        btn = el('button', 'small', '장착 중');
+        btn.disabled = true;
+      } else {
+        btn = el('button', 'small primary', '보유 · 장착');
+        btn.addEventListener('click', () => { store.equipShop(g.id); weapon = g.weapon; previewShop = null; renderAll(); });
+      }
+      btn.type = 'button';
+      btn.setAttribute('aria-label', `${g.name} ${btn.textContent}`);
+      actions.append(btn);
+      card.append(view, actions);
+      return card;
+    }));
+  }
+  for (const b of document.querySelectorAll('#mod-tabs button')) {
+    b.addEventListener('click', () => { tab = b.dataset.tab; previewShop = null; renderTabs(); renderShop(); });
+  }
+
+  function renderAll() { renderCoins(); renderTabs(); renderWeapons(); renderSlots(); renderFilter(); renderBag(); renderShop(); }
+  store.onChange(() => { if (running) { renderCoins(); renderSlots(); renderBag(); renderShop(); } });
 
   /** 뽑은 결과 카드(가장 좋은 등급부터) */
   function reveal(items) {
@@ -403,6 +472,7 @@ export function createWorkshop({ show, onClose }) {
   function open() {
     show('mod');
     $('#mod-reveal').hidden = true;
+    previewShop = null;
     if (!three) {
       try { three = makeThree(); } catch (error) { console.warn('작업실 3D 화면을 만들 수 없습니다.', error); }
     }

@@ -10,21 +10,21 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
  * 1스테이지 옥상: 1웨이브 요원 1명(돌격소총) → 2웨이브 헬리콥터에서 요원 2명 → 3웨이브 요원 3명
  *   → 중간보스: 전투기가 헬리콥터를 격추하고, 건쉽에서 스미스 요원(권총 + 보조무기 + 수류탄)이 내려온다.
  *   스미스 요원을 쓰러뜨리면 엔딩 컷씬(발차기로 건물 밖으로) 뒤 다음 스테이지로. 스테이지를 깰 때마다 체력 100% 회복.
- * 2스테이지 복도: 엘리베이터에서 요원이 나온다. 1웨이브 보통 요원 1명(무작위 무기) → 2웨이브 쉬움 돌격소총 + 보통 돌격소총
- *   → 3웨이브 쉬움 요원 4명(쌍권총·권총·권총·돌격소총) → 보스전: 천장을 부수고 R-10(레이저 캐논, 체력 600)이 나온다.
+ * 2스테이지 복도: 엘리베이터에서 요원이 나온다. 1웨이브 보통 요원 1명(무작위 무기) → 2웨이브 보통 돌격소총 2명
+ *   → 3웨이브 보통 요원 4명(쌍권총·권총·권총·돌격소총) → 보스전: 천장을 부수고 R-10(레이저 캐논, 체력 600)이 나온다.
  *   R-10을 쓰러뜨리면 RPG 엔딩 컷씬 뒤 3스테이지로. 복도에는 전투기 대신 벽 포탑 2개가 플레이어를 쏜다(config.js TURRET).
  * 3스테이지 하늘(공중전): 라이트닝을 타고 건쉽과 싸우고, 보스 데스스타를 쓰러뜨리면 엔딩 컷씬 → 낙하산 컷씬으로 4스테이지로.
  * 4스테이지 도로: 비 내리는 밤 도시 도로에서 달리는 자동차 위에서 싸운다. ISB 요원도 차를 타고 뒤에서 따라붙고,
  *   전투기 대신 탱크(config.js TANK)가 가운데 차선을 지나가며 위아래로 포탄을 쏜다. 보스는 RPG 두 자루를 든 윌슨 요원(체력 800)으로,
  *   쓰러뜨리면 건 카타 → 엔딩 컷씬(윌슨 요원의 차가 미끄러져 폭발) 뒤, 자동차로 눈길의 구멍을 피해 달리는 대교 가는 길(drive)로.
- * 5스테이지 대교(손그림 기획서): 눈 내리는 대교. 요원들이 낙하산을 메고 다리 위에 멈춘 차 지붕에 내려앉는다(1웨이브 쉬움 3명은
- *   쓰러질 때 저마다 한마디, 2웨이브 4명 중 보통 요원은 건 카타 5번, 3웨이브 쉬움 5명). 전투기 대신 다리 가운데가 벌어지며
+ * 5스테이지 대교(손그림 기획서): 눈 내리는 대교. 요원들이 낙하산을 메고 다리 위에 멈춘 차 지붕에 내려앉는다(1웨이브 3명은
+ *   쓰러질 때 저마다 한마디, 2웨이브 4명 중 마지막 요원은 건 카타 5번, 3웨이브 5명. 일반 요원은 모두 보통 난이도). 전투기 대신 다리 가운데가 벌어지며
  *   배(config.js SHIP)가 지나가 대포를 쏜다(명중 20, 폭발 8). 보스는 존슨 요원(체력 900, 보통): "내가 처리하지… 멍청이들…" 뒤
  *   1.5초마다 빨간 조준선을 따라 저격총 3발(체력 절반 아래면 5발). 쓰러뜨리면 건 카타 → 엔딩 컷씬(얼음에 미끄러져 강으로) 뒤 스토리 클리어.
  * 일반 요원의 무작위 주무기는 RPG·저격총·아킴보 석궁을 뺀 주무기 중 하나. 스미스 요원 말고는 보조무기·수류탄을 쓰지 않는다.
  * 웨이브별 요원 체력·난이도·피해·탄속·이동 속도·히트박스와 요원마다의 주무기(R-10 빼고)는 스토리 설정(밸런스 칸)에서 바꾼다.
  * 2인 협동: P2도 지구방위팀으로 함께 싸운다(COOP_SLOT). 둘 다 쓰러지면 패배, 한 명이라도 서 있으면 계속한다.
- * AI 동료: 지구방위팀 AI를 MAX_ALLIES명까지 데려갈 수 있다(캐릭터·주무기를 직접 고르고, 동료는 주무기만 쓴다). 대신 동료 수만큼 일반 웨이브마다 쉬움 난이도의
+ * AI 동료: 지구방위팀 AI를 MAX_ALLIES명까지 데려갈 수 있다(캐릭터·주무기를 직접 고르고, 동료는 주무기만 쓴다). 대신 동료 수만큼 일반 웨이브마다 보통 난이도의
  *   돌격소총 요원이 더 나온다(보스전 제외). 사람 주인공이 모두 쓰러지면 동료가 남아 있어도 패배.
  *   쓰러진 동료는 스테이지를 깰 때 체력 가득으로 다시 일어난다. 요원·포탑은 가까운 쪽 주인공을 노린다.
  */
@@ -52,7 +52,7 @@ export const GUNSHIP_NAME = '건쉽';
  * 웨이브 구성. from: 'start'(경기 시작부터 서 있음)·'heli'(헬리콥터)·'gunship'(건쉽)·'elevator'(엘리베이터)·'ceiling'(천장을 부수고)
  *   ·'sky'(하늘에서 날아옴)·'car'(차를 타고 뒤에서 따라붙음)·'chute'(낙하산을 메고 다리 위 차 지붕에 내려앉음).
  * weapon 'random'은 STORY_WEAPONS 중 무작위. agents가 있으면 요원마다 { weapon, difficulty }(difficulty는 설정이 '기획대로'일 때).
- * agents의 line은 그 요원이 쓰러질 때의 한마디. normalKata: 이 웨이브에서 보통 난이도 요원과의 건 카타 대응 횟수.
+ * agents의 line은 그 요원이 쓰러질 때의 한마디, kata는 그 요원과의 건 카타 대응 횟수(없으면 기본 3번).
  * boss: 'smith'(옥상)·'r10'(복도)·'deathstar'(하늘)·'wilson'(도로)·'johnson'(대교). fixed: 무기를 바꿀 수 없는 웨이브. end: 웨이브 마지막 요원을 쓰러뜨렸을 때의 장면(killcamShots).
  * killLine: 그 웨이브의 마지막이 아닌 요원을 쓰러뜨렸을 때 나오는 한마디(없으면 LAST_WORDS 중 무작위).
  */
@@ -64,7 +64,7 @@ export const WAVES = [
   { stage: 'corridor', title: '1웨이브', count: 1, weapon: 'random', from: 'elevator', end: 'corridor-call' },
   {
     stage: 'corridor', title: '2웨이브', from: 'elevator', end: 'eikk', killLine: '나 이제 승급인데!!!',
-    agents: [{ weapon: 'rifle', difficulty: 'easy' }, { weapon: 'rifle', difficulty: 'normal' }],
+    agents: [{ weapon: 'rifle' }, { weapon: 'rifle' }],
   },
   {
     stage: 'corridor', title: '3웨이브', from: 'elevator', end: 'rumble',
@@ -87,8 +87,8 @@ export const WAVES = [
     agents: ['눈 때문에… 조준이…', '낙하산… 괜히 멨어…', '추워… 집에 갈래…'].map((line) => ({ line })),
   },
   {
-    stage: 'bridge', title: '2웨이브', weapon: 'random', from: 'chute', end: 'hero', normalKata: 5,
-    agents: ['easy', 'easy', 'easy', 'normal'].map((difficulty) => ({ difficulty })),
+    stage: 'bridge', title: '2웨이브', weapon: 'random', from: 'chute', end: 'hero',
+    agents: [{}, {}, {}, { kata: 5 }], // 마지막 요원은 건 카타 5번
   },
   { stage: 'bridge', title: '3웨이브', count: 5, weapon: 'random', from: 'chute', end: 'johnson-call' },
   { stage: 'bridge', title: '보스전', count: 1, weapon: 'jsniper', from: 'chute', boss: 'johnson', fixed: true },
@@ -114,7 +114,7 @@ export const defaultWeapons = (i) => (WAVES[i].boss === 'r10' || WAVES[i].fixed 
 
 /**
  * 웨이브별 요원 밸런스 기본값. damage·bulletSpeed·speed는 %, radius는 히트박스 반지름.
- * difficulty 'mixed'(기획대로)는 요원마다 WAVES의 난이도를 쓴다(복도 2웨이브: 쉬움·보통).
+ * 일반 요원(보스가 아닌 웨이브)은 모두 보통 난이도가 기본이다.
  * secondary(스미스 요원만): 보조무기 id 또는 'random'(경기마다 무작위).
  * weapons: 요원마다의 주무기(AGENT_WEAPON_CHOICES). R-10은 빈 목록.
  */
@@ -122,14 +122,14 @@ export function defaultStory() {
   const agent = (hp, difficulty = 'normal') => ({ hp, difficulty, damage: 100, bulletSpeed: 100, speed: 100, radius: 30 });
   const waves = [
     agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
-    agent(500), agent(300, 'mixed'), agent(200, 'easy'), { ...agent(600), radius: 48 },
+    agent(500), agent(300), agent(200), { ...agent(600), radius: 48 },
     // 하늘: 건쉽(히트박스 46), 데스스타(체력 10000, 히트박스 130)
-    { ...agent(250, 'easy'), radius: 46 }, { ...agent(300), radius: 46 }, { ...agent(350), radius: 46 },
+    { ...agent(250), radius: 46 }, { ...agent(300), radius: 46 }, { ...agent(350), radius: 46 },
     { ...agent(10000), radius: 130 },
     // 도로: 보스 윌슨 요원 체력 800
     agent(300), agent(250), agent(200), agent(800),
-    // 대교: 1웨이브 쉬움 3명, 2웨이브 쉬움 3명 + 보통 1명(기획대로), 3웨이브 쉬움 5명, 보스 존슨 요원 체력 900(보통)
-    agent(200, 'easy'), agent(250, 'mixed'), agent(200, 'easy'), agent(900),
+    // 대교: 보스 존슨 요원 체력 900
+    agent(200), agent(250), agent(200), agent(900),
   ];
   // gunkata: 요원·보스를 쓰러뜨릴 때 건 카타 모드를 하는지(끄면 바로 처치 컷씬·엔딩 컷씬)
   return { gunkata: true, waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
@@ -137,6 +137,8 @@ export function defaultStory() {
 
 /** 예전 기본값: 저장값이 이 값이면 바뀐 새 기본값을 쓴다(웨이브 번호 → { 칸: 예전 기본값 }). 데스스타 체력 3000 → 10000 */
 const OLD_DEFAULTS = { 11: { hp: 3000 } };
+/** 예전 난이도 기본값(쉬움·기획대로). 저장값이 이 값이면 새 기본값(보통)을 쓴다 */
+const OLD_DIFFICULTY = { 5: 'mixed', 6: 'easy', 8: 'easy', 16: 'easy', 17: 'mixed', 18: 'easy' };
 
 /**
  * 저장된 값을 기본값 위에 덮고, 범위·선택지 밖의 값은 기본값으로 되돌린다.
@@ -155,7 +157,8 @@ export function normalizeStory(saved, base = null) {
       if (v === OLD_DEFAULTS[i]?.[key]) continue;
       if (w[key] !== undefined && w[key] !== '' && Number.isFinite(v)) def[key] = Math.min(f.max, Math.max(f.min, Math.round(v)));
     }
-    if (DIFFICULTY[w.difficulty] || (mixable && w.difficulty === 'mixed')) def.difficulty = w.difficulty;
+    if (w.difficulty === OLD_DIFFICULTY[i]) { /* 예전 기본값 → 새 기본값 */ }
+    else if (DIFFICULTY[w.difficulty] || (mixable && w.difficulty === 'mixed')) def.difficulty = w.difficulty;
     if ('secondary' in def && (w.secondary === 'random' || SECONDARY_IDS.includes(w.secondary))) def.secondary = w.secondary;
     if (Array.isArray(w.weapons)) {
       def.weapons = def.weapons.map((d, k) => (AGENT_WEAPON_CHOICES.includes(w.weapons[k]) ? w.weapons[k] : d));
@@ -213,12 +216,12 @@ function heroXs(count) {
   return Array.from({ length: count }, (_, i) => ARENA_WIDTH / 2 + (i - (count - 1) / 2) * gap);
 }
 
-/** 데려갈 수 있는 AI 동료 수(0~MAX_ALLIES). 동료 1명마다 일반 웨이브에 쉬움 돌격소총 요원 1명이 더 나온다. */
+/** 데려갈 수 있는 AI 동료 수(0~MAX_ALLIES). 동료 1명마다 일반 웨이브에 보통 돌격소총 요원 1명이 더 나온다. */
 export const MAX_ALLIES = 3;
 export const ALLY_IDS = ['A1', 'A2', 'A3'];
 const ALLY_DIFFICULTY = 'normal';
-/** 덤으로 나오는 요원: 쉬움 난이도, 돌격소총 */
-export const EXTRA_AGENT = { weapon: 'rifle', difficulty: 'easy' };
+/** 덤으로 나오는 요원: 보통 난이도, 돌격소총 */
+export const EXTRA_AGENT = { weapon: 'rifle', difficulty: 'normal' };
 /** 그림 속 무기가 정해지지 않은 지구방위팀 캐릭터의 동료 무기 */
 const ALLY_WEAPON = { 'earth-arrow': 'dual', 'earth-pizza': 'rifle' };
 const ALLY_POOL = ['earth-pizza', 'codename-x', 'codename-v', 'codename-r', 'sirius-k', 'earth-arrow'];
@@ -314,20 +317,20 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
 /** 이 웨이브에 AI 동료 수만큼 더 나오는 요원 수(보스전은 없음) */
 export const extraAgents = (index, allies) => (WAVES[index].boss ? 0 : allyCount(allies));
 
-/** 웨이브 안내 문구: '요원 2명 · 체력 300' (동료가 있으면 '요원 2명 + 쉬움 1명') */
+/** 웨이브 안내 문구: '요원 2명 · 체력 300' (동료가 있으면 '요원 2명 + 추가 1명') */
 export function waveInfo(index, settings, allies = 0) {
   const wave = WAVES[index];
   const hp = normalizeStory(settings).waves[index].hp;
   return `${waveWho(wave, extraAgents(index, allies))} · 체력 ${hp}`;
 }
 
-/** 웨이브에 나오는 적 이름: '요원 2명', '건쉽 3대', '스미스 요원'… extra는 AI 동료 때문에 더 나오는 쉬움 적 수 */
+/** 웨이브에 나오는 적 이름: '요원 2명', '건쉽 3대', '스미스 요원'… extra는 AI 동료 때문에 더 나오는 적 수 */
 export function waveWho(wave, extra = 0) {
   const names = { smith: BOSS_NAME, r10: R10_NAME, deathstar: DEATHSTAR_NAME, wilson: WILSON_NAME, johnson: JOHNSON_NAME };
   if (wave.boss) return names[wave.boss];
   const sky = wave.stage === 'sky';
   const unit = sky ? `${GUNSHIP_NAME} ${wave.count}대` : `요원 ${wave.count}명`;
-  return extra ? `${unit} + 쉬움 ${extra}${sky ? '대' : '명'}` : unit;
+  return extra ? `${unit} + 추가 ${extra}${sky ? '대' : '명'}` : unit;
 }
 
 function banner(text, sub = '') {
@@ -403,7 +406,7 @@ function spawnWave(match, inputs, index) {
     inputs[id] = createInput(p);
     addStats(match, p);
     const difficulty = extra ? EXTRA_AGENT.difficulty : cfg.difficulty === 'mixed' ? spec.difficulty ?? 'normal' : cfg.difficulty;
-    if (wave.normalKata && difficulty === 'normal') p.kataGoal = wave.normalKata;
+    if (spec.kata) p.kataGoal = spec.kata;
     story.brains.push(createAI(id, difficulty, Math.floor(story.rng() * 2 ** 32)));
     story.roster.push(p);
   }

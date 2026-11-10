@@ -38,7 +38,8 @@ function waveNote(wave) {
   if (wave.stage === 'sky') return `${from} · ${WEAPONS.gunship.name}(${WEAPONS.gunship.burst}점사)`;
   const levels = wave.agents?.some((a) => a.difficulty)
     ? ` · 기획 난이도 ${wave.agents.map((a) => DIFFICULTY_NAME[a.difficulty ?? 'normal']).join('·')}` : '';
-  const kata = wave.normalKata ? ` · 보통 요원은 건 카타 ${wave.normalKata}번` : '';
+  const kataGoal = wave.agents?.find((a) => a.kata)?.kata;
+  const kata = kataGoal ? ` · 마지막 요원은 건 카타 ${kataGoal}번` : '';
   return wave.boss ? `${from} · 주무기 + 보조무기 + 수류탄` : `${from} · 주무기만(보조무기·수류탄 없음)${levels}${kata}`;
 }
 

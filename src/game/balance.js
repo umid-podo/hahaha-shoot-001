@@ -56,7 +56,6 @@ export const SECTIONS = [
       ...gun('rpg', [
         ['폭발 피해', ['splash', 'damage'], { max: 1000 }],
         ['폭발 반경', ['splash', 'radius'], { max: 800, step: 5 }],
-        ['유도 회전(rad/초)', ['homing', 'turnRate'], { max: 10, step: 0.1 }],
       ]),
       ...gun('sniper'),
       param('즉사기', '피해(9999면 즉사)', ['weapons', 'instakill', 'damage'], { max: 9999, step: 1 }),

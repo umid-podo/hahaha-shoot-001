@@ -155,14 +155,14 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
   untilFight(match, inputs);
   wave = enemies(match);
   assert.deepEqual(wave.map((p) => p.primary), ['rifle', 'rifle']);
-  assert.deepEqual(match.story.brains.map((b) => b.diff.name), ['쉬움', '보통']);
+  assert.deepEqual(match.story.brains.map((b) => b.diff.name), ['보통', '보통']);
 
   // 복도 3웨이브: 쉬움 요원 4명(쌍권총·권총·권총·돌격소총)
   killAll(match, inputs);
   untilFight(match, inputs);
   wave = enemies(match);
   assert.deepEqual(wave.map((p) => p.primary), ['dual', 'pistol', 'pistol', 'rifle']);
-  assert.ok(match.story.brains.every((b) => b.diff.name === '쉬움'));
+  assert.ok(match.story.brains.every((b) => b.diff.name === '보통'));
   for (const p of wave) assert.ok(p.x >= 80 && p.x <= 1520);
 
   // 보스전: 천장을 부수고 R-10(체력 600, 레이저 캐논, 큰 히트박스) → 도발 장면
@@ -309,7 +309,7 @@ test('내려오는 중인 요원은 맞지 않고 움직이지 않으며, AI도 
 test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이동 속도·히트박스, 보스 보조무기', () => {
   const settings = defaultStory();
   assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 10000, 300, 250, 200, 800, 200, 250, 200, 900]);
-  assert.deepEqual(settings.waves.map((w) => w.difficulty), ['normal', 'normal', 'normal', 'normal', 'normal', 'mixed', 'easy', 'normal', 'easy', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'easy', 'mixed', 'easy', 'normal']);
+  assert.deepEqual(settings.waves.map((w) => w.difficulty), Array(20).fill('normal'), '일반 요원은 모두 보통');
   settings.waves[0] = { ...settings.waves[0], hp: 1234, difficulty: 'hard', damage: 200, bulletSpeed: 150, speed: 50, radius: 45 };
   settings.waves[3].secondary = 'shotgun';
   const { match, inputs } = story(settings);
@@ -1053,16 +1053,16 @@ test('AI 동료: 최대 3명, 지구방위팀 AI로 함께 싸우고 사람이 �
   assert.equal(withAllies(0).match.players.filter((p) => p.team === 'earth').length, 1);
 });
 
-test('AI 동료 수만큼 일반 웨이브마다 쉬움 돌격소총 요원이 더 나오고, 보스전은 그대로', () => {
+test('AI 동료 수만큼 일반 웨이브마다 보통 돌격소총 요원이 더 나오고, 보스전은 그대로', () => {
   const { match, inputs } = withAllies(2);
   // 옥상 1웨이브: 요원 1명 + 덤 2명
   let wave = enemies(match);
   assert.equal(wave.length, 3);
   assert.deepEqual(wave.slice(1).map((p) => p.primary), ['rifle', 'rifle']);
   const diff = (p) => match.story.brains.find((b) => b.playerId === p.id).diff.name;
-  assert.deepEqual(wave.slice(1).map(diff), ['쉬움', '쉬움']);
+  assert.deepEqual(wave.slice(1).map(diff), ['보통', '보통']);
   assert.equal(wave[1].maxHp, wave[0].maxHp, '체력은 그 웨이브 설정과 같음');
-  assert.match(match.story.banner.sub, /요원 1명 \+ 쉬움 2명/);
+  assert.match(match.story.banner.sub, /요원 1명 \+ 추가 2명/);
   // 2웨이브(헬기 2명) → 4명
   killAll(match, inputs);
   untilFight(match, inputs);
@@ -1543,7 +1543,7 @@ test('대교: 요원은 낙하산을 메고 다리 위 차에 내려앉음(오�
   const agents = enemies(match);
   assert.equal(agents.length, 3);
   assert.ok(agents.every((p) => p.carX === p.x && p.y === RAIL_Y.isb));
-  assert.deepEqual(agents.map((p) => match.story.brains.find((b) => b.playerId === p.id).diff.name), ['쉬움', '쉬움', '쉬움']);
+  assert.deepEqual(agents.map((p) => match.story.brains.find((b) => b.playerId === p.id).diff.name), ['보통', '보통', '보통']);
   assert.ok(agents.every((p) => STORY_WEAPONS.includes(p.primary)), '기본 무기는 무작위(설정에서 바꿈)');
   const lines = [];
   for (const agent of agents) {
@@ -1558,28 +1558,28 @@ test('대교: 요원은 낙하산을 메고 다리 위 차에 내려앉음(오�
   assert.equal(new Set(lines).size, 3);
 });
 
-test('대교 2웨이브: 4명이 4대의 차에 내려앉고(쉬움 3·보통 1), 보통 요원을 쓰러뜨리면 건 카타 5번', () => {
+test('대교 2웨이브: 4명이 4대의 차에 내려앉고(모두 보통), 마지막 요원을 쓰러뜨리면 건 카타 5번', () => {
   const { match, inputs } = bridge(17);
   untilFight(match, inputs);
   const agents = enemies(match);
   assert.equal(agents.length, 4);
   const diff = (p) => match.story.brains.find((b) => b.playerId === p.id).diff.name;
-  assert.deepEqual(agents.map(diff), ['쉬움', '쉬움', '쉬움', '보통']);
+  assert.deepEqual(agents.map(diff), ['보통', '보통', '보통', '보통']);
   agents[0].hp = 0;
   step(match, inputs);
-  assert.equal(match.gunkata.goal, 3, '쉬움 요원은 3번');
+  assert.equal(match.gunkata.goal, 3, '다른 요원은 3번');
   playKata(match, inputs);
   runOut(match, inputs, ['killcam']);
   agents[3].hp = 0;
   step(match, inputs);
-  assert.equal(match.gunkata.goal, 5, '보통 요원은 5번');
+  assert.equal(match.gunkata.goal, 5, '마지막 요원은 5번');
   // 3웨이브는 쉬움 5명
   playKata(match, inputs);
   runOut(match, inputs, ['killcam']);
   killAll(match, inputs);
   untilFight(match, inputs);
   assert.equal(enemies(match).length, 5);
-  assert.ok(enemies(match).every((p) => diff(p) === '쉬움'));
+  assert.ok(enemies(match).every((p) => diff(p) === '보통'));
 });
 
 test('대교 배: 다리 가운데가 벌어지고 배가 지나가며 위아래로 대포(명중 5·폭발 2), 지나가면 다리가 닫힘', () => {

@@ -149,6 +149,18 @@ export function createRenderer(canvas, wrap, assets) {
     effects.push({ kind: 'smoke', x: b.x + Math.cos(back) * 20, y: b.y + Math.sin(back) * 20, seed: b.id % 7, age: 0 });
   }
   const recoil = {};
+  // HUD 확대 배율: 휴대폰처럼 게임 화면이 작게 줄어들면 조준점·체력바도 같이 작아져 안 보인다.
+  // 화면에 보이는 크기가 원래의 0.8배쯤은 되도록 HUD만 따로 키운다(최대 2.4배).
+  let uiScale = 1;
+  /** (ax, ay)를 기준점으로 HUD 조각을 k배 키워 그린다 */
+  function scaled(ax, ay, k, draw) {
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.scale(k, k);
+    ctx.translate(-ax, -ay);
+    draw();
+    ctx.restore();
+  }
 
   function resize() {
     const scale = Math.min(wrap.clientWidth / ARENA_WIDTH, wrap.clientHeight / ARENA_HEIGHT);
@@ -157,6 +169,7 @@ export function createRenderer(canvas, wrap, assets) {
     canvas.style.height = `${ARENA_HEIGHT * scale}px`;
     canvas.width = Math.max(1, Math.round(ARENA_WIDTH * scale * dpr));
     canvas.height = Math.max(1, Math.round(ARENA_HEIGHT * scale * dpr));
+    uiScale = scale > 0 ? Math.max(1, Math.min(2.4, 0.8 / scale)) : 1;
   }
   new ResizeObserver(resize).observe(wrap);
   resize();
@@ -2818,60 +2831,193 @@ export function createRenderer(canvas, wrap, assets) {
     }
   }
 
-  /** 라이트닝 조종석: 캐노피 틀과 계기판 */
+  /**
+   * 라이트닝 조종석: 화면을 조종실 안처럼 덮고 창문(앞 유리·좌우 옆창)으로만 바깥이 보인다(적도 창문으로 보임).
+   * 창틀 기둥·지붕·고무 테두리·유리 반사, 아래에는 계기판(눈부심 가리개·원형 계기·다기능 화면·경고등·조종간).
+   */
   function drawCockpit(p, rect, time, reducedMotion) {
     const { x, y, w, h } = rect;
+    const P = (u, v) => [x + w * u, y + h * v];
+    // 창문(화면 비율 좌표): 앞 유리, 왼쪽·오른쪽 옆창
+    const front = [P(0.28, 0.07), P(0.72, 0.07), P(0.79, 0.62), P(0.21, 0.62)];
+    const left = [P(0, 0.17), P(0.235, 0.07), P(0.17, 0.62), P(0, 0.68)];
+    const right = [P(1, 0.17), P(0.765, 0.07), P(0.83, 0.62), P(1, 0.68)];
+    const windows = [front, left, right];
+    const poly = (pts) => { ctx.moveTo(...pts[0]); for (const q of pts.slice(1)) ctx.lineTo(...q); ctx.closePath(); };
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    ctx.strokeStyle = 'rgba(40,46,58,0.95)';
-    ctx.lineWidth = 18;
-    ctx.beginPath();
-    ctx.moveTo(x + w * 0.5, y + h * 0.05); ctx.lineTo(x + w * 0.5, y + h * 0.16);
-    ctx.moveTo(x + w * 0.05, y + h * 0.2); ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.05, x + w * 0.95, y + h * 0.2);
-    ctx.moveTo(x + w * 0.02, y + h * 0.75); ctx.lineTo(x + w * 0.22, y + h * 0.18);
-    ctx.moveTo(x + w * 0.98, y + h * 0.75); ctx.lineTo(x + w * 0.78, y + h * 0.18);
-    ctx.stroke();
-    const dash = ctx.createLinearGradient(0, y + h * 0.78, 0, y + h);
-    dash.addColorStop(0, '#2A2E38'); dash.addColorStop(1, '#14171E');
-    ctx.fillStyle = dash;
-    ctx.beginPath();
-    ctx.moveTo(x, y + h); ctx.lineTo(x, y + h * 0.84); ctx.quadraticCurveTo(x + w / 2, y + h * 0.74, x + w, y + h * 0.84); ctx.lineTo(x + w, y + h);
-    ctx.closePath(); ctx.fill();
-    for (let i = 0; i < 4; i++) {
-      const cx = x + w * (0.3 + i * 0.13), cy = y + h * 0.9;
-      ctx.fillStyle = '#0B0F1A'; ctx.beginPath(); ctx.arc(cx, cy, 24, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = p.boost > 0 ? '#5AAAFF' : '#9FE0FF'; ctx.lineWidth = 3;
-      const a = (reducedMotion ? 0 : time * (i + 1)) + i;
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * 18, cy + Math.sin(a) * 18); ctx.stroke();
+
+    // 유리: 살짝 푸른 빛과 비스듬한 반사 줄
+    for (const win of windows) {
+      ctx.save();
+      ctx.beginPath(); poly(win); ctx.clip();
+      ctx.fillStyle = 'rgba(120,170,220,0.07)';
+      ctx.fillRect(x, y, w, h);
+      const shift = reducedMotion ? 0 : (time * 12) % 80;
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 26;
+      for (let k = -2; k < 4; k++) {
+        const sx = win[0][0] + k * w * 0.12 + shift;
+        ctx.beginPath(); ctx.moveTo(sx, win[0][1]); ctx.lineTo(sx - h * 0.35, win[2][1]); ctx.stroke();
+      }
+      ctx.restore();
     }
+
+    // 조종실 몸체: 화면 전체에서 창문만 뚫는다(even-odd)
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    for (const win of windows) poly(win);
+    const body = ctx.createLinearGradient(0, y, 0, y + h);
+    body.addColorStop(0, '#2E3440');
+    body.addColorStop(0.5, '#1D222B');
+    body.addColorStop(1, '#0F1218');
+    ctx.fillStyle = body;
+    ctx.fill('evenodd');
+
+    // 창틀 고무 테두리 + 안쪽 금속 테
+    ctx.lineJoin = 'round';
+    for (const win of windows) {
+      ctx.beginPath(); poly(win);
+      ctx.strokeStyle = '#07090D'; ctx.lineWidth = 12; ctx.stroke();
+      ctx.strokeStyle = '#59606C'; ctx.lineWidth = 3; ctx.stroke();
+    }
+    // 창틀 나사(리벳)
+    ctx.fillStyle = '#7A828F';
+    for (const win of windows) {
+      for (let i = 0; i < win.length; i++) {
+        const [ax, ay] = win[i], [bx, by] = win[(i + 1) % win.length];
+        const len = Math.hypot(bx - ax, by - ay), n = Math.floor(len / 70);
+        for (let k = 1; k < n; k++) {
+          const t = k / n;
+          ctx.beginPath(); ctx.arc(ax + (bx - ax) * t, ay + (by - ay) * t, 2.6, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    // 지붕 손잡이·백미러
+    ctx.fillStyle = '#3A414D';
+    ctx.beginPath(); ctx.roundRect(x + w * 0.42, y + h * 0.012, w * 0.16, h * 0.035, 8); ctx.fill();
+    ctx.fillStyle = 'rgba(160,190,220,0.35)';
+    ctx.beginPath(); ctx.roundRect(x + w * 0.435, y + h * 0.018, w * 0.13, h * 0.022, 5); ctx.fill();
+
+    // 계기판: 눈부심 가리개(둥근 윗변) + 판
+    const top = y + h * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(x, top + h * 0.08);
+    ctx.quadraticCurveTo(x + w * 0.5, top - h * 0.05, x + w, top + h * 0.08);
+    ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+    const dash = ctx.createLinearGradient(0, top, 0, y + h);
+    dash.addColorStop(0, '#2A2F38'); dash.addColorStop(0.12, '#161A21'); dash.addColorStop(1, '#0B0E13');
+    ctx.fillStyle = dash; ctx.fill();
+    ctx.strokeStyle = '#4A515D'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, top + h * 0.08); ctx.quadraticCurveTo(x + w * 0.5, top - h * 0.05, x + w, top + h * 0.08); ctx.stroke();
+
+    // 가운데 다기능 화면 2개(레이더 쓸기·지평선)
+    const mfd = (cx, kind) => {
+      const mw = w * 0.11, mh = h * 0.13, mx = cx - mw / 2, my = y + h * 0.7;
+      ctx.fillStyle = '#05080B'; ctx.beginPath(); ctx.roundRect(mx - 6, my - 6, mw + 12, mh + 12, 8); ctx.fill();
+      ctx.fillStyle = '#071A10'; ctx.fillRect(mx, my, mw, mh);
+      ctx.strokeStyle = 'rgba(90,255,150,0.75)'; ctx.lineWidth = 2;
+      if (kind === 'radar') {
+        const rx = mx + mw / 2, ry = my + mh * 0.9, rr = mh * 0.8;
+        for (const k of [0.35, 0.7, 1]) { ctx.beginPath(); ctx.arc(rx, ry, rr * k, Math.PI, Math.PI * 2); ctx.stroke(); }
+        const a = Math.PI + (reducedMotion ? 0.5 : (time * 1.6) % 1) * Math.PI;
+        ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx + Math.cos(a) * rr, ry + Math.sin(a) * rr); ctx.stroke();
+      } else {
+        const roll = reducedMotion ? 0 : Math.sin(time * 0.8) * 0.12;
+        ctx.save(); ctx.beginPath(); ctx.rect(mx, my, mw, mh); ctx.clip();
+        ctx.translate(mx + mw / 2, my + mh / 2); ctx.rotate(roll);
+        ctx.fillStyle = 'rgba(60,140,255,0.35)'; ctx.fillRect(-mw, -mh, mw * 2, mh);
+        ctx.fillStyle = 'rgba(150,100,40,0.35)'; ctx.fillRect(-mw, 0, mw * 2, mh);
+        ctx.beginPath(); ctx.moveTo(-mw, 0); ctx.lineTo(mw, 0); ctx.stroke();
+        ctx.restore();
+        ctx.beginPath(); ctx.moveTo(mx + mw * 0.3, my + mh / 2); ctx.lineTo(mx + mw * 0.7, my + mh / 2); ctx.stroke();
+      }
+    };
+    mfd(x + w * 0.42, 'radar');
+    mfd(x + w * 0.58, 'horizon');
+
+    // 원형 계기(속도·고도·연료·엔진): 바늘이 천천히 흔들린다
+    const gauges = [[0.31, 0.74], [0.69, 0.74], [0.31, 0.89], [0.69, 0.89]];
+    gauges.forEach(([u, v], i) => {
+      const [cx, cy] = P(u, v), r = Math.min(w, h) * 0.045;
+      ctx.fillStyle = '#05070A'; ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#6A717D'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = 'rgba(230,236,245,0.7)'; ctx.lineWidth = 1.5;
+      for (let k = 0; k < 10; k++) {
+        const a = Math.PI * 0.75 + (k / 9) * Math.PI * 1.5;
+        ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r * 0.78, cy + Math.sin(a) * r * 0.78); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke();
+      }
+      const a = Math.PI * 0.75 + (0.35 + 0.3 * (reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(time * (0.7 + i * 0.4) + i))) * Math.PI * 1.5;
+      ctx.strokeStyle = p.boost > 0 ? '#5AAAFF' : '#FFB347'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r * 0.85, cy + Math.sin(a) * r * 0.85); ctx.stroke();
+    });
+
+    // 경고등 줄: 체력이 낮으면 빨강이 깜빡임
+    const low = p.hp <= p.maxHp * 0.25;
+    for (let k = 0; k < 6; k++) {
+      const [lx, ly] = P(0.4 + k * 0.04, 0.665);
+      const on = k === 0 ? low && (reducedMotion || Math.sin(time * 8) > 0) : k === 5 ? p.boost > 0 : true;
+      ctx.fillStyle = k === 0 ? (on ? '#FF3B30' : '#4A1512') : k === 5 ? (on ? '#5AAAFF' : '#14304A') : '#2FCB5A';
+      ctx.beginPath(); ctx.roundRect(lx - 9, ly - 5, 18, 10, 3); ctx.fill();
+    }
+
+    // 조종간(아래 가운데)
+    const [sx, sy] = P(0.5, 0.97);
+    const lean = Math.max(-1, Math.min(1, (p.x - (p.previousX ?? p.x)) * 0.2));
+    ctx.save();
+    ctx.translate(sx, sy); ctx.rotate(lean * 0.25);
+    ctx.fillStyle = '#20242C'; ctx.fillRect(-9, -h * 0.12, 18, h * 0.14);
+    ctx.fillStyle = '#2C313B'; ctx.beginPath(); ctx.roundRect(-34, -h * 0.17, 68, h * 0.07, 14); ctx.fill();
+    ctx.fillStyle = '#C0392B'; ctx.beginPath(); ctx.arc(-18, -h * 0.15, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
     ctx.restore();
   }
 
   /** 조준점: 팀 색 십자. 쏠 수 없는 동안(쿨타임·방전·과열)은 회색, 내 탄이 맞으면 X 표시 */
   function drawCrosshair(p, rect, reloading, kick, hitT) {
     const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
-    const gap = 10 + kick * 14;
-    ctx.strokeStyle = reloading ? 'rgba(154,158,165,0.9)' : '#FFFFFF';
-    ctx.lineWidth = 5;
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = '#000';
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * gap, cy + dy * gap); ctx.lineTo(cx + dx * (gap + 16), cy + dy * (gap + 16)); ctx.stroke(); }
-    ctx.globalAlpha = 1;
-    // 빨간 조준점(장전·쿨타임 중엔 회색). 둘레에 붉은 빛
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(uiScale, uiScale);
+    const gap = 9 + kick * 14, len = 18;
+    const color = reloading ? '#B4B8BF' : '#FF2A2A';
+    const arms = () => {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        ctx.beginPath(); ctx.moveTo(dx * gap, dy * gap); ctx.lineTo(dx * (gap + len), dy * (gap + len)); ctx.stroke();
+      }
+    };
+    ctx.lineCap = 'round';
+    // 어떤 배경에서도 보이게: 검은 테두리 → 흰 테두리 → 색 십자
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = 9;
+    arms();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 6;
+    arms();
+    ctx.strokeStyle = color;
     ctx.lineWidth = 3;
-    ctx.strokeStyle = reloading ? '#9A9EA5' : '#FF2A2A';
     ctx.shadowColor = reloading ? 'transparent' : 'rgba(255,40,40,0.9)';
     ctx.shadowBlur = 8;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * gap, cy + dy * gap); ctx.lineTo(cx + dx * (gap + 16), cy + dy * (gap + 16)); ctx.stroke(); }
-    ctx.fillStyle = reloading ? '#9A9EA5' : '#FF2A2A';
-    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+    arms();
     ctx.shadowBlur = 0;
     ctx.shadowColor = 'transparent';
+    // 가운데 점: 검은 테두리 + 흰 고리 + 색 점
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
     if (hitT > 0) {
-      ctx.strokeStyle = `rgba(255,255,255,${Math.min(1, hitT * 5)})`;
-      ctx.lineWidth = 4;
-      for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * 12, cy + dy * 12); ctx.lineTo(cx + dx * 24, cy + dy * 24); ctx.stroke(); }
+      const a = Math.min(1, hitT * 5);
+      for (const [w, c] of [[7, `rgba(0,0,0,${0.8 * a})`], [4, `rgba(255,255,255,${a})`]]) {
+        ctx.strokeStyle = c;
+        ctx.lineWidth = w;
+        for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(dx * 12, dy * 12); ctx.lineTo(dx * 24, dy * 24); ctx.stroke(); }
+      }
     }
+    ctx.restore();
   }
 
   /** 레이더: 위에서 본 작은 지도. 내가 가운데, 보는 쪽이 위. 같은 팀 파랑·상대 주황, 전투기·탱크·배는 흰 점 */
@@ -2937,7 +3083,7 @@ export function createRenderer(canvas, wrap, assets) {
   /** 이름표: 이름·체력바(멀수록 작게). 보스는 붉게 */
   function drawTag(t) {
     const p = t.player;
-    const s = Math.max(0.55, Math.min(1.15, 700 / Math.max(200, t.dist)));
+    const s = Math.min(2, Math.max(0.55, Math.min(1.15, 700 / Math.max(200, t.dist))) * Math.min(uiScale, 1.8));
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.scale(s, s);
@@ -3059,10 +3205,11 @@ export function createRenderer(canvas, wrap, assets) {
     const rect = v.rect;
     ctx.save();
     ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+    // 조종실은 먼저 그리고, 창문으로 보이는 적의 이름표·체력바는 그 위에(창틀에 가려도 체력은 보이게)
+    if (p.alive && p.plane) drawCockpit(p, rect, time, reducedMotion);
     for (const t of [...v.tags].sort((a, b) => b.dist - a.dist)) drawTag(t);
     const kick = hud.kick[p.id] ?? 0;
     if (p.alive) {
-      if (p.plane) drawCockpit(p, rect, time, reducedMotion);
       const weapon = WEAPONS[p.weapon];
       const reloading = (weapon.trigger === 'release' && p.cooldown > 0) || (weapon.ownCooldown && (p.cooldowns[weapon.id] ?? 0) > 0)
         || (weapon.battery && p.battery <= 0) || (weapon.heat && p.overheat > 0);
@@ -3082,7 +3229,7 @@ export function createRenderer(canvas, wrap, assets) {
     }
     drawHurt(p, rect, hud.hurtFrom[p.id], time, reducedMotion);
     drawRadar(match, p, rect);
-    drawStatus(p, rect);
+    scaled(rect.x, rect.y + rect.h, Math.max(1, Math.min(uiScale, 1.6, rect.w / 560)), () => drawStatus(p, rect));
     ctx.restore();
   }
 
@@ -3190,7 +3337,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.fillRect(ARENA_WIDTH / 2 - 3, 0, 6, ARENA_HEIGHT);
     }
     // 컷씬·처치 컷씬 동안에도 사람 플레이어의 체력바를 왼쪽 위에 보여 준다
-    if ((killcam || cut) && views.every((v) => v.cinematic)) drawCinematicHp(match.players);
+    if ((killcam || cut) && views.every((v) => v.cinematic)) scaled(0, 0, Math.min(uiScale, 1.8), () => drawCinematicHp(match.players));
     if (killcam) {
       drawKillcamOverlay(killcam, time, reducedMotion);
     } else if (cut) {
@@ -3206,8 +3353,10 @@ export function createRenderer(canvas, wrap, assets) {
       drawLetterbox(cut);
     } else {
       if (views.length === 1) {
-        drawTeamBox('isb', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20);
-        drawTeamBox('earth', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20 + 52 + match.players.filter((p) => p.team === 'isb').length * 30);
+        scaled(ARENA_WIDTH - 20, 20, Math.min(uiScale, 1.8), () => {
+          drawTeamBox('isb', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20);
+          drawTeamBox('earth', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20 + 52 + match.players.filter((p) => p.team === 'isb').length * 30);
+        });
       }
       if (match.story) drawStoryHud(match.story);
     }

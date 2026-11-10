@@ -450,6 +450,14 @@ button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; 
 #mod-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .mod-weapons, .mod-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .mod-weapon { padding: 8px 12px; }
+.mod-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.mod-tabs button { flex: 1; padding: 10px 12px; font-weight: 700; }
+.mod-tabs button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.mod-shop .hint { margin: 0 0 4px; }
+.mod-shop-list { max-height: min(46vh, 460px); }
+.shop-item .shop-weapon { font-size: 12px; color: var(--muted); }
+.shop-item.previewing { box-shadow: 0 0 0 3px #FFB020; }
+.shop-tag { font-size: 11px; font-weight: 700; color: #8A5A00; background: #FFF1CC; border-radius: 6px; padding: 1px 6px; }
 .mod-gacha { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .mod-gacha .hint { flex-basis: 100%; margin: 2px 0 0; }
 .mod-side { min-width: 0; }
