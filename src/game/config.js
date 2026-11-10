@@ -19,6 +19,11 @@ export const MAX_Y = 950;
 export const JUMP = { jump: 620, gravity: 1600, step: 18, hitBelow: 100, hitAbove: 110, coverClear: 40 };
 export const COVER_HEIGHT = 84;
 /**
+ * 회피(빠른 돌진): 누른 순간 움직이던 쪽(안 움직이면 앞)으로 time초 동안 초당 speed만큼 돌진한다. 돌진하는 동안 받는 피해는 taken배(30% 덜 받음).
+ * charges번 연달아 돌진할 수 있고, 마지막 돌진이 끝나고 cooldown초가 지나면 다시 charges번으로 채워진다.
+ */
+export const EVADE = { speed: 1500, time: 0.18, charges: 2, cooldown: 0.5, taken: 0.7 };
+/**
  * 넓은 맵(2인 대결·자유 대전): 원래 옥상 경기장(1600×1000)을 가운데에 두고 사방으로 크게 넓힌 건물 옥상(5000×4000, 원래의 12.5배).
  * 시작 자리는 원래대로 가운데 근처이고, 둘레로 엄폐물·고지대·컨테이너·계단식 탑이 흩어져 있다. 스토리 모드는 원래 크기.
  */

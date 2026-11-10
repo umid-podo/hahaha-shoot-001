@@ -552,6 +552,7 @@ export function playEvents(events) {
     if (e.type === 'bump') { gunshot({ filter: 260, q: 0.4, decay: 0.3, thump: 90, volume: 1.2 }); tone(80, 0.15, 'square'); } // 구멍: 덜컹
     if (e.type === 'drift') gunshot({ filter: 3000, q: 0.3, decay: 0.35, thump: 0, volume: 0.7 }); // 눈더미: 퍽(눈보라)
     if (e.type === 'splash') { gunshot({ filter: 900, q: 0.3, decay: 0.9, thump: 60, volume: 1.4 }); slide(500, 120, 0.6, 'sine', 0.6); } // 풍덩
+    if (e.type === 'evade') { gunshot({ filter: 2400, q: 0.6, decay: 0.16, thump: 0, volume: 0.7 }); slide(420, 1200, 0.14, 'triangle', 0.45); } // 회피: 휙
     if (e.type === 'jump') slide(900, 250, 0.6, 'triangle', 0.6); // 뛰어내림
     if (e.type === 'chute') { gunshot({ filter: 1800, q: 0.6, decay: 0.25, thump: 0, volume: 0.8 }); slide(300, 180, 0.4, 'sine', 0.5); } // 낙하산 펴짐(펄럭)
     if (e.type === 'swap' && !playRecorded('swap')) { tone(1200, 0.03, 'square'); tone(900, 0.04, 'square', 0.05); } // 철컥

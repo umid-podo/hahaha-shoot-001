@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MIN_Y, MAX_Y, BULLET_RADIUS, ZONE, JUMP, COVER_HEIGHT,
-  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, SHIP, COVER,
+  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, SHIP, COVER, EVADE,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { between } from './state.js';
@@ -240,6 +240,8 @@ function damage(match, victim, amount, shot, events) {
   // bonusDamage: 추가 피해가 있는 캐릭터(아크 트루퍼)가 상대 플레이어에게 준 피해마다 더한다
   const attacker = match.players.find((p) => p.id === shot.ownerId);
   amount += attacker?.bonusDamage ?? 0;
+  // 회피(돌진) 중에는 피해를 30% 덜 받는다
+  if (victim.evade && amount > 0) amount = Math.max(1, Math.round(amount * EVADE.taken));
   const dealt = Math.min(victim.hp, amount);
   victim.hp = Math.max(0, victim.hp - amount);
   victim.hurt = HURT_TIME;
@@ -528,14 +530,14 @@ export function groundAt(match, x, y) {
  * 부서지지 않은 엄폐물은 그보다 높이 떠 있지 않으면 뚫고 지나가지 못하고(몸 반지름만큼 밀어낸다), 고지대는 발이 그 높이(턱 JUMP.step 빼고)보다
  * 낮으면 벽처럼 막는다(뛰어올라 올라선다).
  */
-export function move(match, p, ax, ay, dt) {
+export function move(match, p, ax, ay, dt, speed = p.speed) {
   const len = Math.hypot(ax, ay);
   if (len > 1) { ax /= len; ay /= len; }
   if (!ax && !ay) return;
   const B = boundsOf(match);
   const cy = (v) => Math.min(B.maxY, Math.max(B.minY, v));
-  let x = Math.min(B.maxX, Math.max(B.minX, p.x + ax * p.speed * dt));
-  let y = cy(p.y + ay * p.speed * dt);
+  let x = Math.min(B.maxX, Math.max(B.minX, p.x + ax * speed * dt));
+  let y = cy(p.y + ay * speed * dt);
   const z = p.z ?? 0;
   const walls = [
     ...(match.covers ?? []).filter((c) => c.hp > 0 && z < groundAt(match, c.x, c.y) + COVER_HEIGHT - 2).map((c) => ({ c, pad: p.radius * 0.6 })),
@@ -553,6 +555,43 @@ export function move(match, p, ax, ay, dt) {
   }
   p.x = Math.min(B.maxX, Math.max(B.minX, x));
   p.y = y;
+}
+
+/** 남은 회피 횟수(없으면 가득) */
+export const evadeCharges = (p) => p.evadeCharges ?? EVADE.charges;
+
+/**
+ * 회피 시작: 움직이던 쪽(이동 입력이 없으면 바라보는 쪽)으로 빠르게 돌진한다. 남은 횟수가 없으면 아무 일 없다.
+ * 돌진 중에 다시 누르면(연속 회피) 그 자리에서 새 방향으로 다시 돌진한다.
+ */
+export function startEvade(p, input, events) {
+  const left = evadeCharges(p);
+  if (left <= 0) return false;
+  let dx = input.moveAxis ?? 0, dy = input.moveY ?? 0;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.2) { dx = Math.cos(p.aim); dy = Math.sin(p.aim); } else { dx /= len; dy /= len; }
+  p.evadeCharges = left - 1;
+  p.evade = { dx, dy, t: EVADE.time };
+  events.push({ type: 'evade', playerId: p.id, left: p.evadeCharges });
+  return true;
+}
+
+/** 회피 돌진 한 틱(엄폐물·고지대 옆면은 걸을 때처럼 막힌다). 돌진이 끝나면 쿨타임이 돈다. */
+function updateEvade(match, p, dt) {
+  const e = p.evade;
+  move(match, p, e.dx, e.dy, Math.min(dt, e.t), EVADE.speed);
+  e.t -= dt;
+  if (e.t <= EPS) {
+    p.evade = null;
+    p.evadeCooldown = EVADE.cooldown;
+  }
+}
+
+/** 회피 쿨타임: 쓴 횟수가 있으면 마지막 돌진이 끝나고 EVADE.cooldown초 뒤 가득 채운다(돌진 중에는 멈춤). */
+function updateEvadeCharges(p, dt) {
+  if (p.evade || evadeCharges(p) >= EVADE.charges) return;
+  p.evadeCooldown = Math.max(0, (p.evadeCooldown ?? 0) - dt);
+  if (p.evadeCooldown <= EPS) p.evadeCharges = EVADE.charges;
 }
 
 /** 점프·떨어지기 한 틱: 땅(고지대 위 포함)에 있을 때 jump면 뛰어오르고, 공중이면 중력으로 떨어져 바닥 높이에 내려선다. */
@@ -586,7 +625,10 @@ export function step(match, inputs, dt = TICK) {
   const events = [];
   if (match.phase === 'countdown') {
     // 일시정지 해제 등으로 조준이 끊긴 것을 '손을 뗌'으로 보지 않도록 초기화
-    for (const p of match.players) p.wasAiming = false;
+    for (const p of match.players) {
+      p.wasAiming = false;
+      if (inputs?.[p.id]) inputs[p.id].evade = false;
+    }
     match.countdown -= dt;
     if (match.countdown <= 0) match.phase = 'playing';
     return events;
@@ -636,14 +678,22 @@ export function step(match, inputs, dt = TICK) {
     updateReload(p, weapon, dt, events);
     p.aim = input.aim;
     // 단검 돌진 중에는 이동·사격·아이템 입력을 받지 않는다(조준 각도만 따라감).
+    updateEvadeCharges(p, dt);
     if (p.dash) {
       input.item = false;
+      input.evade = false;
       updateDash(match, p, dt, events);
       p.wasAiming = false;
       continue;
     }
     // rooted: 스토리 연출로 잠깐 멈춰 선 적(조준선을 긋는 존슨 요원)
-    if (!p.rooted) move(match, p, input.moveAxis, input.moveY ?? 0, dt);
+    // 회피: 돌진하는 동안은 걷기 대신 돌진한다(사격·점프는 그대로 된다)
+    if (input.evade) {
+      input.evade = false;
+      if (!p.rooted && !p.scripted && !p.plane) startEvade(p, input, events);
+    }
+    if (p.evade) updateEvade(match, p, dt);
+    else if (!p.rooted) move(match, p, input.moveAxis, input.moveY ?? 0, dt);
     updateJump(match, p, input.jump && !p.rooted, dt, events);
     input.jump = false;
     // 스토리가 대신 쏘는 적(존슨 요원의 조준선 저격)은 움직이기만 한다
@@ -730,6 +780,7 @@ export function step(match, inputs, dt = TICK) {
       p.alive = false;
       // 돌진 중에 쓰러지면 출발한 자리에 쓰러진다
       if (p.dash) { p.x = p.dash.homeX; p.y = p.dash.homeY; p.dash = null; }
+      p.evade = null;
       if (match.stats?.[p.id]) match.stats[p.id].downAt = match.tick * TICK;
       events.push({ type: 'down', playerId: p.id, x: p.x, y: p.y });
     }
