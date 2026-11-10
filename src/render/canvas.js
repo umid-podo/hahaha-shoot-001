@@ -149,6 +149,18 @@ export function createRenderer(canvas, wrap, assets) {
     effects.push({ kind: 'smoke', x: b.x + Math.cos(back) * 20, y: b.y + Math.sin(back) * 20, seed: b.id % 7, age: 0 });
   }
   const recoil = {};
+  // HUD 확대 배율: 휴대폰처럼 게임 화면이 작게 줄어들면 조준점·체력바도 같이 작아져 안 보인다.
+  // 화면에 보이는 크기가 원래의 0.8배쯤은 되도록 HUD만 따로 키운다(최대 2.4배).
+  let uiScale = 1;
+  /** (ax, ay)를 기준점으로 HUD 조각을 k배 키워 그린다 */
+  function scaled(ax, ay, k, draw) {
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.scale(k, k);
+    ctx.translate(-ax, -ay);
+    draw();
+    ctx.restore();
+  }
 
   function resize() {
     const scale = Math.min(wrap.clientWidth / ARENA_WIDTH, wrap.clientHeight / ARENA_HEIGHT);
@@ -157,6 +169,7 @@ export function createRenderer(canvas, wrap, assets) {
     canvas.style.height = `${ARENA_HEIGHT * scale}px`;
     canvas.width = Math.max(1, Math.round(ARENA_WIDTH * scale * dpr));
     canvas.height = Math.max(1, Math.round(ARENA_HEIGHT * scale * dpr));
+    uiScale = scale > 0 ? Math.max(1, Math.min(2.4, 0.8 / scale)) : 1;
   }
   new ResizeObserver(resize).observe(wrap);
   resize();
@@ -2850,28 +2863,47 @@ export function createRenderer(canvas, wrap, assets) {
   /** 조준점: 팀 색 십자. 쏠 수 없는 동안(쿨타임·방전·과열)은 회색, 내 탄이 맞으면 X 표시 */
   function drawCrosshair(p, rect, reloading, kick, hitT) {
     const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
-    const gap = 10 + kick * 14;
-    ctx.strokeStyle = reloading ? 'rgba(154,158,165,0.9)' : '#FFFFFF';
-    ctx.lineWidth = 5;
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = '#000';
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * gap, cy + dy * gap); ctx.lineTo(cx + dx * (gap + 16), cy + dy * (gap + 16)); ctx.stroke(); }
-    ctx.globalAlpha = 1;
-    // 빨간 조준점(장전·쿨타임 중엔 회색). 둘레에 붉은 빛
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(uiScale, uiScale);
+    const gap = 9 + kick * 14, len = 18;
+    const color = reloading ? '#B4B8BF' : '#FF2A2A';
+    const arms = () => {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        ctx.beginPath(); ctx.moveTo(dx * gap, dy * gap); ctx.lineTo(dx * (gap + len), dy * (gap + len)); ctx.stroke();
+      }
+    };
+    ctx.lineCap = 'round';
+    // 어떤 배경에서도 보이게: 검은 테두리 → 흰 테두리 → 색 십자
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = 9;
+    arms();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 6;
+    arms();
+    ctx.strokeStyle = color;
     ctx.lineWidth = 3;
-    ctx.strokeStyle = reloading ? '#9A9EA5' : '#FF2A2A';
     ctx.shadowColor = reloading ? 'transparent' : 'rgba(255,40,40,0.9)';
     ctx.shadowBlur = 8;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * gap, cy + dy * gap); ctx.lineTo(cx + dx * (gap + 16), cy + dy * (gap + 16)); ctx.stroke(); }
-    ctx.fillStyle = reloading ? '#9A9EA5' : '#FF2A2A';
-    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+    arms();
     ctx.shadowBlur = 0;
     ctx.shadowColor = 'transparent';
+    // 가운데 점: 검은 테두리 + 흰 고리 + 색 점
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
     if (hitT > 0) {
-      ctx.strokeStyle = `rgba(255,255,255,${Math.min(1, hitT * 5)})`;
-      ctx.lineWidth = 4;
-      for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * 12, cy + dy * 12); ctx.lineTo(cx + dx * 24, cy + dy * 24); ctx.stroke(); }
+      const a = Math.min(1, hitT * 5);
+      for (const [w, c] of [[7, `rgba(0,0,0,${0.8 * a})`], [4, `rgba(255,255,255,${a})`]]) {
+        ctx.strokeStyle = c;
+        ctx.lineWidth = w;
+        for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { ctx.beginPath(); ctx.moveTo(dx * 12, dy * 12); ctx.lineTo(dx * 24, dy * 24); ctx.stroke(); }
+      }
     }
+    ctx.restore();
   }
 
   /** 레이더: 위에서 본 작은 지도. 내가 가운데, 보는 쪽이 위. 같은 팀 파랑·상대 주황, 전투기·탱크·배는 흰 점 */
@@ -2937,7 +2969,7 @@ export function createRenderer(canvas, wrap, assets) {
   /** 이름표: 이름·체력바(멀수록 작게). 보스는 붉게 */
   function drawTag(t) {
     const p = t.player;
-    const s = Math.max(0.55, Math.min(1.15, 700 / Math.max(200, t.dist)));
+    const s = Math.min(2, Math.max(0.55, Math.min(1.15, 700 / Math.max(200, t.dist))) * Math.min(uiScale, 1.8));
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.scale(s, s);
@@ -3082,7 +3114,7 @@ export function createRenderer(canvas, wrap, assets) {
     }
     drawHurt(p, rect, hud.hurtFrom[p.id], time, reducedMotion);
     drawRadar(match, p, rect);
-    drawStatus(p, rect);
+    scaled(rect.x, rect.y + rect.h, Math.max(1, Math.min(uiScale, 1.6, rect.w / 560)), () => drawStatus(p, rect));
     ctx.restore();
   }
 
@@ -3190,7 +3222,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.fillRect(ARENA_WIDTH / 2 - 3, 0, 6, ARENA_HEIGHT);
     }
     // 컷씬·처치 컷씬 동안에도 사람 플레이어의 체력바를 왼쪽 위에 보여 준다
-    if ((killcam || cut) && views.every((v) => v.cinematic)) drawCinematicHp(match.players);
+    if ((killcam || cut) && views.every((v) => v.cinematic)) scaled(0, 0, Math.min(uiScale, 1.8), () => drawCinematicHp(match.players));
     if (killcam) {
       drawKillcamOverlay(killcam, time, reducedMotion);
     } else if (cut) {
@@ -3206,8 +3238,10 @@ export function createRenderer(canvas, wrap, assets) {
       drawLetterbox(cut);
     } else {
       if (views.length === 1) {
-        drawTeamBox('isb', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20);
-        drawTeamBox('earth', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20 + 52 + match.players.filter((p) => p.team === 'isb').length * 30);
+        scaled(ARENA_WIDTH - 20, 20, Math.min(uiScale, 1.8), () => {
+          drawTeamBox('isb', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20);
+          drawTeamBox('earth', match.players, ARENA_WIDTH - 20 - TEAM_BOX.w, 20 + 52 + match.players.filter((p) => p.team === 'isb').length * 30);
+        });
       }
       if (match.story) drawStoryHud(match.story);
     }
