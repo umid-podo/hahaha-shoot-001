@@ -31,8 +31,8 @@ test('개조 파츠: 칸 5종, 같은 seed면 같은 디자인·이름, 다른 s
 
 test('개조 배낭: 뽑으면 배낭에 저장되고, 총마다 붙일 수 있는 칸만 장착, 분해하면 장착도 풀림, 다시 열어도 그대로', () => {
   const storage = memory();
-  const store = createModStore(storage);
-  assert.equal(store.coins, STARTER_COINS, '처음엔 기본 10코인');
+  const store = createModStore(storage, { starterCoins: 10 });
+  assert.equal(store.coins, 10, '처음엔 기본 코인(이 테스트는 10코인으로)');
   assert.deepEqual(store.draw(11, seededRng(3)), [], '코인이 모자라면 못 뽑음');
   store.addCoins(1);
   const got = store.draw(10, seededRng(3));
@@ -59,7 +59,7 @@ test('개조 배낭: 뽑으면 배낭에 저장되고, 총마다 붙일 수 있�
   store.remove(scope.id);
   assert.equal(store.equipped('rifle').scope, undefined, '분해하면 떨어짐');
   assert.equal(store.equipped('rpg').scope, undefined);
-  const again = createModStore(storage);
+  const again = createModStore(storage, { starterCoins: 10 });
   assert.equal(again.items.length, store.items.length, '저장한 배낭을 다시 읽음');
   assert.equal(again.draws, 11);
   assert.equal(again.coins, 0, '코인도 저장');
@@ -93,10 +93,10 @@ test('상점: 레어 30·엘리트 30 총기 스킨 60가지, 이름이 모두 �
 
 test('상점 구매: 코인을 내고 파츠 한 벌을 받아 바로 장착, 다시 열어도 보관, 분해 불가, 다시 장착 가능', () => {
   const storage = memory();
-  const store = createModStore(storage);
+  const store = createModStore(storage, { starterCoins: 10 });
   const rare = SHOP.find((g) => g.grade === 'rare'), elite = SHOP.find((g) => g.grade === 'elite');
-  assert.equal(store.coins, STARTER_COINS);
-  assert.equal(store.canBuy('legend-energyrifle'), false, '기본 10코인으로 전설 무기(50코인)는 못 삼');
+  assert.equal(store.coins, 10);
+  assert.equal(store.canBuy('legend-energyrifle'), false, '10코인으로 전설 무기(50코인)는 못 삼');
   const got = store.buy(rare.id);
   assert.equal(got.length, rare.parts.length);
   assert.equal(store.coins, 7);
@@ -114,7 +114,7 @@ test('상점 구매: 코인을 내고 파츠 한 벌을 받아 바로 장착, �
   assert.ok(store.equipShop(rare.id));
   assert.ok(store.shopEquipped(rare.id));
   // 다시 열어도(다음 접속) 산 총기·파츠·장착이 남음
-  const again = createModStore(storage);
+  const again = createModStore(storage, { starterCoins: 10 });
   assert.deepEqual(again.owned, [rare.id, elite.id]);
   assert.ok(again.shopEquipped(rare.id));
   assert.equal(again.items.filter((i) => i.shop).length, rare.parts.length + elite.parts.length);
@@ -128,10 +128,10 @@ test('상점 전설 무기: 에너지 돌격소총·에너지 쌍권총 50코인
   assert.equal(legendFor('rifle'), null);
   const mem = new Map();
   const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
-  const store = createModStore(storage);
+  const store = createModStore(storage, { starterCoins: 10 });
   assert.equal(store.ownsWeapon('energyrifle'), false);
   assert.equal(store.ownsWeapon('flamethrower'), true, '화염방사기는 누구나');
-  store.addCoins(49 - STARTER_COINS);
+  store.addCoins(39);
   assert.equal(store.canBuy('legend-energyrifle'), false, '49코인으로는 못 산다');
   store.addCoins(1);
   assert.deepEqual(store.buy('legend-energyrifle'), [], '파츠는 없다');
@@ -139,20 +139,24 @@ test('상점 전설 무기: 에너지 돌격소총·에너지 쌍권총 50코인
   assert.ok(store.owns('legend-energyrifle') && store.ownsWeapon('energyrifle'));
   assert.equal(store.ownsWeapon('energydual'), false);
   assert.equal(store.canBuy('legend-energyrifle'), false, '이미 샀음');
-  const again = createModStore(storage);
+  const again = createModStore(storage, { starterCoins: 10 });
   assert.ok(again.ownsWeapon('energyrifle'), '다시 열어도 보유');
 });
 
-test('시작 기본 코인: 처음 열면 10코인, 다시 열어도 또 주지 않고, 기본 코인이 생기기 전 저장에는 한 번만 더해 준다', () => {
-  assert.equal(STARTER_COINS, 10);
+test('시작 기본 코인: 처음 열면 100코인, 다시 열어도 또 주지 않고, 예전 저장에는 모자란 만큼만 한 번 더해 준다', () => {
+  assert.equal(STARTER_COINS, 100);
   const mem = new Map();
   const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
   const store = createModStore(storage);
-  assert.equal(store.coins, 10);
+  assert.equal(store.coins, 100);
   store.draw(4, seededRng(1));
-  assert.equal(createModStore(storage).coins, 6, '다시 열어도 또 주지 않음');
-  // 예전 저장(starter 표시 없음, 코인 3개): 한 번만 +10
+  assert.equal(createModStore(storage).coins, 96, '다시 열어도 또 주지 않음');
+  // 기본 코인이 생기기 전 저장(표시 없음, 코인 3개): +100
   mem.set('haha2.mods.v1', JSON.stringify({ items: [], equips: {}, nextId: 1, draws: 0, coins: 3, owned: [] }));
-  assert.equal(createModStore(storage).coins, 13);
-  assert.equal(createModStore(storage).coins, 13, '두 번째부터는 그대로');
+  assert.equal(createModStore(storage).coins, 103);
+  assert.equal(createModStore(storage).coins, 103, '두 번째부터는 그대로');
+  // 예전에 기본 10코인을 받은 저장(starter: true, 코인 3개): 모자란 90만 더
+  mem.set('haha2.mods.v1', JSON.stringify({ items: [], equips: {}, nextId: 1, draws: 0, coins: 3, owned: [], starter: true }));
+  assert.equal(createModStore(storage).coins, 93);
+  assert.equal(createModStore(storage).coins, 93);
 });

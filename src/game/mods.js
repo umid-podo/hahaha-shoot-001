@@ -41,8 +41,10 @@ export const MOD_WEAPONS = {
 export const canMount = (weapon, slot) => !!MOD_WEAPONS[weapon]?.includes(slot);
 /** 뽑기 1번에 드는 코인 */
 export const DRAW_COST = 1;
-/** 처음 시작할 때 주는 기본 코인(예전부터 하던 저장에도 한 번만 준다) */
-export const STARTER_COINS = 10;
+/**
+ * 처음 시작할 때 주는 기본 코인. 예전부터 하던 저장에도 한 번만 주고, 예전에 더 적게(10코인) 받았으면 모자란 만큼만 더 준다.
+ */
+export const STARTER_COINS = 100;
 
 /** 0~1 난수(시드 고정). mulberry32 */
 export function seededRng(seed) {
@@ -229,10 +231,10 @@ function defaultStorage() {
 /**
  * 배낭(뽑은 파츠 목록)과 총별 장착 상태. 바뀔 때마다 저장하고, 구독한 함수(onChange)를 부른다.
  * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws, coins, owned, starter }
- * starter: 기본 코인(STARTER_COINS)을 이미 받았는지. 처음 열면(또는 기본 코인이 생기기 전 저장이면) 한 번 받는다.
+ * starter: 지금까지 받은 기본 코인 수(예전 저장의 true는 10코인을 받았다는 뜻). STARTER_COINS보다 적으면 모자란 만큼 한 번 더 받는다.
  */
-export function createModStore(storage = defaultStorage()) {
-  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [], starter: false };
+export function createModStore(storage = defaultStorage(), { starterCoins = STARTER_COINS } = {}) {
+  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [], starter: 0 };
   try {
     const saved = JSON.parse(storage.getItem(KEY));
     if (saved && Array.isArray(saved.items)) {
@@ -243,7 +245,7 @@ export function createModStore(storage = defaultStorage()) {
         draws: Number.isFinite(saved.draws) ? saved.draws : 0,
         coins: Number.isFinite(saved.coins) && saved.coins > 0 ? Math.floor(saved.coins) : 0,
         owned: Array.isArray(saved.owned) ? saved.owned.filter((id) => SHOP_BY_ID[id]) : [],
-        starter: saved.starter === true,
+        starter: saved.starter === true ? 10 : Number.isFinite(saved.starter) && saved.starter > 0 ? saved.starter : 0,
       };
       state.nextId = Math.max(state.nextId, ...state.items.map((i) => i.id + 1), 1);
     }
@@ -257,9 +259,9 @@ export function createModStore(storage = defaultStorage()) {
   };
   const byId = (id) => state.items.find((i) => i.id === id) ?? null;
   // 시작 기본 코인: 한 번만
-  if (!state.starter) {
-    state.coins += STARTER_COINS;
-    state.starter = true;
+  if (state.starter < starterCoins) {
+    state.coins += starterCoins - state.starter;
+    state.starter = starterCoins;
     save();
   }
   return {
