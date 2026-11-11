@@ -207,13 +207,13 @@ export const SHOP = ['rare', 'elite'].flatMap((grade, g) => SHOP_THEMES[grade].m
 export const LEGEND_PRICE = 50;
 /**
  * 상점 전설 무기: 사면 그 무기(config.js의 legendary 무기)가 주무기 선택 목록에 나타난다(영구). 스킨이 아니라 새 총이라 파츠는 없다.
- * 에너지 돌격소총: 푸른 에너지 볼트, 탄속이 매우 빠르고 엄폐물·벽에 3번 튕김 · 에너지 쌍권총: 엄청난 연사, 탄약 무한, 탄속 매우 빠름, 피해 낮음
+ * 에너지 돌격소총: 푸른 에너지 볼트, 탄속이 매우 빠르고 엄폐물·벽에 3번 튕김 · 에너지 쌍권총: 엄청난 연사, 250발(두 자루를 빠르게 돌려 장전), 탄속 매우 빠름, 피해 낮음
  */
 export const LEGEND_SHOP = [
   { id: 'legend-energyrifle', weapon: 'energyrifle', unlocks: 'energyrifle', grade: 'legendary', name: '에너지 돌격소총', price: LEGEND_PRICE, parts: [],
     info: '푸른 에너지 볼트 · 탄속 매우 빠름 · 엄폐물·벽에 3번 튕김' },
   { id: 'legend-energydual', weapon: 'energydual', unlocks: 'energydual', grade: 'legendary', name: '에너지 쌍권총', price: LEGEND_PRICE, parts: [],
-    info: '푸른 에너지 볼트를 엄청난 연사로 · 탄약 무한 · 탄속 매우 빠름 · 피해 낮음' },
+    info: '푸른 에너지 볼트를 엄청난 연사로 · 250발 · 탄속 매우 빠름 · 피해 낮음' },
 ];
 export const SHOP_BY_ID = Object.fromEntries([...LEGEND_SHOP, ...SHOP].map((g) => [g.id, g]));
 /** 그 무기를 살 수 있는 상점 항목(전설 무기가 아니면 null) */

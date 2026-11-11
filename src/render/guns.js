@@ -986,11 +986,13 @@ const ease = (v) => { const q = clamp01(v); return q * q * (3 - 2 * q); };
 /** 0→1 구간 [a, b]에서의 부드러운 진행도 */
 const span = (k, a, b) => ease((k - a) / (b - a));
 
+/** 장전 때 권총을 돌리는 바퀴 수(쌍권총 종류) */
+const SPIN_TURNS = { dual: 2, dualrpg: 2, energydual: 4 };
 /** 장전할 때 총 전체의 움직임(카메라 기준 cm·라디안). 탄창 총은 기울여 탄창 구멍을 보이고, RPG는 총구를 내리고, 석궁은 내린다 */
 function reloadPose(weapon, rl, e) {
   const out = { x: 0, y: 0, z: 0, pitch: 0, roll: 0 };
   if (rl === null) return out;
-  if (weapon === 'dual' || weapon === 'dualrpg') {
+  if (weapon === 'dual' || weapon === 'dualrpg' || weapon === 'energydual') {
     out.y = 2.2 * e; out.roll = -0.25 * e; // 쌍권총: 조금 들어 올려 바깥으로 기울이고 돌린다
   } else if (weapon === 'rpg') {
     out.y = -2.5 * e; out.pitch = -0.16 * e; out.x = -2 * e;
@@ -1009,7 +1011,7 @@ function applyReload(item, weapon, rl, p) {
   const u = item.userData;
   const ammo = Math.min(WEAPON_MAG(weapon), p.ammo?.[weapon] ?? Infinity);
   // 탄창
-  const spinning = weapon === 'dual' || weapon === 'dualrpg'; // 쌍권총은 탄창을 갈지 않고 돌린다
+  const spinning = SPIN_TURNS[weapon] !== undefined; // 쌍권총은 탄창을 갈지 않고 돌린다
   if (u.mag) {
     let d = 0, visible = true;
     if (rl !== null && !spinning) {
@@ -1056,8 +1058,8 @@ function applyReload(item, weapon, rl, p) {
       u.arrow.position.x = -(1 - span(rl, 0.5, 0.85)) * 14;
     }
   }
-  // 쌍권총: 방아쇠울에 건 손가락으로 권총을 두 바퀴 휙휙 돌린다(그동안 탄이 채워짐)
-  if (u.spin) u.spin.rotation.z = rl !== null && (weapon === 'dual' || weapon === 'dualrpg') ? span(rl, 0.08, 0.9) * Math.PI * 4 : 0;
+  // 쌍권총: 방아쇠울에 건 손가락으로 권총을 휙휙 돌린다(그동안 탄이 채워짐). 에너지 쌍권총은 더 빠르게 네 바퀴
+  if (u.spin) u.spin.rotation.z = rl !== null && spinning ? span(rl, 0.05, 0.95) * Math.PI * 2 * SPIN_TURNS[weapon] : 0;
 }
 
 /**
