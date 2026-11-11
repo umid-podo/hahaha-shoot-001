@@ -1,7 +1,8 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { WEAPONS } from '../game/config.js';
-import { GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, SHOP, SHOP_BY_ID, SHOP_PRICE, canMount, modStore } from '../game/mods.js';
+import { GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, SHOP, SHOP_BY_ID, SHOP_PRICE, LEGEND_SHOP, LEGEND_PRICE, canMount, modStore } from '../game/mods.js';
 import { buildShowcase, environmentMap } from '../render/guns.js';
+import { weaponIcon } from './widgets.js';
 import { makePartPreview } from '../render/parts.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -20,7 +21,7 @@ export function createWorkshop({ show, onClose }) {
   let filter = 'all';
   let selected = null; // 배낭에서 눌러 본 파츠 id
   let tab = 'gacha'; // 'gacha'(랜덤 뽑기) · 'shop'(상점)
-  let shopFilter = 'all'; // 'all' · 'rare' · 'elite' · 'weapon'(지금 고른 총만)
+  let shopFilter = 'all'; // 'all' · 'legendary' · 'rare' · 'elite' · 'weapon'(지금 고른 총만)
   let previewShop = null; // 상점에서 눌러 본 총기 스킨 id(책상 위 총에 미리 붙여 보여 줌)
   let three = null; // 3D 장면(처음 열 때 만든다)
   let running = false;
@@ -202,16 +203,19 @@ export function createWorkshop({ show, onClose }) {
   /** 책상 위 총: 무기·장착이 바뀌면 다시 만든다. 길이를 맞춰(권총은 크게) 받침 위에 옆모습이 보이게 */
   function syncGun() {
     const s = three;
-    const shop = previewShop && SHOP_BY_ID[previewShop].weapon === weapon ? SHOP_BY_ID[previewShop] : null;
-    const key = shop ? `${weapon}|shop:${shop.id}` : `${weapon}|${store.signature(weapon)}`;
+    // 전설 무기를 눌러 보면 개조할 총 대신 그 전설 무기를 책상에 올린다
+    const legend = previewShop ? SHOP_BY_ID[previewShop].unlocks : null;
+    const shop = !legend && previewShop && SHOP_BY_ID[previewShop].weapon === weapon ? SHOP_BY_ID[previewShop] : null;
+    const shown = legend ?? weapon;
+    const key = legend ? `legend:${legend}` : shop ? `${weapon}|shop:${shop.id}` : `${weapon}|${store.signature(weapon)}`;
     if (s.gunKey === key) return;
     if (s.gun) { s.scene.remove(s.gun); dispose(s.gun); }
-    const model = buildShowcase(weapon, shop ? Object.fromEntries(shop.parts.map((p) => [p.slot, p])) : store.equipped(weapon));
+    const model = buildShowcase(shown, legend ? {} : shop ? Object.fromEntries(shop.parts.map((p) => [p.slot, p])) : store.equipped(weapon));
     const holder = new THREE.Group();
     const bb = new THREE.Box3().setFromObject(model);
     const size = bb.getSize(new THREE.Vector3()), center = bb.getCenter(new THREE.Vector3());
     model.position.sub(center);
-    const fit = (weapon === 'pistol' || weapon === 'dual' ? 44 : weapon === 'crossbow' ? 52 : 74) / Math.max(size.x, 1);
+    const fit = (['pistol', 'dual', 'energydual'].includes(shown) ? 44 : shown === 'crossbow' ? 52 : 74) / Math.max(size.x, 1);
     holder.scale.setScalar(fit);
     holder.add(model);
     holder.position.set(-8, size.y * fit * 0.5 + 3, 4);
@@ -381,7 +385,7 @@ export function createWorkshop({ show, onClose }) {
     $('#mod-shop').hidden = tab !== 'shop';
   }
   function renderShopFilter() {
-    const opts = [['all', '전체'], ['rare', `레어 (${SHOP_PRICE.rare}코인)`], ['elite', `엘리트 (${SHOP_PRICE.elite}코인)`], ['weapon', `${WEAPONS[weapon].name}만`]];
+    const opts = [['all', '전체'], ['legendary', `전설 무기 (${LEGEND_PRICE}코인)`], ['rare', `레어 (${SHOP_PRICE.rare}코인)`], ['elite', `엘리트 (${SHOP_PRICE.elite}코인)`], ['weapon', `${WEAPONS[weapon].name}만`]];
     $('#mod-shop-filter').replaceChildren(...opts.map(([id, name]) => {
       const b = el('button', 'small', name);
       b.type = 'button';
@@ -392,8 +396,9 @@ export function createWorkshop({ show, onClose }) {
   }
   function renderShop() {
     renderShopFilter();
-    const list = SHOP.filter((g) => shopFilter === 'all' || g.grade === shopFilter || (shopFilter === 'weapon' && g.weapon === weapon));
+    const list = [...LEGEND_SHOP, ...SHOP].filter((g) => shopFilter === 'all' || g.grade === shopFilter || (shopFilter === 'weapon' && g.weapon === weapon));
     $('#mod-shop-list').replaceChildren(...list.map((g) => {
+      if (g.unlocks) return legendCard(g);
       const owned = store.owns(g.id);
       const card = el('div', `mod-item shop-item grade-border-${g.grade}${previewShop === g.id ? ' previewing' : ''}`);
       const view = el('button', 'mod-item-view');
@@ -432,6 +437,40 @@ export function createWorkshop({ show, onClose }) {
       return card;
     }));
   }
+  /** 전설 무기 카드: 사면 주무기 선택 목록에 그 무기가 나타난다(파츠가 아니라 새 총) */
+  function legendCard(g) {
+    const owned = store.owns(g.id);
+    const card = el('div', `mod-item shop-item grade-border-legendary${previewShop === g.id ? ' previewing' : ''}`);
+    const view = el('button', 'mod-item-view');
+    view.type = 'button';
+    view.setAttribute('aria-label', `전설 ${g.name} 미리 보기`);
+    const icon = el('img', 'legend-thumb');
+    icon.src = weaponIcon(g.unlocks) ?? '';
+    icon.alt = '';
+    view.append(icon, el('span', 'mod-item-name', `★ ${g.name}`));
+    const meta = el('span', 'mod-item-meta');
+    meta.append(gradeChip('legendary'), el('span', 'shop-weapon', '새 주무기'));
+    view.append(meta, el('span', 'shop-info', g.info));
+    view.addEventListener('click', () => {
+      previewShop = previewShop === g.id ? null : g.id;
+      renderShop();
+    });
+    const actions = el('div', 'mod-item-actions');
+    const btn = el('button', `small${owned ? '' : ' primary'}`, owned ? '보유 · 주무기에서 선택' : `구매 🪙${g.price}`);
+    btn.type = 'button';
+    btn.disabled = owned || !store.canBuy(g.id);
+    btn.addEventListener('click', () => {
+      store.buy(g.id);
+      if (!store.owns(g.id)) return;
+      previewShop = g.id;
+      renderAll();
+    });
+    btn.setAttribute('aria-label', `${g.name} ${btn.textContent}`);
+    actions.append(btn);
+    card.append(view, actions);
+    return card;
+  }
+
   for (const b of document.querySelectorAll('#mod-tabs button')) {
     b.addEventListener('click', () => { tab = b.dataset.tab; previewShop = null; renderTabs(); renderShop(); });
   }

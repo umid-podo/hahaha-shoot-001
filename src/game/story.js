@@ -28,7 +28,7 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
  *   돌격소총 요원이 더 나온다(보스전 제외). 사람 주인공이 모두 쓰러지면 동료가 남아 있어도 패배.
  *   쓰러진 동료는 스테이지를 깰 때 체력 가득으로 다시 일어난다. 요원·포탑은 가까운 쪽 주인공을 노린다.
  */
-export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'crossbow'].includes(id));
+export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'crossbow', 'flamethrower'].includes(id) && !WEAPONS[id].legendary);
 export const BOSS_NAME = '스미스 요원';
 export const R10_NAME = 'R-10';
 export const WILSON_NAME = '윌슨 요원';
@@ -107,7 +107,7 @@ export function currentWave(story) {
 }
 
 /** 요원 주무기로 고를 수 있는 값: 'random'(STORY_WEAPONS 중 무작위) 또는 주무기 id */
-export const AGENT_WEAPON_CHOICES = ['random', ...PRIMARY_IDS];
+export const AGENT_WEAPON_CHOICES = ['random', ...PRIMARY_IDS.filter((id) => !WEAPONS[id].legendary)];
 /** 웨이브 i 요원들의 기획 무기(요원마다 'random' 또는 주무기 id). R-10은 레이저 캐논 전용이라 없음([]). */
 export const defaultWeapons = (i) => (WAVES[i].boss === 'r10' || WAVES[i].fixed ? []
   : Array.from({ length: WAVES[i].count }, (_, k) => WAVES[i].agents?.[k]?.weapon ?? WAVES[i].weapon));

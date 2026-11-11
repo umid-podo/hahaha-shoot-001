@@ -1099,7 +1099,40 @@ export function createWorld3D(canvas, wrap, assets) {
     unitSphere: new THREE.SphereGeometry(1, 12, 8),
     debris: new THREE.BoxGeometry(14, 14, 14),
     ring: new THREE.RingGeometry(0.8, 1, 32),
+    // 에너지 볼트: 흰 속심 + 푸른 빛 껍질(X축 방향) + 뒤로 옅게 남는 꼬리
+    boltCore: new THREE.CapsuleGeometry(1.1, 22, 4, 8).rotateZ(Math.PI / 2),
+    boltGlow: new THREE.CapsuleGeometry(2.6, 28, 4, 10).rotateZ(Math.PI / 2),
+    boltTrail: new THREE.CylinderGeometry(2.0, 0.2, 70, 8, 1, true).rotateZ(Math.PI / 2).translate(-48, 0, 0),
   };
+  const BOLT = {
+    core: M.mat('#F2FFFF', { basic: true }),
+    glow: new THREE.MeshBasicMaterial({ color: '#3FE6FF', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
+    trail: new THREE.MeshBasicMaterial({ color: '#3FC8FF', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }),
+  };
+  for (const m of Object.values(BOLT)) m.userData.shared = true;
+  function makeBolt() {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(GEO.boltCore, BOLT.core), new THREE.Mesh(GEO.boltGlow, BOLT.glow), new THREE.Mesh(GEO.boltTrail, BOLT.trail));
+    return g;
+  }
+  /** 화염방사기 불꽃 한 덩어리: 날아가며 커지고 노랑 → 주황 → 검붉게 식어 사라진다(재질은 덩어리마다, 지울 때 버린다) */
+  const FLAME_COLORS = [new THREE.Color('#FFF2A0'), new THREE.Color('#FF9A2A'), new THREE.Color('#C8321A'), new THREE.Color('#3A2A26')];
+  function makeFlame() {
+    const m = new THREE.Mesh(GEO.unitSphere, new THREE.MeshBasicMaterial({
+      color: '#FFD060', transparent: true, opacity: 0.8, depthWrite: false,
+    }));
+    m.userData.ownMaterial = true;
+    return m;
+  }
+  /** 불꽃: 총구 바로 앞은 작고 옅게(1인칭 화면을 가리지 않게) 날아가며 커지고 식는다 */
+  function updateFlame(m, b) {
+    const k = clamp01(1 - b.life / (b.maxLife || 0.45));
+    const out = clamp01((Math.hypot(b.x - (b.startX ?? b.x), b.y - (b.startY ?? b.y)) - 20) / 90);
+    m.scale.setScalar(3 + 30 * k + (b.id % 5) * 1.2);
+    const t = k * (FLAME_COLORS.length - 1), i = Math.min(FLAME_COLORS.length - 2, Math.floor(t));
+    m.material.color.copy(FLAME_COLORS[i]).lerp(FLAME_COLORS[i + 1], t - i);
+    m.material.opacity = 0.75 * (1 - k * k) * out;
+  }
   function makeRocket(color = '#4E6B3A') {
     const g = new THREE.Group();
     const body = new THREE.Mesh(GEO.rocketBody, M.mat(color, { metal: 0.3 }));
@@ -1128,6 +1161,8 @@ export function createWorld3D(canvas, wrap, assets) {
       return m;
     }
     if (b.weapon === 'crossbow') return makeArrow();
+    if (b.flame) return makeFlame();
+    if (WEAPONS[b.weapon]?.energy) return makeBolt();
     const trail = bulletColor(b);
     if (b.weapon === 'shotgun' || b.weapon === 'flak') return makeBullet({ kind: 'pellet', trail, trailLen: 40 });
     if (b.weapon === 'sniper' || b.weapon === 'jsniper') return makeBullet({ trail, scale: 1.25, trailLen: 120 });
@@ -1158,6 +1193,7 @@ export function createWorld3D(canvas, wrap, assets) {
       const prev = m.userData.h ?? h;
       m.rotation.set(0, -yaw, Math.atan2(h - prev, Math.hypot(b.vx, b.vy) / 60) * 0.5);
       m.userData.h = h;
+      if (b.flame) updateFlame(m, b);
       // 로켓 연기(윌슨 요원의 쌍 RPG는 진하게)
       if (!reducedMotion && (b.splash && !b.thrown)) {
         const last = smokeFrom.get(b.id);
@@ -1171,6 +1207,7 @@ export function createWorld3D(canvas, wrap, assets) {
     for (const [id, m] of shots) {
       if (live.has(id)) continue;
       scene.remove(m);
+      if (m.userData.ownMaterial) m.material.dispose();
       shots.delete(id);
       smokeFrom.delete(id);
     }
@@ -1297,7 +1334,7 @@ export function createWorld3D(canvas, wrap, assets) {
       return;
     }
     if (kind === 'spark') {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, transparent: true, depthWrite: false }));
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, transparent: true, depthWrite: false, ...(e.color ? { color: e.color } : {}) }));
       s.position.set(e.x, e.h ?? stageH + GUN_Y, e.y);
       const size = e.size ?? 60;
       scene.add(s);
@@ -1624,7 +1661,8 @@ export function createWorld3D(canvas, wrap, assets) {
     const x = p.x + dx * MUZZLE_OFFSET, y = p.y + dz * MUZZLE_OFFSET;
     const h = (currentStage === 'sky' ? PLANE_Y : GUN_Y) + (currentStage === 'road' ? CAR_ROOF : 0) + (p.z ?? 0);
     const big = ['shotgun', 'rpg', 'sniper', 'dualrpg', 'jsniper'].includes(e.weapon);
-    const color = e.weapon === 'laser' ? '#FF3030' : e.weapon === 'instakill' ? '#FF4FA0' : null;
+    const color = e.weapon === 'laser' ? '#FF3030' : e.weapon === 'instakill' ? '#FF4FA0'
+      : WEAPONS[e.weapon]?.energy ? '#5FEFFF' : e.weapon === 'flamethrower' ? '#FF8A2A' : null;
     addEffect('muzzle', { x, y, h, owner: p.id, color, size: big ? 70 : 46 });
     if (p.ai) { // 사람 플레이어의 연기는 손에 든 총구 자리에서 띄운다(ownSmoke)
       addEffect('gunsmoke', { x: x + dx * 6, y: y + dz * 6, h: h + 4, size: big ? 16 : 10, vx: dx * 30, vz: dz * 30 });
@@ -1668,6 +1706,7 @@ export function createWorld3D(canvas, wrap, assets) {
         if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, h: currentStage === 'sky' ? PLANE_Y : currentStage === 'road' ? CAR_ROOF : 0 });
         if (e.type === 'hit') { addEffect('spark', { x: e.x, y: e.y, h }); label(`-${e.damage}`, e.x, e.y, h + 80, '#FF5A4A'); }
         if (e.type === 'block') addEffect('spark', { x: e.x, y: e.y, h, size: 34 });
+        if (e.type === 'bounce') addEffect('spark', { x: e.x, y: e.y, h: (currentStage === 'sky' ? PLANE_Y : GUN_Y), size: 46, color: '#5FEFFF' });
         if (e.type === 'cover-break' || e.type === 'ceiling-break') addEffect('debris', { x: e.x, y: e.y, h: e.type === 'ceiling-break' ? 240 : 0 });
         if (e.type === 'laser') addEffect('beam', { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, h1: 180, h2: 0 });
         if (e.type === 'megalaser') addEffect('beam', { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, width: 22, color: '#FF3B6B', life: 0.6 });

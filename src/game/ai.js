@@ -150,6 +150,12 @@ function wanderDir(ai, match, me, target, dt) {
   const needsClearShot = ai.diff.coverAware && blockedAt(match, me, me.x, target);
   // 넓은 맵: 상대 둘레 350~700 거리의 자리로 옮겨 다니며 따라간다(멀리 도망가도 쫓아감). 좁은 맵: 자기 진영 안 아무 데나
   const spot = () => {
+    // 화염방사기처럼 사거리가 짧은 무기: 진영을 넘어서라도 상대 둘레 120~240 거리로 다가간다
+    if (WEAPONS[me.weapon]?.flame) {
+      const B = match.bounds ?? { minX: MIN_X, maxX: MAX_X, minY: ZONE.isb.minY, maxY: ZONE.earth.maxY };
+      const a = ai.rng() * Math.PI * 2, r = between(ai.rng, [120, 240]);
+      return [Math.min(B.maxX, Math.max(B.minX, target.x + Math.cos(a) * r)), Math.min(B.maxY, Math.max(B.minY, target.y + Math.sin(a) * r))];
+    }
     if (match.wide) {
       const a = ai.rng() * Math.PI * 2, r = between(ai.rng, [350, 700]);
       return [Math.min(zone.maxX, Math.max(zone.minX, target.x + Math.cos(a) * r)), Math.min(zone.maxY, Math.max(zone.minY, target.y + Math.sin(a) * r))];

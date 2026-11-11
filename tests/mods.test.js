@@ -117,3 +117,25 @@ test('상점 구매: 코인을 내고 파츠 한 벌을 받아 바로 장착, �
   assert.equal(again.items.filter((i) => i.shop).length, rare.parts.length + elite.parts.length);
   assert.equal(SHOP_BY_ID[rare.id], rare);
 });
+
+test('상점 전설 무기: 에너지 돌격소총·에너지 쌍권총 50코인, 사야 그 주무기를 쓸 수 있고 저장된다', async () => {
+  const { LEGEND_SHOP, LEGEND_PRICE, legendFor } = await import('../src/game/mods.js');
+  assert.equal(LEGEND_PRICE, 50);
+  assert.deepEqual(LEGEND_SHOP.map((g) => [g.unlocks, g.price, g.grade]), [['energyrifle', 50, 'legendary'], ['energydual', 50, 'legendary']]);
+  assert.equal(legendFor('rifle'), null);
+  const mem = new Map();
+  const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  const store = createModStore(storage);
+  assert.equal(store.ownsWeapon('energyrifle'), false);
+  assert.equal(store.ownsWeapon('flamethrower'), true, '화염방사기는 누구나');
+  store.addCoins(49);
+  assert.equal(store.canBuy('legend-energyrifle'), false, '49코인으로는 못 산다');
+  store.addCoins(1);
+  assert.deepEqual(store.buy('legend-energyrifle'), [], '파츠는 없다');
+  assert.equal(store.coins, 0);
+  assert.ok(store.owns('legend-energyrifle') && store.ownsWeapon('energyrifle'));
+  assert.equal(store.ownsWeapon('energydual'), false);
+  assert.equal(store.canBuy('legend-energyrifle'), false, '이미 샀음');
+  const again = createModStore(storage);
+  assert.ok(again.ownsWeapon('energyrifle'), '다시 열어도 보유');
+});

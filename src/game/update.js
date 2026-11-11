@@ -66,12 +66,16 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
   const speed = weapon.speed * (player.bulletSpeedScale ?? 1);
   const x = player.x + Math.cos(aim) * MUZZLE_OFFSET - Math.sin(aim) * offset;
   const y = player.y + Math.sin(aim) * MUZZLE_OFFSET + Math.cos(aim) * offset;
+  // 화염방사기 불꽃은 짧게 살고, 에너지 돌격소총 볼트는 튕길 횟수를 갖는다
+  const life = weapon.flame ? weapon.flame.life : RULES.bulletLife;
   const projectile = {
     id: match.nextProjectileId++, ownerId: player.id, team: player.team, weapon: weapon.id,
     x, y, previousX: x, previousY: y,
     vx: Math.cos(aim) * speed, vy: Math.sin(aim) * speed,
-    life: RULES.bulletLife, damage,
+    life, damage,
     splash, homing: weapon.homing,
+    ...(weapon.bounces > 0 ? { bounces: weapon.bounces } : {}),
+    ...(weapon.flame ? { flame: true, maxLife: life } : {}),
     // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용). group이 있으면 그쪽에 기록한다.
     connected: false, group,
     // z: 쏜 사람 발 높이(높이가 다른 사람은 hitBelow~hitAbove 안일 때만 맞고, coverClear보다 높으면 엄폐물 위로 지나감)
@@ -201,6 +205,48 @@ function coverContact(match, b) {
     if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, cover: c };
   }
   return earliest;
+}
+
+/**
+ * 튕기는 탄을 엄폐물 면에서 반사한다. (x, y)는 닿은 자리. 덜 파고든 쪽(가로·세로) 면에 닿은 것으로 보고 그 축의 속도를 뒤집는다.
+ * 다음 틱에 같은 면에 다시 닿지 않도록 면 바깥으로 살짝 띄워 둔다.
+ */
+function bounceOffCover(b, c, x, y) {
+  const hw = c.w / 2 + BULLET_RADIUS, hh = c.h / 2 + BULLET_RADIUS;
+  const dx = (x - c.x) / hw, dy = (y - c.y) / hh;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    b.vx = -b.vx;
+    b.x = c.x + Math.sign(dx || -b.vx || 1) * (hw + 1);
+    b.y = y;
+  } else {
+    b.vy = -b.vy;
+    b.x = x;
+    b.y = c.y + Math.sign(dy || -b.vy || 1) * (hh + 1);
+  }
+  b.previousX = b.x; b.previousY = b.y;
+  b.bounces--;
+  b.bounced = (b.bounced ?? 0) + 1;
+}
+
+/** 튕기는 탄이 반사되는 벽(경기장 끝): 넓은 맵은 이동 범위 둘레, 원래 경기장은 화면 테두리 */
+const wallsOf = (match) => (match.wide ? match.bounds : { minX: 0, maxX: ARENA_WIDTH, minY: 0, maxY: ARENA_HEIGHT });
+
+/** 탄이 벽(walls)을 넘었으면 거울처럼 되돌리고 그 축의 속도를 뒤집는다. 튕겼으면 true */
+function bounceOffWalls(b, walls) {
+  let hit = false;
+  for (const [axis, v, lo, hi] of [['x', 'vx', walls.minX, walls.maxX], ['y', 'vy', walls.minY, walls.maxY]]) {
+    if (b.bounces <= 0) break;
+    if (b[axis] < lo || b[axis] > hi) {
+      const edge = b[axis] < lo ? lo : hi;
+      b[axis] = 2 * edge - b[axis];
+      b[v] = -b[v];
+      b.bounces--;
+      b.bounced = (b.bounced ?? 0) + 1;
+      hit = true;
+    }
+  }
+  if (hit) { b.previousX = b.x; b.previousY = b.y; }
+  return hit;
 }
 
 /** 쏜 사람·무기의 통계 칸. 전투기처럼 플레이어가 아니면 null. */
@@ -354,10 +400,19 @@ function fire(match, p, events) {
     for (let i = 0; i < n; i++) {
       spawnProjectile(match, p, p.aim, weapon.id, { offset: (i - (n - 1) / 2) * weapon.arrowGap, group });
     }
+  } else if (weapon.flame) {
+    // 화염방사기: 조준 방향 둘레로 흩어지는 불꽃
+    const spread = (weapon.flame.spread * Math.PI) / 180;
+    const r = match.rng ? match.rng() : Math.random();
+    spawnProjectile(match, p, p.aim + (r - 0.5) * spread, weapon.id, { group });
+  } else if (weapon.alternate) {
+    // 에너지 쌍권총: 오른손·왼손 총을 번갈아(총구가 양옆으로 조금 벌어져 있다)
+    p.hand = p.hand === 1 ? -1 : 1;
+    spawnProjectile(match, p, p.aim, weapon.id, { offset: p.hand * 12, group });
   } else {
     spawnProjectile(match, p, p.aim);
   }
-  events.push({ type: 'fire', playerId: p.id, weapon: p.weapon });
+  events.push({ type: 'fire', playerId: p.id, weapon: p.weapon, ...(weapon.alternate ? { hand: p.hand } : {}) });
 }
 
 /** 경기 시작 뒤 흐른 시간(초). 카운트다운·일시정지는 세지 않는다. */
@@ -754,13 +809,26 @@ export function step(match, inputs, dt = TICK) {
 
   // 같은 틱에 먼저 맞은 탄으로 엄폐물이 부서져도, 이미 그 엄폐물에 닿은 나머지 탄은 막힌 것으로 처리한다.
   for (const { t, projectile: b, victim, cover } of contacts) {
-    removed.add(b);
     const x = b.previousX + (b.x - b.previousX) * t;
     const y = b.previousY + (b.y - b.previousY) * t;
+    // 튕기는 탄(에너지 돌격소총)이 엄폐물에 닿으면: 엄폐물을 깎고 닿은 면에서 반사돼 계속 날아간다
+    if (!victim && cover && b.bounces > 0) {
+      damageCover(match, cover, coverDamage(b), b, events);
+      bounceOffCover(b, cover, x, y);
+      events.push({ type: 'bounce', x, y, weapon: b.weapon });
+      continue;
+    }
+    removed.add(b);
     if (victim) damage(match, victim, b.damage, b, events);
     else events.push({ type: 'block', x, y });
     if (cover) damageCover(match, cover, coverDamage(b), b, events);
     if (b.splash) explode(match, b, x, y, victim, cover, events);
+  }
+
+  // 튕기는 탄이 경기장 끝(벽)을 넘으면 그 벽에서 반사한다
+  for (const b of match.projectiles) {
+    if (removed.has(b) || !(b.bounces > 0)) continue;
+    if (bounceOffWalls(b, wallsOf(match))) events.push({ type: 'bounce', x: b.x, y: b.y, weapon: b.weapon });
   }
 
   // 빗나간 RPG·전투기 미사일은 경로 끝에서 터져 주변에 폭발 피해를 준다.

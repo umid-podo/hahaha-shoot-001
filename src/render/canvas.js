@@ -3220,6 +3220,13 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.fillStyle = reloading ? '#4FB3FF' : left <= Math.max(1, Math.ceil(weapon.mag * 0.25)) ? '#FF6A5A' : '#FFFFFF';
       ctx.fillText(reloading ? '장전 중…' : `${left} / ${weapon.mag}`, wx + 286, wy + 20);
       ctx.textAlign = 'left';
+    } else if (weapon.energy) {
+      // 탄약 무한(에너지 쌍권총)
+      ctx.textAlign = 'right';
+      ctx.font = 'bold 24px system-ui, sans-serif';
+      ctx.fillStyle = '#7FF4FF';
+      ctx.fillText('∞', wx + 286, wy + 20);
+      ctx.textAlign = 'left';
     }
     ctx.font = '15px system-ui, sans-serif';
     ctx.fillStyle = '#C9CED6';

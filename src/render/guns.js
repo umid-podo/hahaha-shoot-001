@@ -527,6 +527,179 @@ function laserModel() {
   return g;
 }
 
+// ── 전설 에너지 무기(상점) · 화염방사기 ──
+// 에너지 무기 재질: 흰 외장판, 검은 몸통, 푸르게 빛나는 띠·육각 문양
+const E_WHITE = () => mat('#EEF2F5', { metal: 0.12, rough: 0.3 });
+const E_BLACK = () => mat('#1A1D23', { metal: 0.35, rough: 0.45 });
+const E_DARK = () => mat('#2A2F38', { metal: 0.4, rough: 0.4 });
+const E_GLOW = () => mat('#A8FBFF', { metal: 0, rough: 0.2, emissive: '#3FE6FF', intensity: 2.4 });
+const E_BORE = () => mat('#0B3540', { metal: 0, rough: 0.3, emissive: '#2FD8F0', intensity: 1.6 });
+/** 모서리를 깎은 사각형 옆모습(x0~x1, y0~y1, 깎는 크기 c) */
+const chamfer = (x0, y0, x1, y1, c) => [[x0 + c, y0], [x1 - c, y0], [x1, y0 + c], [x1, y1 - c], [x1 - c, y1], [x0 + c, y1], [x0, y1 - c], [x0, y0 + c]];
+/** 육각 문양: 검은 육각 받침 + 양옆 면에 푸르게 빛나는 육각 고리. (x, y) 가운데, r 반지름, depth 총 두께(z) */
+function hexEmblem(g, x, y, r, depth) {
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(r, r, depth + 0.5, 6), E_BLACK());
+  base.rotation.x = Math.PI / 2;
+  base.position.set(x, y, 0);
+  g.add(base);
+  for (const side of [1, -1]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.58, r * 0.14, 6, 6), E_GLOW());
+    ring.rotation.z = Math.PI / 6;
+    ring.position.set(x, y, side * (depth / 2 + 0.3));
+    const core = new THREE.Mesh(new THREE.CircleGeometry(r * 0.42, 6), mat('#0E2A33', { metal: 0.2, rough: 0.3, emissive: '#0A5A6A', intensity: 0.8 }));
+    core.rotation.set(0, side > 0 ? 0 : Math.PI, Math.PI / 6);
+    core.position.set(x, y, side * (depth / 2 + 0.28));
+    g.add(ring, core);
+  }
+}
+/** 양옆 면에 붙는 얇은 판(옆모습 points, 두께 t, 가운데에서 면까지 z) */
+function sidePlates(g, points, t, material, z) {
+  for (const side of [1, -1]) g.add(slab(points, t, material, { bevel: 0.05, z: side * z }));
+}
+
+/**
+ * 에너지 돌격소총(전설): 흰 윗몸통 앞쪽 옆면에 길게 빛나는 푸른 띠, 그 아래 검은 총열 덮개, 총구는 검은 덮개에 위(가늠쇠)·아래 두 총열.
+ * 가운데 검은 육각 받침에 푸른 육각 고리, 그 위 작은 가늠자. 뒤는 흰 개머리판을 검은 테가 감싸고 손잡이와 이어진 큰 구멍(엄지 구멍 개머리판),
+ * 개머리판 위 뒤쪽에 짧은 푸른 띠.
+ */
+function energyRifleModel() {
+  const g = new THREE.Group();
+  // 흰 윗몸통(앞이 조금 높고, 앞 끝은 비스듬히)
+  g.add(slab([[-9, -0.6], [31, -0.6], [33, 1.2], [33, 4.0], [30, 5.4], [7, 5.4], [4, 4.2], [-9, 4.2]], 3.6, E_WHITE(), { bevel: 0.3 }));
+  g.add(box(25, 0.6, 2.2, E_BLACK(), 18.5, 5.6)); // 윗면 검은 띠
+  // 옆면 푸른 빛 띠(양쪽)와 그 둘레 검은 테
+  sidePlates(g, chamfer(6.8, 0.7, 29.2, 4.3, 1.5), 0.2, E_BLACK(), 1.86);
+  sidePlates(g, chamfer(7.5, 1.2, 28.5, 3.8, 1.2), 0.3, E_GLOW(), 2.0);
+  // 검은 총열 덮개(아래) · 그 아래 짙은 회색 받침
+  g.add(slab([[2, -0.6], [31, -0.6], [31, -2.6], [28, -4.4], [6, -4.4], [2, -2.8]], 3.2, E_BLACK(), { bevel: 0.3 }));
+  g.add(slab([[6, -4.2], [27, -4.2], [25, -6.6], [9, -6.6]], 2.6, E_DARK(), { bevel: 0.35 }));
+  // 총구: 검은 덮개 + 위 총열(가늠쇠) · 아래 굵은 총열(안쪽이 푸르게 빛남)
+  g.add(slab([[32, -1.4], [35.5, -1.4], [35.5, 4.4], [32, 4.4]], 3.0, E_BLACK(), { bevel: 0.3 }));
+  g.add(tube(0.8, 0.8, 35, 38.2, E_BLACK(), { y: 3.1, seg: 14 }));
+  g.add(tube(1.25, 1.25, 35, 37.6, E_BLACK(), { y: 0.3, seg: 16 }));
+  g.add(tube(0.7, 0.7, 37.5, 37.7, E_BORE(), { y: 0.3, seg: 14 }));
+  g.add(slab([[33.4, 4.2], [35.2, 4.2], [35, 6.6], [34, 6.6]], 0.7, E_BLACK(), { bevel: 0.05 })); // 가늠쇠
+  // 가운데 육각 문양 · 그 위 가늠자
+  hexEmblem(g, -1.5, 1.8, 2.9, 3.8);
+  g.add(slab([[-3.4, 4.1], [0.2, 4.1], [-0.4, 6.2], [-2.8, 6.2]], 1.6, E_BLACK(), { bevel: 0.1 }));
+  g.add(box(0.5, 1.2, 0.5, E_BLACK(), -1.6, 6.6));
+  // 흰 개머리판 위쪽 · 뒤쪽 짧은 푸른 띠
+  g.add(slab([[-9, 4.2], [-9, -0.6], [-31, -0.6], [-32, 1.2], [-30.5, 3.4], [-12, 4.2]], 3.4, E_WHITE(), { bevel: 0.3 }));
+  sidePlates(g, chamfer(-26.5, 1.0, -21.5, 2.6, 0.7), 0.3, E_GLOW(), 1.85);
+  // 손잡이와 이어진 검은 테(가운데 큰 구멍)
+  g.add(slab([[-5, -0.6], [-32, -0.6], [-32.2, -8.4], [-29, -11.8], [-12, -14.2], [-9.4, -13.6]], 3.0, E_BLACK(), {
+    bevel: 0.35, holes: [[[-10.4, -3.0], [-13.4, -11.2], [-28.4, -9.2], [-28.8, -3.0]]],
+  }));
+  g.add(box(0.35, 1.8, 0.5, E_BLACK(), -4.4, -1.8)); // 방아쇠
+  g.userData = { muzzle: [38.4, 0.3, 0], grip: { x: -7.7, y: -7.4, tilt: 0.32, w: 3.0, d: 3.6 }, support: { x: 17, y: -2.6, r: 3.0 } };
+  return g;
+}
+
+/**
+ * 에너지 권총(전설 쌍권총의 한 자루): 검은 몸통 위 흰 슬라이드 판(앞뒤 두 장, 윗면 가운데 검은 홈), 손잡이 위 검은 육각 받침에 푸른 육각 고리,
+ * 아래가 앞으로 말린 검은 손잡이, 육각 문양 아래 작은 장식 고리.
+ */
+function energyPistolModel() {
+  const g = new THREE.Group();
+  g.add(slab([[-10, -0.8], [9, -0.8], [9.4, 0.6], [8.6, 2.2], [-9.4, 2.2], [-10, 1.2]], 2.8, E_BLACK(), { bevel: 0.25 }));
+  // 흰 슬라이드 판(옆면 앞·뒤, 윗면)
+  sidePlates(g, [[1.6, 0.0], [8.6, 0.0], [8.9, 0.8], [8.3, 1.9], [0.8, 1.9]], 0.22, E_WHITE(), 1.45);
+  sidePlates(g, [[-9.3, 0.0], [0.6, 0.0], [-0.2, 1.9], [-8.9, 1.9], [-9.5, 1.1]], 0.22, E_WHITE(), 1.45);
+  g.add(box(17.6, 0.35, 2.2, E_WHITE(), -0.4, 2.35));
+  g.add(box(17.6, 0.4, 0.35, E_BLACK(), -0.4, 2.45)); // 윗면 가운데 검은 홈
+  g.add(box(0.6, 0.7, 0.6, E_BLACK(), -8.8, 2.8)); // 가늠자
+  g.add(box(0.5, 0.6, 0.4, E_BLACK(), 7.8, 2.75)); // 가늠쇠
+  g.add(tube(0.55, 0.55, 9.2, 9.5, E_BORE(), { y: 0.6, seg: 14 }));
+  // 몸통 아래 · 방아쇠울 · 굽은 손잡이(아래가 앞으로 말림)
+  const frame = [[-10.2, -0.8], [7.4, -0.8], [7.4, -2.2], [3.8, -2.4], [3.4, -4.1], [2.2, -4.6], [-0.2, -4.6], [-1.4, -3.4],
+    [-2.4, -4.6], [-3.4, -11.6], [-2.4, -12.6], [-3.0, -13.8], [-5.6, -14.2], [-9.4, -13.4], [-11.2, -11.8], [-10.4, -3.6], [-11, -2.2]];
+  const guard = [[2.8, -2.3], [2.6, -3.6], [1.9, -4.0], [-0.1, -4.0], [-0.9, -3.0], [-1.1, -2.3]];
+  g.add(slab(frame, 2.6, E_BLACK(), { bevel: 0.3, holes: [guard] }));
+  const trigger = box(0.35, 1.5, 0.45, E_DARK(), 1.0, -3.0);
+  trigger.rotation.z = 0.25;
+  g.add(trigger);
+  hexEmblem(g, -4.6, -1.9, 2.1, 2.8);
+  // 육각 문양 아래 작은 장식 고리
+  g.add(box(0.22, 1.4, 0.22, mat('#C9D2DA', { metal: 0.9, rough: 0.25 }), -4.6, -4.6, 1.7));
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), E_GLOW());
+  gem.position.set(-4.6, -5.6, 1.7);
+  g.add(gem);
+  g.userData = { muzzle: [9.6, 0.6, 0], grip: { x: -6.6, y: -7.8, tilt: 0.24, w: 2.6, d: 5.0 }, pivot: [0.8, -3.0] };
+  return g;
+}
+
+/**
+ * 화염방사기: 길고 짙은 남색 주 관 위로 큰 휜 손잡이, 그 아래 나란한 연료관(검은 이음 슬리브 여러 개)이 앞에서 위로 굽어 점화구로 올라가고,
+ * 앞 끝에는 구멍이 숭숭 뚫린 붉은 방열 덮개와 작은 불씨. 가운데 아래 붉은 연료통, 뒤 손잡이, 뒤쪽 아래 작은 붉은 통에 은빛 갈매기 줄무늬.
+ */
+function flamethrowerModel() {
+  const g = new THREE.Group();
+  const PIPE = role(mat('#262B36', { metal: 0.55, rough: 0.42 }), 'metal');
+  const SLEEVE_B = mat('#121418', { metal: 0.1, rough: 0.8 });
+  const RED = role(mat('#8E1C1E', { metal: 0.25, rough: 0.5 }), 'furniture');
+  const SILVER = mat('#C9CED6', { metal: 0.9, rough: 0.25 });
+  const HOLE = mat('#050505', { rough: 1 });
+  // 주 관
+  g.add(tube(1.3, 1.3, -26, 46, PIPE, { seg: 16 }));
+  // 앞 붉은 방열 덮개(구멍: 둘레 6개 × 길이 3줄, 줄마다 엇갈림)
+  g.add(tube(3.0, 3.0, 44, 55, RED, { seg: 20 }));
+  g.add(tube(3.15, 3.15, 54.4, 55.2, RED, { seg: 20 }));
+  for (let i = 0; i < 3; i++) {
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + (i % 2) * (Math.PI / 6);
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(0.85, 10), HOLE);
+      hole.position.set(46.5 + i * 3.2, Math.cos(a) * 3.03, Math.sin(a) * 3.03);
+      hole.lookAt(hole.position.x, Math.cos(a) * 10, Math.sin(a) * 10);
+      g.add(hole);
+    }
+  }
+  const mouth = new THREE.Mesh(new THREE.CircleGeometry(2.5, 18), HOLE);
+  mouth.rotation.y = Math.PI / 2;
+  mouth.position.set(55.25, 0, 0);
+  g.add(mouth);
+  // 아래 연료관 · 검은 슬리브 · 앞에서 위로 굽어 점화구로
+  g.add(tube(0.85, 0.85, -6, 41, PIPE, { y: -4.2, seg: 12 }));
+  for (const [x0, x1] of [[-2, 3], [6, 10], [14, 23], [27, 30], [33, 36]]) g.add(tube(1.35, 1.35, x0, x1, SLEEVE_B, { y: -4.2, seg: 14 }));
+  const bend = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.85, 10, 16, Math.PI / 2), PIPE);
+  bend.position.set(41, -0.8, 0);
+  bend.rotation.z = -Math.PI / 2;
+  g.add(bend);
+  const riser = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 5.2, 10), PIPE);
+  riser.position.set(44.4, 1.8, 0);
+  g.add(riser);
+  g.add(box(1.8, 1.6, 1.8, SLEEVE_B, 44.4, 3.4, 0)); // 점화구(방열 덮개 위로 솟음)
+  const pilot = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3.2, 10), mat('#FFC23A', { emissive: '#FF8A1A', intensity: 2.6, rough: 0.3 }));
+  pilot.position.set(44.6, 5.6, 0);
+  g.add(pilot);
+  // 큰 휜 손잡이(위)
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(4.6, 0.5, 8, 6, Math.PI), SLEEVE_B);
+  handle.position.set(-4, 1.2, 0);
+  g.add(handle);
+  for (const x of [-8.6, 0.6]) g.add(box(1.2, 1.4, 1.6, SLEEVE_B, x, 1.0));
+  // 가운데 아래 붉은 연료통(둥근 끝) · 이음 부품
+  g.add(box(1.6, 3.6, 1.6, SLEEVE_B, 8, -6.6));
+  const tank = new THREE.Mesh(new THREE.CapsuleGeometry(3.3, 9, 6, 18), RED);
+  tank.position.set(8, -14.6, 0);
+  g.add(tank);
+  // 뒤 손잡이 · 방아쇠
+  g.add(box(4, 3, 2.6, SLEEVE_B, -12, -1.4));
+  g.add(slab([[-13.6, -2.6], [-10.6, -2.6], [-11.4, -14], [-14.2, -14]], 2.6, SLEEVE_B, { bevel: 0.4 }));
+  g.add(box(0.4, 2.0, 0.5, SLEEVE_B, -9.4, -3.8));
+  // 뒤쪽 작은 붉은 통 · 은빛 갈매기 줄무늬 · 뒤 받침
+  g.add(tube(2.3, 2.3, -27, -16, RED, { y: -4.6, seg: 18 }));
+  for (let i = 0; i < 3; i++) {
+    for (const side of [1, -1]) {
+      const stripe = box(0.6, 3.0, 0.5, SILVER, -24.6 + i * 1.6, -4.6 + side * 1.0, 2.2);
+      stripe.rotation.z = side * 0.6;
+      g.add(stripe);
+    }
+  }
+  g.add(box(3, 8, 2.4, PIPE, -27.5, -3.0));
+  g.add(box(4.5, 1.2, 2.4, SLEEVE_B, -26, -7.4));
+  g.userData = { muzzle: [55.6, 0, 0], grip: { x: -12.4, y: -8.2, tilt: 0.08, w: 2.6, d: 3.0 }, support: { x: 24, y: -4.2, r: 1.4 } };
+  return g;
+}
+
 /** 무기 id → 손에 든 모습. hands: 오른손(주) + 왼손(받침) 구성 */
 function build(weapon, equipped = {}) {
   const root = new THREE.Group();
@@ -607,6 +780,16 @@ function build(weapon, equipped = {}) {
     case 'laser':
       items.push(set(gun(laserModel()), { x: 0, y: -13, z: -26, yaw: 0, pitch: 0.04, k: 1.6 }));
       break;
+    case 'energyrifle':
+      items.push(set(gun(energyRifleModel()), { x: 12.5, y: -10.5, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
+      break;
+    case 'energydual':
+      items.push(set(gun(energyPistolModel(), 'one'), { x: 12, y: -7.2, z: -31, yaw: 0.18, pitch: 0.03, roll: -0.15, k: 1.25 }));
+      items.push(set(gun(energyPistolModel(), 'one'), { x: -12, y: -7.2, z: -31, yaw: -0.18, pitch: 0.03, roll: 0.15, mirror: true, k: 1.25 }));
+      break;
+    case 'flamethrower':
+      items.push(set(gun(flamethrowerModel()), { x: 12.5, y: -9, z: -32, yaw: 0.17, pitch: 0.03, roll: -0.05, k: 1.6 }));
+      break;
     default:
       items.push(set(gun(mod(rifleModel())), { x: 12.5, y: -11, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
   }
@@ -681,7 +864,7 @@ export function getSmokeTexture() {
   }
   return smokeTex;
 }
-const FLASH_COLOR = { laser: '#FF3030', instakill: '#FF4FA0' };
+const FLASH_COLOR = { laser: '#FF3030', instakill: '#FF4FA0', energyrifle: '#5FEFFF', energydual: '#5FEFFF', flamethrower: '#FF8A2A' };
 function makeFlash() {
   const g = new THREE.Group();
   const front = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
@@ -738,7 +921,9 @@ export function environmentMap(renderer) {
 }
 
 /** 작업실 책상에 올려놓을 총(손 없이, 개조 파츠 장착). 쌍권총·석궁은 한 자루. 앞이 +X */
-const SHOWCASE = { rifle: () => rifleModel(), smg: () => smgModel(), sniper: () => sniperModel(), shotgun: () => shotgunModel(), pistol: () => pistolModel(), dual: () => pistolModel({ twoTone: true }), rpg: () => rpgModel(), crossbow: () => crossbowModel() };
+const SHOWCASE = {
+  energyrifle: () => energyRifleModel(), energydual: () => energyPistolModel(), flamethrower: () => flamethrowerModel(),
+  rifle: () => rifleModel(), smg: () => smgModel(), sniper: () => sniperModel(), shotgun: () => shotgunModel(), pistol: () => pistolModel(), dual: () => pistolModel({ twoTone: true }), rpg: () => rpgModel(), crossbow: () => crossbowModel() };
 export function buildShowcase(weapon, equipped = {}) {
   const model = applyMods((SHOWCASE[weapon] ?? SHOWCASE.rifle)(), equipped);
   if (model.userData.warhead) model.userData.warhead.visible = true;
@@ -753,8 +938,9 @@ const HELD = {
   rifle: () => rifleModel(), smg: () => smgModel(), sniper: () => sniperModel(), jsniper: () => sniperModel(), shotgun: () => shotgunModel(),
   pistol: () => pistolModel(), dual: () => pistolModel({ twoTone: true }), rpg: () => rpgModel(), dualrpg: () => rpgModel(),
   crossbow: () => crossbowModel(), dagger: () => daggerModel(), instakill: () => instakillModel(),
+  energyrifle: () => energyRifleModel(), energydual: () => energyPistolModel(), flamethrower: () => flamethrowerModel(),
 };
-const PAIRED = new Set(['dual', 'dualrpg', 'crossbow']);
+const PAIRED = new Set(['dual', 'dualrpg', 'crossbow', 'energydual']);
 export const hasHeldGun = (weapon) => !!HELD[weapon];
 export function makeHeldGun(weapon, equipped = {}) {
   const root = new THREE.Group();
@@ -924,9 +1110,10 @@ export function createViewmodel() {
       if (weapon === 'grenade' || weapon === 'missile' || weapon === 'overcool') return;
       // 석궁은 양손이 한꺼번에, 쌍권총·레이저 캐논은 번갈아 쏜다
       if (weapon === 'crossbow') { s.kick = [0.8, 0.8]; return; } // 칼·석궁은 불꽃이 없다
-      const two = ['dual', 'dualrpg', 'laser'].includes(weapon);
+      const two = ['dual', 'dualrpg', 'laser', 'energydual'].includes(weapon);
       const hand = two ? s.shot++ % 2 : 0;
-      s.kick[hand] = Math.min(1.2, s.kick[hand] + (weapon === 'rpg' || weapon === 'shotgun' || weapon === 'sniper' ? 1 : weapon === 'smg' ? 0.35 : 0.7));
+      s.kick[hand] = Math.min(1.2, s.kick[hand] + (weapon === 'rpg' || weapon === 'shotgun' || weapon === 'sniper' ? 1
+        : weapon === 'smg' || weapon === 'energydual' ? 0.35 : weapon === 'flamethrower' ? 0.12 : 0.7));
       if (weapon === 'dagger') return;
       s.flash[hand] = weapon === 'shotgun' || weapon === 'rpg' ? 0.07 : 0.05;
       s.roll[hand] = Math.random() * Math.PI * 2;
@@ -944,7 +1131,7 @@ export function createViewmodel() {
       if (s.weapon !== weapon) { if (s.weapon) s.swap = 1; s.weapon = weapon; s.kick = [0, 0]; s.flash = [0, 0]; s.smoke = []; }
       if (!paused) {
         s.swap = Math.max(0, s.swap - dt * 3.2);
-        for (let i = 0; i < 2; i++) { s.kick[i] = Math.max(0, s.kick[i] - dt * (weapon === 'smg' ? 9 : 6)); s.flash[i] = Math.max(0, s.flash[i] - dt); }
+        for (let i = 0; i < 2; i++) { s.kick[i] = Math.max(0, s.kick[i] - dt * (weapon === 'smg' || weapon === 'energydual' ? 9 : 6)); s.flash[i] = Math.max(0, s.flash[i] - dt); }
       }
       if (lights) {
         hemi.color.copy(lights.hemi.color); hemi.groundColor.copy(lights.hemi.groundColor);
