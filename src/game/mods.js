@@ -41,6 +41,8 @@ export const MOD_WEAPONS = {
 export const canMount = (weapon, slot) => !!MOD_WEAPONS[weapon]?.includes(slot);
 /** 뽑기 1번에 드는 코인 */
 export const DRAW_COST = 1;
+/** 처음 시작할 때 주는 기본 코인(예전부터 하던 저장에도 한 번만 준다) */
+export const STARTER_COINS = 10;
 
 /** 0~1 난수(시드 고정). mulberry32 */
 export function seededRng(seed) {
@@ -226,10 +228,11 @@ function defaultStorage() {
 
 /**
  * 배낭(뽑은 파츠 목록)과 총별 장착 상태. 바뀔 때마다 저장하고, 구독한 함수(onChange)를 부른다.
- * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws, coins }
+ * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws, coins, owned, starter }
+ * starter: 기본 코인(STARTER_COINS)을 이미 받았는지. 처음 열면(또는 기본 코인이 생기기 전 저장이면) 한 번 받는다.
  */
 export function createModStore(storage = defaultStorage()) {
-  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [] };
+  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [], starter: false };
   try {
     const saved = JSON.parse(storage.getItem(KEY));
     if (saved && Array.isArray(saved.items)) {
@@ -240,6 +243,7 @@ export function createModStore(storage = defaultStorage()) {
         draws: Number.isFinite(saved.draws) ? saved.draws : 0,
         coins: Number.isFinite(saved.coins) && saved.coins > 0 ? Math.floor(saved.coins) : 0,
         owned: Array.isArray(saved.owned) ? saved.owned.filter((id) => SHOP_BY_ID[id]) : [],
+        starter: saved.starter === true,
       };
       state.nextId = Math.max(state.nextId, ...state.items.map((i) => i.id + 1), 1);
     }
@@ -252,6 +256,12 @@ export function createModStore(storage = defaultStorage()) {
     for (const fn of listeners) fn(state);
   };
   const byId = (id) => state.items.find((i) => i.id === id) ?? null;
+  // 시작 기본 코인: 한 번만
+  if (!state.starter) {
+    state.coins += STARTER_COINS;
+    state.starter = true;
+    save();
+  }
   return {
     get items() { return state.items; },
     get draws() { return state.draws; },
