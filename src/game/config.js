@@ -152,9 +152,9 @@ export const WEAPONS = {
     id: 'energyrifle', name: '에너지 돌격소총', interval: 0.16, damage: 9, speed: 2400, burst: 1, mag: 30, reload: 1.8,
     bounces: 3, energy: true, legendary: true,
   },
-  // 에너지 쌍권총: 푸른 에너지 볼트를 아주 빠르게 연사한다. 탄약 무한·탄속 매우 빠름, 대신 한 발 피해가 낮다
+  // 에너지 쌍권총: 푸른 에너지 볼트를 아주 빠르게 연사한다. 250발(다 쏘면 두 자루를 빠르게 돌리며 1.2초 장전)·탄속 매우 빠름, 대신 한 발 피해가 낮다
   energydual: {
-    id: 'energydual', name: '에너지 쌍권총', interval: 0.06, damage: 3, speed: 2400, burst: 1, mag: 0, reload: 1,
+    id: 'energydual', name: '에너지 쌍권총', interval: 0.06, damage: 3, speed: 2400, burst: 1, mag: 250, reload: 1.2,
     energy: true, alternate: true, legendary: true,
   },
   sniper: {

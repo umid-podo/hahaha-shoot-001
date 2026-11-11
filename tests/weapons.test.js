@@ -1,4 +1,4 @@
-// 새 무기: 화염방사기(짧은 사거리 불꽃), 에너지 돌격소총(빠른 볼트, 3번 튕김), 에너지 쌍권총(빠른 연사·무한 탄약·낮은 피해)
+// 새 무기: 화염방사기(짧은 사거리 불꽃), 에너지 돌격소총(빠른 볼트, 3번 튕김), 에너지 쌍권총(빠른 연사·250발·낮은 피해)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch, createInputs } from '../src/game/state.js';
@@ -78,14 +78,22 @@ test('에너지 돌격소총: 튕긴 볼트로도 상대를 맞힌다', () => {
   assert.equal(P2.hp, hp - WEAPONS.energyrifle.damage);
 });
 
-test('에너지 쌍권총: 아주 빠르게 연사하고, 탄약이 무한이며(장전 없음), 한 발 피해는 낮다', () => {
-  const { match, inputs, P1 } = playing('energydual');
+test('에너지 쌍권총: 아주 빠르게 연사하고, 250발을 다 쏘면 1.2초 장전, 한 발 피해는 낮다', () => {
+  const { match, inputs, P1, P2 } = playing('energydual');
   P1.y = 900;
+  P2.x = -9999; // 쏘는 길에서 비켜 둔다(쓰러지면 경기가 끝남)
   inputs.P1.aim = -Math.PI / 2;
   inputs.P1.aiming = true;
   const ev = run(match, inputs, 5);
   assert.ok(shots(ev, 'P1') >= 80, `5초에 ${shots(ev, 'P1')}발`);
-  assert.ok(!ev.some((e) => e.type === 'reload'), '장전 없음');
+  assert.ok(!ev.some((e) => e.type === 'reload'), '5초(약 83발)로는 250발을 다 못 씀');
+  assert.equal(WEAPONS.energydual.mag, 250);
+  const more = run(match, inputs, 12);
+  const reload = more.find((e) => e.type === 'reload');
+  assert.ok(reload, '250발을 다 쏘면 장전');
+  assert.equal(reload.time, 1.2);
+  assert.ok(more.some((e) => e.type === 'reloaded'));
+  assert.equal(shots(ev, 'P1') + shots(more, 'P1') - 250 > 0, true, '장전 뒤 다시 쏨');
   assert.ok(WEAPONS.energydual.damage < WEAPONS.rifle.damage);
   assert.ok(WEAPONS.energydual.speed >= WEAPONS.pistol.speed * 3);
   const hands = new Set(ev.filter((e) => e.type === 'fire').map((e) => e.hand));

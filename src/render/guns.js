@@ -529,9 +529,10 @@ function laserModel() {
 
 // ── 전설 에너지 무기(상점) · 화염방사기 ──
 // 에너지 무기 재질: 흰 외장판, 검은 몸통, 푸르게 빛나는 띠·육각 문양
-const E_WHITE = () => mat('#EEF2F5', { metal: 0.12, rough: 0.3 });
-const E_BLACK = () => mat('#1A1D23', { metal: 0.35, rough: 0.45 });
-const E_DARK = () => mat('#2A2F38', { metal: 0.4, rough: 0.4 });
+// 총 색깔 파츠를 끼우면 흰 외장판은 몸통 색(furniture), 검은 몸통은 쇠 색(metal)으로 바뀐다(빛나는 띠·문양은 그대로)
+const E_WHITE = () => role(mat('#EEF2F5', { metal: 0.12, rough: 0.3 }), 'furniture');
+const E_BLACK = () => role(mat('#1A1D23', { metal: 0.35, rough: 0.45 }), 'metal');
+const E_DARK = () => role(mat('#2A2F38', { metal: 0.4, rough: 0.4 }), 'metal');
 const E_GLOW = () => mat('#A8FBFF', { metal: 0, rough: 0.2, emissive: '#3FE6FF', intensity: 2.4 });
 const E_BORE = () => mat('#0B3540', { metal: 0, rough: 0.3, emissive: '#2FD8F0', intensity: 1.6 });
 /** 모서리를 깎은 사각형 옆모습(x0~x1, y0~y1, 깎는 크기 c) */
@@ -581,17 +582,24 @@ function energyRifleModel() {
   g.add(slab([[33.4, 4.2], [35.2, 4.2], [35, 6.6], [34, 6.6]], 0.7, E_BLACK(), { bevel: 0.05 })); // 가늠쇠
   // 가운데 육각 문양 · 그 위 가늠자
   hexEmblem(g, -1.5, 1.8, 2.9, 3.8);
-  g.add(slab([[-3.4, 4.1], [0.2, 4.1], [-0.4, 6.2], [-2.8, 6.2]], 1.6, E_BLACK(), { bevel: 0.1 }));
-  g.add(box(0.5, 1.2, 0.5, E_BLACK(), -1.6, 6.6));
-  // 흰 개머리판 위쪽 · 뒤쪽 짧은 푸른 띠
-  g.add(slab([[-9, 4.2], [-9, -0.6], [-31, -0.6], [-32, 1.2], [-30.5, 3.4], [-12, 4.2]], 3.4, E_WHITE(), { bevel: 0.3 }));
-  sidePlates(g, chamfer(-26.5, 1.0, -21.5, 2.6, 0.7), 0.3, E_GLOW(), 1.85);
-  // 손잡이와 이어진 검은 테(가운데 큰 구멍)
-  g.add(slab([[-5, -0.6], [-32, -0.6], [-32.2, -8.4], [-29, -11.8], [-12, -14.2], [-9.4, -13.6]], 3.0, E_BLACK(), {
-    bevel: 0.35, holes: [[[-10.4, -3.0], [-13.4, -11.2], [-28.4, -9.2], [-28.8, -3.0]]],
-  }));
+  // 가늠자(개조 스코프를 달면 숨김)
+  const sight = sub(g);
+  sight.add(slab([[-3.4, 4.1], [0.2, 4.1], [-0.4, 6.2], [-2.8, 6.2]], 1.6, E_BLACK(), { bevel: 0.1 }));
+  sight.add(box(0.5, 1.2, 0.5, E_BLACK(), -1.6, 6.6));
+  // 손잡이
+  g.add(slab([[-5, -0.6], [-9.8, -0.6], [-12.8, -12.2], [-12.2, -14.2], [-9.4, -13.6]], 3.0, E_BLACK(), { bevel: 0.35 }));
   g.add(box(0.35, 1.8, 0.5, E_BLACK(), -4.4, -1.8)); // 방아쇠
-  g.userData = { muzzle: [38.4, 0.3, 0], grip: { x: -7.7, y: -7.4, tilt: 0.32, w: 3.0, d: 3.6 }, support: { x: 17, y: -2.6, r: 3.0 } };
+  // 개머리판(개조 개머리판을 달면 숨김): 흰 윗판 · 뒤쪽 짧은 푸른 띠 · 손잡이 뒤로 이어진 검은 테(가운데 큰 구멍)
+  const stock = sub(g);
+  stock.add(slab([[-9, 4.2], [-9, -0.6], [-31, -0.6], [-32, 1.2], [-30.5, 3.4], [-12, 4.2]], 3.4, E_WHITE(), { bevel: 0.3 }));
+  sidePlates(stock, chamfer(-26.5, 1.0, -21.5, 2.6, 0.7), 0.3, E_GLOW(), 1.85);
+  stock.add(slab([[-10.2, -0.6], [-32, -0.6], [-32.2, -8.4], [-29, -11.8], [-13.4, -14.0], [-12.4, -11.6]], 3.0, E_BLACK(), {
+    bevel: 0.35, holes: [[[-12.4, -3.0], [-15.0, -10.8], [-28.4, -9.2], [-28.8, -3.0]]],
+  }));
+  g.userData = {
+    muzzle: [38.4, 0.3, 0], grip: { x: -7.7, y: -7.4, tilt: 0.32, w: 3.0, d: 3.6 }, support: { x: 17, y: -2.6, r: 3.0 },
+    mods: { size: 1, bore: 1.15, scope: [-2, 4.2], sight, stock, stockAt: [-9.4, 1.6], stockFit: { len: 20, top: 2.6, bottom: -9.6 } },
+  };
   return g;
 }
 
@@ -624,7 +632,10 @@ function energyPistolModel() {
   const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), E_GLOW());
   gem.position.set(-4.6, -5.6, 1.7);
   g.add(gem);
-  g.userData = { muzzle: [9.6, 0.6, 0], grip: { x: -6.6, y: -7.8, tilt: 0.24, w: 2.6, d: 5.0 }, pivot: [0.8, -3.0] };
+  g.userData = {
+    muzzle: [9.6, 0.6, 0], grip: { x: -6.6, y: -7.8, tilt: 0.24, w: 2.6, d: 5.0 }, pivot: [0.8, -3.0],
+    mods: { size: 0.55, bore: 0.6, scope: [-3.4, 2.5] },
+  };
   return g;
 }
 
@@ -781,11 +792,11 @@ function build(weapon, equipped = {}) {
       items.push(set(gun(laserModel()), { x: 0, y: -13, z: -26, yaw: 0, pitch: 0.04, k: 1.6 }));
       break;
     case 'energyrifle':
-      items.push(set(gun(energyRifleModel()), { x: 12.5, y: -10.5, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
+      items.push(set(gun(mod(energyRifleModel())), { x: 12.5, y: -10.5, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
       break;
     case 'energydual':
-      items.push(set(gun(energyPistolModel(), 'one'), { x: 12, y: -7.2, z: -31, yaw: 0.18, pitch: 0.03, roll: -0.15, k: 1.25 }));
-      items.push(set(gun(energyPistolModel(), 'one'), { x: -12, y: -7.2, z: -31, yaw: -0.18, pitch: 0.03, roll: 0.15, mirror: true, k: 1.25 }));
+      items.push(set(gun(mod(energyPistolModel()), 'one'), { x: 12, y: -7.2, z: -31, yaw: 0.18, pitch: 0.03, roll: -0.15, k: 1.25 }));
+      items.push(set(gun(mod(energyPistolModel()), 'one'), { x: -12, y: -7.2, z: -31, yaw: -0.18, pitch: 0.03, roll: 0.15, mirror: true, k: 1.25 }));
       break;
     case 'flamethrower':
       items.push(set(gun(flamethrowerModel()), { x: 12.5, y: -9, z: -32, yaw: 0.17, pitch: 0.03, roll: -0.05, k: 1.6 }));
@@ -986,11 +997,13 @@ const ease = (v) => { const q = clamp01(v); return q * q * (3 - 2 * q); };
 /** 0→1 구간 [a, b]에서의 부드러운 진행도 */
 const span = (k, a, b) => ease((k - a) / (b - a));
 
+/** 장전 때 권총을 돌리는 바퀴 수(쌍권총 종류) */
+const SPIN_TURNS = { dual: 2, dualrpg: 2, energydual: 4 };
 /** 장전할 때 총 전체의 움직임(카메라 기준 cm·라디안). 탄창 총은 기울여 탄창 구멍을 보이고, RPG는 총구를 내리고, 석궁은 내린다 */
 function reloadPose(weapon, rl, e) {
   const out = { x: 0, y: 0, z: 0, pitch: 0, roll: 0 };
   if (rl === null) return out;
-  if (weapon === 'dual' || weapon === 'dualrpg') {
+  if (weapon === 'dual' || weapon === 'dualrpg' || weapon === 'energydual') {
     out.y = 2.2 * e; out.roll = -0.25 * e; // 쌍권총: 조금 들어 올려 바깥으로 기울이고 돌린다
   } else if (weapon === 'rpg') {
     out.y = -2.5 * e; out.pitch = -0.16 * e; out.x = -2 * e;
@@ -1009,7 +1022,7 @@ function applyReload(item, weapon, rl, p) {
   const u = item.userData;
   const ammo = Math.min(WEAPON_MAG(weapon), p.ammo?.[weapon] ?? Infinity);
   // 탄창
-  const spinning = weapon === 'dual' || weapon === 'dualrpg'; // 쌍권총은 탄창을 갈지 않고 돌린다
+  const spinning = SPIN_TURNS[weapon] !== undefined; // 쌍권총은 탄창을 갈지 않고 돌린다
   if (u.mag) {
     let d = 0, visible = true;
     if (rl !== null && !spinning) {
@@ -1056,8 +1069,8 @@ function applyReload(item, weapon, rl, p) {
       u.arrow.position.x = -(1 - span(rl, 0.5, 0.85)) * 14;
     }
   }
-  // 쌍권총: 방아쇠울에 건 손가락으로 권총을 두 바퀴 휙휙 돌린다(그동안 탄이 채워짐)
-  if (u.spin) u.spin.rotation.z = rl !== null && (weapon === 'dual' || weapon === 'dualrpg') ? span(rl, 0.08, 0.9) * Math.PI * 4 : 0;
+  // 쌍권총: 방아쇠울에 건 손가락으로 권총을 휙휙 돌린다(그동안 탄이 채워짐). 에너지 쌍권총은 더 빠르게 네 바퀴
+  if (u.spin) u.spin.rotation.z = rl !== null && spinning ? span(rl, 0.05, 0.95) * Math.PI * 2 * SPIN_TURNS[weapon] : 0;
 }
 
 /**

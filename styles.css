@@ -503,6 +503,8 @@ button.small { padding: 4px 10px; font-size: 13px; min-height: 30px; }
 .choice.legendary > span:first-of-type { color: #6A3FD8; }
 .choice.legendary[aria-pressed="true"] { background: linear-gradient(135deg, #7A4CFF, #2FB8E8); color: #fff; }
 .choice.legendary[aria-pressed="true"] > span:first-of-type { color: #fff; }
+.mod-weapon.legendary { border-color: #8E5CFF; color: #6A3FD8; }
+.mod-weapon.legendary[aria-pressed="true"] { background: linear-gradient(135deg, #7A4CFF, #2FB8E8); color: #fff; }
 .choice.legendary.locked { opacity: 0.6; border-style: dashed; cursor: not-allowed; }
 .grade-text-uncommon { color: #23863f; }
 .grade-text-rare { color: #2a5fd0; }

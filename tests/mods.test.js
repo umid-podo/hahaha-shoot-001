@@ -88,7 +88,7 @@ test('상점: 레어 30·엘리트 30 총기 스킨 60가지, 이름이 모두 �
     assert.deepEqual(g.parts.map((p) => p.slot), MOD_WEAPONS[g.weapon]);
     assert.ok(g.parts.every((p) => p.grade === g.grade && Number.isFinite(p.seed)));
   }
-  assert.deepEqual(new Set(SHOP.map((g) => g.weapon)), new Set(Object.keys(MOD_WEAPONS)), '8가지 총에 골고루');
+  assert.deepEqual(new Set(SHOP.map((g) => g.weapon)), new Set(['rifle', 'smg', 'sniper', 'shotgun', 'pistol', 'dual', 'rpg', 'crossbow']), '8가지 총에 골고루');
 });
 
 test('상점 구매: 코인을 내고 파츠 한 벌을 받아 바로 장착, 다시 열어도 보관, 분해 불가, 다시 장착 가능', () => {
@@ -159,4 +159,22 @@ test('시작 기본 코인: 처음 열면 100코인, 다시 열어도 또 주지
   mem.set('haha2.mods.v1', JSON.stringify({ items: [], equips: {}, nextId: 1, draws: 0, coins: 3, owned: [], starter: true }));
   assert.equal(createModStore(storage).coins, 93);
   assert.equal(createModStore(storage).coins, 93);
+});
+
+test('전설 무기 개조: 산 뒤에만 작업실에 나오고, 붙일 수 있는 칸이 있으며 장착하면 저장된다', async () => {
+  const { moddableWeapons } = await import('../src/game/mods.js');
+  assert.deepEqual(MOD_WEAPONS.energyrifle, ['stock', 'muzzle', 'scope', 'skin']);
+  assert.deepEqual(MOD_WEAPONS.energydual, ['muzzle', 'scope', 'skin']);
+  assert.ok(!canMount('energydual', 'stock') && !canMount('energyrifle', 'mag'));
+  const mem = new Map();
+  const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  const store = createModStore(storage);
+  const shown = () => moddableWeapons((id) => store.ownsWeapon(id));
+  assert.ok(!shown().includes('energyrifle'), '사기 전에는 작업실에 없음');
+  store.buy('legend-energyrifle');
+  assert.ok(shown().includes('energyrifle') && !shown().includes('energydual'));
+  const scope = { id: 900, ...rollItem(seededRng(5), 'scope') };
+  store.items.push(scope);
+  assert.ok(store.equip('energyrifle', scope.id));
+  assert.equal(createModStore(storage).equipped('energyrifle').scope.id, 900, '다시 열어도 장착 그대로');
 });
