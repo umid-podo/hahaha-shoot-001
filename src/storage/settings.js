@@ -1,4 +1,41 @@
 import { defaultStory, normalizeStory, normalizeStorySave, normalizeAllyPicks, STAGE_ORDER } from '../game/story.js';
+import { accountKey } from '../game/mods.js';
+import { ACCOUNTS, normalizeRank, defaultRank } from '../game/rank.js';
+
+// ── 계정(1~4) ──
+// 지금 플레이하는 계정. 랭크·스토리 저장(·배낭·코인은 mods.js)은 계정마다 따로 저장한다.
+let account = 1;
+const ACCOUNT_KEY = 'haha2.account.v1';
+export const currentAccount = () => account;
+/** 이 계정으로 바꾼다(저장 이름이 그 계정 것으로 바뀜). 마지막에 고른 계정은 다음 실행 때 미리 골라 둔다 */
+export function useAccount(n) {
+  account = ACCOUNTS.includes(n) ? n : 1;
+  try { localStorage.setItem(ACCOUNT_KEY, String(account)); } catch { /* 저장 불가 환경은 무시 */ }
+  return account;
+}
+/** 마지막에 플레이한 계정(없으면 1) */
+export function lastAccount() {
+  try {
+    const n = Number(localStorage.getItem(ACCOUNT_KEY));
+    return ACCOUNTS.includes(n) ? n : 1;
+  } catch {
+    return 1;
+  }
+}
+
+const RANK_KEY = 'haha2.rank.v1';
+/** 계정의 랭크 { tier, level, wins }(없으면 초보 등급 1레벨) */
+export function loadRank(n = account) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(accountKey(RANK_KEY, n)));
+    return saved ? normalizeRank(saved) : defaultRank();
+  } catch {
+    return defaultRank();
+  }
+}
+export function saveRank(rank, n = account) {
+  try { localStorage.setItem(accountKey(RANK_KEY, n), JSON.stringify(normalizeRank(rank))); } catch { /* 저장 불가 환경은 무시 */ }
+}
 
 const KEY = 'haha2.settings.v1';
 
@@ -115,23 +152,24 @@ export function saveStory(story) {
 const STORY_SAVE_KEY = 'haha2.storysave.v1';
 
 /**
- * 스토리 모드 저장(일시정지 화면의 '저장하기'): { wave, hp, label, pick: { characterId, weapon, secondary }, savedAt }.
+ * 스토리 모드 저장(일시정지 화면의 '저장하기', 계정마다 따로): { wave, hp, label, pick: { characterId, weapon, secondary }, savedAt, clean }.
+ * clean: 처음부터 스테이지 건너뛰기 없이 해 온 판(끝까지 깨면 랭크가 오른다).
  * 없거나 읽을 수 없으면 null.
  */
 export function loadStorySave() {
   try {
-    return normalizeStorySave(JSON.parse(localStorage.getItem(STORY_SAVE_KEY)));
+    return normalizeStorySave(JSON.parse(localStorage.getItem(accountKey(STORY_SAVE_KEY, account))));
   } catch {
     return null;
   }
 }
 
 export function saveStorySave(save) {
-  try { localStorage.setItem(STORY_SAVE_KEY, JSON.stringify(save)); } catch { /* 저장 불가 환경은 무시 */ }
+  try { localStorage.setItem(accountKey(STORY_SAVE_KEY, account), JSON.stringify(save)); } catch { /* 저장 불가 환경은 무시 */ }
 }
 
 export function clearStorySave() {
-  try { localStorage.removeItem(STORY_SAVE_KEY); } catch { /* 저장 불가 환경은 무시 */ }
+  try { localStorage.removeItem(accountKey(STORY_SAVE_KEY, account)); } catch { /* 저장 불가 환경은 무시 */ }
 }
 
 const STORY_DEFAULTS_KEY = 'haha2.storydefaults.v1';

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <!-- 유탄 발사기(보조무기): 굵은 총열, 6발 회전 실린더, 위에 커다란 스코프 -->
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3C4A2C"/><stop offset="1" stop-color="#1E2616"/></linearGradient></defs>
+  <rect width="300" height="300" fill="url(#bg)"/>
+  <g transform="translate(150 150) rotate(-30) translate(-150 -150)">
+    <rect x="20" y="138" width="44" height="12" fill="#5E6672"/><rect x="20" y="158" width="44" height="12" fill="#5E6672"/>
+    <rect x="12" y="128" width="16" height="52" rx="4" fill="#2D2F34"/>
+    <rect x="62" y="132" width="36" height="40" rx="6" fill="#2D2F34"/>
+    <rect x="96" y="126" width="56" height="52" rx="14" fill="#4B5240"/>
+    <g stroke="#1E1F23" stroke-width="4"><line x1="100" y1="138" x2="148" y2="138"/><line x1="100" y1="152" x2="148" y2="152"/><line x1="100" y1="166" x2="148" y2="166"/></g>
+    <rect x="150" y="140" width="120" height="24" rx="4" fill="#1A1C20"/>
+    <g fill="#3A3E46"><rect x="164" y="138" width="6" height="28"/><rect x="180" y="138" width="6" height="28"/><rect x="196" y="138" width="6" height="28"/><rect x="212" y="138" width="6" height="28"/></g>
+    <rect x="250" y="136" width="22" height="32" rx="4" fill="#5E6672"/>
+    <path d="M70 172 L90 172 L84 214 L64 212 Z" fill="#2D2F34"/>
+    <path d="M196 164 L212 164 L210 200 L194 200 Z" fill="#2D2F34"/>
+    <!-- 스코프 -->
+    <rect x="96" y="114" width="70" height="6" fill="#1A1C20"/>
+    <rect x="104" y="98" width="20" height="18" fill="#1A1C20"/><rect x="140" y="98" width="20" height="18" fill="#1A1C20"/>
+    <rect x="78" y="84" width="110" height="18" rx="9" fill="#1A1C20"/>
+    <path d="M186 80 L204 76 L204 110 L186 106 Z" fill="#1A1C20"/>
+    <ellipse cx="204" cy="93" rx="4" ry="16" fill="#4C8DFF"/>
+  </g>
+</svg>

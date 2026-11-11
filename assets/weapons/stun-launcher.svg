@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <!-- 전기충격기 발사기(보조무기): 노란 몸통·넓은 발사구·푸른 전극, 포물선으로 날아가는 전기충격기 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1D2A44"/><stop offset="1" stop-color="#0D1424"/></linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="300" height="300" fill="url(#bg)"/>
+  <path d="M150 120 Q 210 20 268 110" fill="none" stroke="#7FF4FF" stroke-width="3" stroke-dasharray="8 8" opacity="0.7"/>
+  <g transform="translate(262 112) rotate(40)"><rect x="-12" y="-7" width="24" height="14" rx="3" fill="#F2C230"/><circle cx="14" cy="-4" r="3" fill="#BFF8FF" filter="url(#glow)"/><circle cx="14" cy="4" r="3" fill="#BFF8FF" filter="url(#glow)"/></g>
+  <path d="M248 148 l10 -14 l-4 12 l10 -2 l-12 16 l4 -12 z" fill="#BFF8FF" filter="url(#glow)"/>
+  <g transform="translate(140 175) rotate(-25)">
+    <path d="M-90 -20 L40 -20 L50 -10 L50 22 L40 32 L-70 32 L-90 18 Z" fill="#F2C230"/>
+    <rect x="48" y="-26" width="28" height="64" rx="4" fill="#1A1C20"/>
+    <rect x="54" y="-18" width="16" height="48" fill="#F7D560"/>
+    <circle cx="68" cy="-2" r="4" fill="#BFF8FF" filter="url(#glow)"/><circle cx="68" cy="14" r="4" fill="#BFF8FF" filter="url(#glow)"/>
+    <g fill="#1A1C20"><rect x="-60" y="-14" width="10" height="8"/><rect x="-40" y="-14" width="10" height="8"/><rect x="-20" y="-14" width="10" height="8"/></g>
+    <g fill="#7FF4FF" filter="url(#glow)"><rect x="0" y="6" width="8" height="6"/><rect x="12" y="6" width="8" height="6"/><rect x="24" y="6" width="8" height="6"/></g>
+    <path d="M-62 32 L-36 32 L-48 92 L-74 88 Z" fill="#1E1F23"/>
+  </g>
+</svg>

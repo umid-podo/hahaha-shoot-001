@@ -15,16 +15,19 @@ import { loadAssets, createRenderer } from './render/canvas.js';
 import { createWorld3D } from './render/world3d.js';
 import { createScreens } from './ui/screens.js';
 import { modStore } from './game/mods.js';
+import { addWin, rankMessage } from './game/rank.js';
 import { unlock, setMuted, playEvents, updateEngine, updateBattleMusic, restartMusic } from './audio/synth.js';
 import {
   loadSettings, saveSettings, loadBalance, saveBalance, loadBalanceDefaults, saveBalanceDefaults, loadSingle, saveSingle, loadStory, saveStory,
-  loadStorySave, saveStorySave, clearStorySave,
+  loadStorySave, saveStorySave, clearStorySave, useAccount, lastAccount, currentAccount, loadRank, saveRank,
 } from './storage/settings.js';
 import { applyOverrides, applyCustomDefaults, changedCount } from './game/balance.js';
 
 const MAX_FRAME_MS = 100;
 const MAX_STEPS_PER_FRAME = 6;
 const RESULT_DELAY_MS = 900;
+// 2인 대결에서 이긴 사람이 승리 포즈를 취하는 동안(결과 화면은 그 뒤에)
+const VICTORY_MS = 3600;
 
 const settings = loadSettings();
 // 밸런스 메뉴에서 바꿔 저장해 둔 수치를 가장 먼저 적용한다.
@@ -40,6 +43,10 @@ const single = loadSingle();
 const story = loadStory();
 // 스토리 모드 이번 판을 어디서부터 시작했는지(이어하기·저장하기). 재대결은 이 자리부터 다시 한다. null이면 처음부터.
 let resumeFrom = null;
+// 이번 스토리 판을 처음부터 스테이지 건너뛰기 없이 해 왔는지(끝까지 깨면 랭크 +1레벨)
+let storyClean = false;
+// 지금 계정의 랭크 { tier, level, wins }
+let rank = null;
 let match = null;
 let inputs = null;
 let controls = null;
@@ -126,9 +133,12 @@ function startMatch() {
   const startAt = !resumeFrom && single.storyStart !== 'rooftop' && STAGES[single.storyStart]
     ? { wave: stageStart(single.storyStart), hp: FULL_HP, hp2: FULL_HP, skip: true } : null;
   // 건 카타 수련장: P1이 고른 캐릭터로 훈련용 전투 로봇과 끝없이 건 카타
+  // 랭크: 처음 스테이지(옥상)부터 건너뛰기 없이 시작한 판만(저장한 판은 그 판이 그랬을 때만)
+  storyClean = storyMode() && !startAt && (resumeFrom ? resumeFrom.clean === true : true);
   match = mode === 'training' ? createTrainingMatch(loadout.P1)
     : storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies())
-    : createMatch(mode === 'single' ? singleLoadout() : loadout, Date.now(), { wide: true });
+    // 2인 대결은 준비 화면에서 고른 경기장(넓은 옥상·고공 요새)
+    : createMatch(mode === 'single' ? singleLoadout() : loadout, Date.now(), { wide: true, map: mode === 'versus' ? settings.versusMap ?? 'wide' : 'wide' });
   inputs = createInputs(match.players);
   humans = match.players.filter((p) => !p.ai);
   const aiPlayer = match.players.find((p) => p.ai);
@@ -209,7 +219,7 @@ function saveStoryProgress() {
   }
   const [hero, partner] = match.players.filter((p) => !p.ai);
   const pickOf = (p) => ({ characterId: p.characterId, weapon: p.primary, secondary: p.secondary });
-  const save = { ...point, pick: pickOf(hero), savedAt: Date.now() };
+  const save = { ...point, pick: pickOf(hero), savedAt: Date.now(), ...(storyClean ? { clean: true } : {}) };
   if (partner) save.pick2 = pickOf(partner);
   saveStorySave(save);
   resumeFrom = save;
@@ -239,7 +249,39 @@ function showSetup() {
   match = null;
   resumeFrom = null;
   if (mode === 'single') screens.showSingle(SLOTS[0], loadout, single, story, coopLoadout);
-  else screens.showReady(SLOTS, loadout);
+  else screens.showReady(SLOTS, loadout, settings.versusMap ?? 'wide');
+}
+
+/** 계정 고르기: 그 계정의 랭크·코인·배낭·산 무기·스토리 저장으로 바꾼다(다른 계정에는 영향 없음) */
+function selectAccount(n) {
+  useAccount(n);
+  modStore().useAccount(n);
+  rank = loadRank(n);
+  resumeFrom = null;
+  // 다른 계정이 산 전설 무기를 고른 채로 남지 않게
+  for (const pick of [loadout.P1, loadout.P2, coopLoadout.P2]) {
+    if (!modStore().ownsWeapon(pick.weapon)) pick.weapon = 'rifle';
+  }
+  screens.setContinue(loadStorySave());
+  screens.setAccount(n, rank);
+  screens.show('menu');
+}
+
+/**
+ * 경기가 끝났을 때 랭크: 2인 대결에서 누가 이기거나(무승부 제외), 스토리 모드를 건너뛰기 없이 끝까지 깨면 지금 계정이 1레벨 오른다.
+ * 30레벨이면 20코인과 함께 다음 등급으로 승급. 결과 화면에 보일 { message, result }를 돌려준다(오르지 않으면 null).
+ */
+function awardRank(ended) {
+  const won = ended.story ? ended.winner === 'earth' && storyClean : mode === 'versus' && ['earth', 'isb'].includes(ended.winner);
+  if (!won || ended.training) return null;
+  const result = addWin(rank);
+  rank = result.rank;
+  saveRank(rank);
+  if (result.coins) modStore().addCoins(result.coins);
+  screens.setAccount(currentAccount(), rank);
+  const message = rankMessage(result);
+  coinToast(message);
+  return { message, result };
 }
 
 const screens = createScreens({
@@ -261,6 +303,9 @@ const screens = createScreens({
   onSkipStage: skipStage,
   onContinue: continueStory,
   onClearSave() { clearStorySave(); resumeFrom = null; screens.setContinue(null); },
+  onAccount: selectAccount,
+  onAccounts() { match = null; screens.showAccounts(currentAccount()); },
+  onMap(id) { settings.versusMap = id; saveSettings(settings); },
   onMenu() { match = null; screens.show('menu'); },
   onPause: pause,
   onResume: resume,
@@ -274,6 +319,11 @@ const screens = createScreens({
   onBalanceDefaultsChange(values) { saveBalanceDefaults(values); },
 });
 screens.setBalanceStatus(changedCount());
+// 마지막에 플레이한 계정을 미리 골라 둔다(처음 화면에서 계정 1~4 중 다시 고른다)
+useAccount(lastAccount());
+modStore().useAccount(currentAccount());
+rank = loadRank();
+screens.setAccount(currentAccount(), rank);
 screens.setContinue(loadStorySave());
 setMuted(settings.muted);
 screens.syncSettings(settings);
@@ -372,7 +422,14 @@ function frame(now) {
         }
         // 마지막 한 방(즉사기 레이저 등)이 보이도록 결과 화면은 조금 뒤에 띄운다
         const ended = match;
-        setTimeout(() => { if (match === ended) screens.showResult(ended); }, RESULT_DELAY_MS);
+        const ranked = awardRank(ended);
+        // 2인 대결: 이긴 사람이 승리 포즈(3D 화면이 그 사람을 비춘다)를 취한 뒤 결과 화면
+        const winnerPlayer = mode === 'versus' && !ended.story && ended.players.find((p) => p.team === ended.winner);
+        if (winnerPlayer) {
+          ended.victory = { id: winnerPlayer.id, t: 0 };
+          screens.announce(`${winnerPlayer.id} ${winnerPlayer.name} 승리! 승리 포즈!`);
+        }
+        setTimeout(() => { if (match === ended) screens.showResult(ended, ranked); }, winnerPlayer ? VICTORY_MS : RESULT_DELAY_MS);
       }
     }
     if (steps === MAX_STEPS_PER_FRAME) accumulator = 0;
@@ -382,6 +439,7 @@ function frame(now) {
   // 건 카타 동안에는 조작 패널 대신 1·2·3·4 버튼, 눌러야 할 버튼은 빛난다
   controlsEl.classList.toggle('kata', !!match?.gunkata);
   kataKeys.sync(match?.phase === 'gunkata' ? glowingKey(match.gunkata) : null);
+  if (match?.victory) match.victory.t += frameMs / 1000;
   if (match) {
     if (world) {
       // 건 카타(옆에서 본 2D 화면) 동안은 3D를 그리지 않고 3D 화면도 숨긴다(2D 화면만 보인다)
@@ -414,6 +472,8 @@ async function boot() {
       document.querySelector('#world').hidden = true;
     }
     screens.setLoaded();
+    // 처음 시작할 때 계정 1~4 중 하나를 고른다
+    screens.showAccounts(currentAccount());
     requestAnimationFrame(frame);
   } catch (error) {
     screens.setLoadError(error.message);

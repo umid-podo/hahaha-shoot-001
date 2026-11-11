@@ -24,7 +24,7 @@ const shots = (events, id) => events.filter((e) => e.type === 'fire' && e.player
 
 test('새 주무기: 화염방사기는 누구나, 에너지 무기 둘은 전설(상점 구매) 무기', () => {
   for (const id of ['flamethrower', 'energyrifle', 'energydual']) assert.ok(PRIMARY_IDS.includes(id));
-  assert.deepEqual(LEGENDARY_IDS, ['energyrifle', 'energydual']);
+  assert.deepEqual(LEGENDARY_IDS, ['energyrifle', 'energydual', 'energyrpg']);
   assert.ok(!WEAPONS.flamethrower.legendary);
 });
 

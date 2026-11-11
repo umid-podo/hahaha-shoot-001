@@ -301,6 +301,9 @@ export function makeChute(height = 180) {
  */
 export function makeHigh(g) {
   if (g.kind === 'container') return makeContainer(g);
+  if (g.bridge) return makeBridgeDeck(g);
+  if (g.ramp) return makeRamp(g);
+  if (g.kind === 'fortress') return makeFortress(g);
   const out = new THREE.Group();
   const H = g.height;
   const steel = mat('#5E6672', { metal: 0.7, rough: 0.4 });
@@ -370,4 +373,148 @@ export function makeCover(c, teamColor, h = 100) {
   g.add(at(box(c.w + 2, 8, c.h + 2, mat(teamColor ?? '#FFD45E')), 0, h - 4, 0));
   g.userData.block = block;
   return g;
+}
+
+/** 노랑·검정 경고 줄을 가장자리 둘레에 붙인다(높이 H, 위에서 본 w×d) */
+function hazardEdge(out, w, d, H, { sides = [true, true, true, true] } = {}) {
+  const yellow = mat('#FFC53D', { rough: 0.6 }), black = mat('#1A1C20', { rough: 0.6 });
+  const edges = [[w + 6, 3, 0, d / 2 + 2], [w + 6, 3, 0, -d / 2 - 2], [3, d + 6, w / 2 + 2, 0], [3, d + 6, -w / 2 - 2, 0]];
+  edges.forEach(([ew, ed, x, z], i) => {
+    if (!sides[i]) return;
+    const along = ew > ed;
+    const len = along ? ew : ed;
+    const n = Math.floor(len / 24);
+    for (let k = 0; k < n; k++) {
+      const seg = box(along ? 24 : 4, 5, along ? 4 : 24, k % 2 ? black : yellow);
+      seg.position.set(along ? -len / 2 + 12 + k * 24 : x, H - 2, along ? z : -len / 2 + 12 + k * 24);
+      out.add(seg);
+    }
+  });
+}
+
+/**
+ * 고공 요새의 매우 높은 고지대: 콘크리트 벽(가로 띠·창문 줄), 위 철판 바닥과 가장자리 경고 줄, 모서리 철골 기둥, 위 귀퉁이 경고등.
+ */
+function makeFortress(g) {
+  const out = new THREE.Group();
+  const H = g.height;
+  const concrete = mat('#8C877E', { rough: 0.95 });
+  out.add(at(box(g.w, H - 8, g.h, concrete), 0, (H - 8) / 2, 0));
+  out.add(at(box(g.w + 8, 8, g.h + 8, mat('#6F7882', { metal: 0.6, rough: 0.5 })), 0, H - 4, 0));
+  // 바닥 철판 줄무늬
+  const dark = mat('#2A2E35', { metal: 0.5, rough: 0.6 });
+  for (let x = -g.w / 2 + 30; x < g.w / 2 - 20; x += 40) out.add(at(box(3, 0.8, g.h - 30, dark), x, H + 0.4, 0));
+  hazardEdge(out, g.w, g.h, H + 2);
+  // 벽의 가로 띠와 불 켜진 창문 줄
+  const band = mat('#6E6A62', { rough: 1 });
+  const lit = mat('#FFE6A0', { emissive: '#FFB84A' }), off = mat('#2A3040', { metal: 0.4, rough: 0.3 });
+  for (let y = 70; y < H - 30; y += 90) {
+    out.add(at(box(g.w + 4, 6, g.h + 4, band), 0, y, 0));
+    let i = 0;
+    for (let x = -g.w / 2 + 50; x < g.w / 2 - 30; x += 70) {
+      for (const sz of [1, -1]) out.add(at(box(30, 26, 2, (i++ * 7 + y) % 3 ? off : lit), x, y + 32, sz * (g.h / 2 + 1)));
+    }
+    for (let z = -g.h / 2 + 50; z < g.h / 2 - 30; z += 70) {
+      for (const sx of [1, -1]) out.add(at(box(2, 26, 30, (i++ * 5 + y) % 3 ? off : lit), sx * (g.w / 2 + 1), y + 32, z));
+    }
+  }
+  const steel = mat('#5E6672', { metal: 0.7, rough: 0.4 });
+  const lamp = mat('#FF3B30', { emissive: '#FF2A1A' });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    out.add(at(box(14, H, 14, steel), sx * (g.w / 2 - 7), H / 2, sz * (g.h / 2 - 7)));
+    out.add(at(sphere(8, lamp, 10, 8), sx * (g.w / 2 - 7), H + 12, sz * (g.h / 2 - 7)));
+  }
+  return out;
+}
+
+/** 높은 다리: 위에 서는 철판 상판(가장자리 경고 줄·낮은 난간 기둥), 상판 아래 철골 보, 일정 간격의 기둥(밑으로 지나다닐 수 있음) */
+function makeBridgeDeck(g) {
+  const out = new THREE.Group();
+  const H = g.height;
+  const long = g.w >= g.h;
+  const L = long ? g.w : g.h, W = long ? g.h : g.w;
+  const deck = new THREE.Group();
+  deck.add(at(box(L, 14, W, mat('#7C858F', { metal: 0.6, rough: 0.5 })), 0, H - 7, 0));
+  deck.add(at(box(L, 18, W * 0.5, mat('#4A525C', { metal: 0.6, rough: 0.5 })), 0, H - 23, 0));
+  const dark = mat('#2A2E35', { metal: 0.5, rough: 0.6 });
+  for (let x = -L / 2 + 20; x < L / 2 - 10; x += 30) deck.add(at(box(2, 0.8, W - 16, dark), x, H + 0.4, 0));
+  hazardEdge(deck, L, W, H + 2, { sides: [true, true, false, false] });
+  // 기둥: 다리 아래 두 줄, 300마다(가장자리 쪽에 붙여 밑으로 걸어 지나갈 수 있게 가늘게)
+  const steel = mat('#5E6672', { metal: 0.7, rough: 0.4 });
+  for (let x = -L / 2 + 150; x <= L / 2 - 150; x += 300) {
+    for (const sz of [-1, 1]) deck.add(at(box(10, H - 30, 10, steel), x, (H - 30) / 2, sz * (W / 2 - 8)));
+  }
+  // 상판 가장자리 낮은 난간 기둥과 빛나는 띠(밤에도 다리가 보이게)
+  const glow = mat('#7FE7FF', { emissive: '#2AB8E0' });
+  for (const sz of [-1, 1]) {
+    deck.add(at(box(L, 3, 3, glow), 0, H + 18, sz * (W / 2 - 2)));
+    for (let x = -L / 2 + 10; x <= L / 2 - 10; x += 60) deck.add(at(box(3, 18, 3, steel), x, H + 9, sz * (W / 2 - 2)));
+  }
+  if (!long) deck.rotation.y = Math.PI / 2;
+  out.add(deck);
+  return out;
+}
+
+/** 오르막길: 비탈진 철판 길(미끄럼 방지 홈), 양옆 낮은 벽, 아래를 막는 콘크리트 받침. g.ramp.axis·dir 쪽으로 오른다 */
+function makeRamp(g) {
+  const out = new THREE.Group();
+  const H = g.height;
+  const alongX = g.ramp.axis === 'x';
+  const L = alongX ? g.w : g.h, W = alongX ? g.h : g.w;
+  const inner = new THREE.Group();
+  // 옆에서 본 삼각형 받침(+X 쪽이 높다)
+  const shape = new THREE.Shape([new THREE.Vector2(-L / 2, 0), new THREE.Vector2(L / 2, 0), new THREE.Vector2(L / 2, H), new THREE.Vector2(-L / 2, 0)]);
+  const body = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: W, bevelEnabled: false }), mat('#8C877E', { rough: 0.95 }));
+  body.position.z = -W / 2;
+  inner.add(body);
+  // 비탈 위 철판과 미끄럼 방지 홈
+  const slope = Math.atan2(H, L), len = Math.hypot(L, H);
+  const plate = at(box(len, 4, W, mat('#7C858F', { metal: 0.6, rough: 0.5 })), 0, H / 2 + 2, 0);
+  plate.rotation.z = slope;
+  inner.add(plate);
+  const grip = mat('#FFC53D', { rough: 0.6 });
+  for (let i = 1; i < 12; i++) {
+    const k = i / 12;
+    const bar = at(box(5, 2, W - 20, grip), -L / 2 + L * k, H * k + 4, 0);
+    bar.rotation.z = slope;
+    inner.add(bar);
+  }
+  // 위쪽 화살표 표시(오르는 방향)
+  const steel = mat('#5E6672', { metal: 0.7, rough: 0.4 });
+  for (const sz of [-1, 1]) {
+    const wall = at(box(len, 22, 6, steel), 0, H / 2 + 12, sz * (W / 2 - 3));
+    wall.rotation.z = slope;
+    inner.add(wall);
+  }
+  // 오르는 방향(+축 dir)으로 돌린다
+  const dir = g.ramp.dir;
+  if (alongX) inner.rotation.y = dir > 0 ? 0 : Math.PI;
+  else inner.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+  out.add(inner);
+  return out;
+}
+
+/** 점프 패드: 바닥의 둥근 판(푸르게 빛나는 고리·위쪽 화살표). userData.glow를 깜빡여 보인다 */
+export function makeJumpPad(r = 70) {
+  const out = new THREE.Group();
+  out.add(at(cyl(r, r + 6, 8, mat('#2A2E35', { metal: 0.6, rough: 0.4 }), 28), 0, 4, 0));
+  const glow = new THREE.Mesh(new THREE.TorusGeometry(r * 0.78, 6, 8, 32), new THREE.MeshBasicMaterial({ color: '#5FEFFF' }));
+  glow.rotation.x = Math.PI / 2;
+  glow.position.y = 9;
+  out.add(glow);
+  const core = new THREE.Mesh(new THREE.CircleGeometry(r * 0.6, 28), new THREE.MeshBasicMaterial({ color: '#1B6E86' }));
+  core.rotation.x = -Math.PI / 2;
+  core.position.y = 8.6;
+  out.add(core);
+  // 위쪽 화살표 세 겹
+  const arrowMat = new THREE.MeshBasicMaterial({ color: '#BFF8FF', transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+  const arrows = [];
+  for (let i = 0; i < 3; i++) {
+    const a = new THREE.Mesh(new THREE.ConeGeometry(r * 0.35, 30, 4, 1, true), arrowMat);
+    a.position.y = 30 + i * 40;
+    out.add(a);
+    arrows.push(a);
+  }
+  out.userData = { glow, arrows, r };
+  return out;
 }

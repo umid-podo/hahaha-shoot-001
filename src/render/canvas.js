@@ -3237,7 +3237,29 @@ export function createRenderer(canvas, wrap, assets) {
     if (!drawGauge(p, wx + 14, wy + 64, 272)) {
       const cool = WEAPONS[p.secondary]?.ownCooldown ? p.cooldowns[p.secondary] ?? 0 : 0;
       if (cool > 0) bar(wx + 14, wy + 64, 272, 1 - cool / WEAPONS[p.secondary].interval, '#8E6BD6');
-    }
+    }  }
+
+  /** 감전(에너지 RPG)·마비(전기 장판) 중이면 화면 테두리를 푸르게 하고 가운데 아래에 남은 초를 띄운다 */
+  function drawStunned(p, rect) {
+    const shock = p.shock ?? 0, freeze = p.freeze ?? 0;
+    if (!p.alive || (shock <= 0 && freeze <= 0)) return;
+    const left = Math.max(shock, freeze);
+    ctx.save();
+    const flick = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() / 70));
+    ctx.strokeStyle = `rgba(95,239,255,${0.45 * flick})`;
+    ctx.lineWidth = 18;
+    ctx.strokeRect(rect.x + 9, rect.y + 9, rect.w - 18, rect.h - 18);
+    const text = shock > 0 ? `⚡ 감전! 움직일 수도 쏠 수도 없음 ${left.toFixed(1)}초` : `⚡ 마비! 움직일 수 없음 ${left.toFixed(1)}초`;
+    ctx.font = 'bold 24px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(text).width + 36;
+    const cx = rect.x + rect.w / 2, cy = rect.y + rect.h * 0.7;
+    ctx.fillStyle = 'rgba(6,24,40,0.82)';
+    ctx.beginPath(); ctx.roundRect(cx - w / 2, cy - 22, w, 44, 12); ctx.fill();
+    ctx.strokeStyle = '#5FEFFF'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#BFF8FF';
+    ctx.fillText(text, cx, cy + 1);
+    ctx.restore();
   }
 
   /** 회피 남은 횟수 점(오른쪽 끝이 (x, y)). 다 쓰면 다시 채워질 때까지 회색 점 */
@@ -3293,6 +3315,7 @@ export function createRenderer(canvas, wrap, assets) {
     drawHurt(p, rect, hud.hurtFrom[p.id], time, reducedMotion);
     drawRadar(match, p, rect);
     scaled(rect.x, rect.y + rect.h, Math.max(1, Math.min(uiScale, 1.3, rect.w / 560)), () => drawStatus(p, rect));
+    drawStunned(p, rect);
     ctx.restore();
   }
 

@@ -151,7 +151,7 @@ export function createWorld3D(canvas, wrap, assets) {
     if (env.group) scene.remove(env.group);
     const group = new THREE.Group();
     scene.add(group);
-    const builders = { field: buildField, arena: buildRooftop, rooftop: buildRooftop, corridor: buildCorridor, sky: buildSky, road: buildRoad, bridge: buildBridge, drive: buildDrive };
+    const builders = { field: buildField, fortress: buildFortress, arena: buildRooftop, rooftop: buildRooftop, corridor: buildCorridor, sky: buildSky, road: buildRoad, bridge: buildBridge, drive: buildDrive };
     env = { key, group, update: () => {}, ...(builders[key] ?? buildRooftop)(group, match) };
   }
 
@@ -311,6 +311,50 @@ export function createWorld3D(canvas, wrap, assets) {
     });
     skyline(group, { ring: Math.max(W, D) * 0.45, count: 48, minH: 1100, maxH: 3200 });
     return {};
+  }
+
+  /**
+   * 고공 요새(스토리 1스테이지 옥상·2인 대결에서 고름): 넓은 옥상 바닥·난간·둘레 장식 위에 계단실(계단 컷씬 문)과 점프 패드.
+   * 매우 높은 고지대·다리·오르막길은 고지대(placeHighs)로 그린다.
+   */
+  function buildFortress(group, match) {
+    buildField(group, match);
+    // 계단실(스토리 옥상 → 복도 계단 컷씬의 문)
+    const stair = new THREE.Group();
+    stair.add(new THREE.Mesh(new THREE.BoxGeometry(150, 190, 120), M.mat('#8F8A80')));
+    stair.children[0].position.y = 95;
+    const door = new THREE.Mesh(new THREE.BoxGeometry(70, 130, 4), M.mat('#8A5A2B'));
+    door.position.set(0, 65, 62);
+    stair.add(door);
+    stair.position.set(ROOF_STAIRS.x, 0, ROOF_STAIRS.y - 60);
+    group.add(stair);
+    // 점프 패드(빛나는 고리·위쪽 화살표가 둥실둥실)
+    const pads = (match.pads ?? []).map((pad) => {
+      const m = M.makeJumpPad(pad.r);
+      m.position.set(pad.x, 0, pad.y);
+      group.add(m);
+      return m;
+    });
+    // 고지대 위 탐조등 빛(밤하늘을 가르는 빛기둥)
+    for (const g of (match.highs ?? []).filter((h) => h.kind === 'fortress')) {
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(6, 70, 1400, 16, 1, true),
+        new THREE.MeshBasicMaterial({ color: '#BFE6FF', transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      beam.position.set(g.x, g.height + 700, g.y);
+      beam.rotation.z = 0.25;
+      group.add(beam);
+    }
+    return {
+      update(m, time, reducedMotion) {
+        const cut = m.cutscene;
+        door.rotation.y = cut?.kind === 'stairs' && !cut.switched ? -cut.door * 1.4 : 0;
+        door.position.x = cut?.kind === 'stairs' && !cut.switched ? -cut.door * 30 : 0;
+        for (const [i, pad] of pads.entries()) {
+          const k = reducedMotion ? 0.5 : (Math.sin(time * 4 + i) + 1) / 2;
+          pad.userData.glow.material.color.setHSL(0.52, 1, 0.55 + 0.2 * k);
+          pad.userData.arrows.forEach((a, j) => { a.position.y = 30 + j * 40 + (reducedMotion ? 0 : ((time * 60) % 40)); });
+        }
+      },
+    };
   }
 
   /** 복도(2스테이지): 본부 복도 그림 바닥, 사방 벽·천장 조명, 엘리베이터, 벽 포탑, 계단 문, 천장 구멍(R-10) */
@@ -793,7 +837,7 @@ export function createWorld3D(canvas, wrap, assets) {
     a.material.rotation = pose.lying ? Math.PI / 2 : pose.spin ?? 0;
     a.material.opacity = pose.alpha ?? 1;
     a.material.transparent = true;
-    a.material.color.set(pose.lying ? '#8A8E96' : pose.hurt ? '#FF7A70' : '#FFFFFF');
+    a.material.color.set(pose.lying ? '#8A8E96' : pose.shocked ? '#8FEFFF' : pose.hurt ? '#FF7A70' : '#FFFFFF');
     a.aim = pose.aim ?? 0;
     a.sprite.visible = (pose.alpha ?? 1) > 0.02;
   }
@@ -822,6 +866,15 @@ export function createWorld3D(canvas, wrap, assets) {
       if (p.drone) h += 30 + (reducedMotion ? 0 : Math.sin(time * 5 + p.x * 0.01) * 6);
       if (p.jetpack && p.alive) h += 14 + (reducedMotion ? 0 : Math.sin(time * 4 + p.x * 0.01) * 4);
       if (!aircraft) h += p.z ?? 0; // 점프·고지대 높이
+      // 2인 대결 승리 포즈: 이긴 사람이 신나게 깡충깡충 뛰며 총을 하늘로 치켜든다
+      const winner = match.victory?.id === p.id && p.alive;
+      a.victoryRaise = winner ? Math.min(1, match.victory.t / 0.5) : 0;
+      if (winner && !reducedMotion) h += Math.abs(Math.sin((Math.PI * Math.max(0, match.victory.t - 0.4)) / 0.55)) * 70;
+      // 감전·마비: 몸이 푸르게 깜빡이고 전기 불꽃이 튄다
+      const stunned = p.alive && ((p.shock ?? 0) > 0 || (p.freeze ?? 0) > 0);
+      if (stunned && !reducedMotion && Math.random() < 0.35) {
+        addEffect('spark', { x: p.x + (Math.random() - 0.5) * 50, y: p.y + (Math.random() - 0.5) * 50, h: h + 30 + Math.random() * 120, color: '#7FF4FF', size: 36 });
+      }
       // 탈것 모델
       const model = setModel(a, aircraft);
       if (model) {
@@ -859,6 +912,7 @@ export function createWorld3D(canvas, wrap, assets) {
         bare: p.alive && !p.drone && hasHeldGun(p.weapon),
         alpha: e?.kind === 'walk' ? Math.min(1, 0.3 + clamp01(e.t / e.duration) * 2) : 1,
         lying: !p.alive, hurt: p.hurt > 0, aim: p.aim,
+        shocked: stunned && (reducedMotion || Math.floor(time * 14) % 2 === 0),
       });
       placeHeld(a, p, h, time, reducedMotion);
       a.ring.visible = p.boss && p.alive;
@@ -895,7 +949,8 @@ export function createWorld3D(canvas, wrap, assets) {
     const side = 0.32;
     const rx = Math.cos(p.aim + Math.PI / 2), rz = Math.sin(p.aim + Math.PI / 2);
     a.held.position.set(p.x + dx * 26 * s + rx * 10 * s, h + (GUN_Y - 6) * s + bob, p.y + dz * 26 * s + rz * 10 * s);
-    a.held.rotation.set(0, -(p.aim - side), 0);
+    // 승리 포즈: 총구를 하늘로 치켜든다
+    a.held.rotation.set(0, -(p.aim - side), (a.victoryRaise ?? 0) * 1.15);
     a.held.scale.setScalar(2.0 * s);
     poseHeldGun(a.held, p);
   }
@@ -957,7 +1012,7 @@ export function createWorld3D(canvas, wrap, assets) {
   function placeAimLines(match) {
     const live = new Set();
     const stage = match.story?.stage;
-    if (stage !== 'sky' && !match.cutscene && !match.killcam && match.phase !== 'countdown') {
+    if (stage !== 'sky' && !match.cutscene && !match.killcam && !match.victory && match.phase !== 'countdown') {
       for (const p of match.players) {
         const character = CHARACTERS.find((c) => c.id === p.characterId);
         if (!p.alive || p.entering || p.plane || character?.aircraft || p.scripted || p.dash) continue;
@@ -1148,9 +1203,47 @@ export function createWorld3D(canvas, wrap, assets) {
     g.add(flame);
     return g;
   }
+  /** 에너지 RPG 로켓: 흰 속심을 감싼 커다란 푸른 빛 덩어리 + 꼬리 */
+  function makeEnergyRocket() {
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(GEO.unitSphere, BOLT.core);
+    core.scale.setScalar(7);
+    const glow = new THREE.Mesh(GEO.unitSphere, BOLT.glow);
+    glow.scale.set(26, 15, 15);
+    const trail = new THREE.Mesh(GEO.boltTrail, BOLT.trail);
+    trail.scale.set(1.4, 4, 4);
+    g.add(core, glow, trail);
+    return g;
+  }
+  /** 전기충격기(던져 날아가는 탄): 노란 몸통에 푸른 전극 두 개 */
+  function makeStunDart() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(GEO.rocketBody, M.mat('#F2C230', { metal: 0.3, rough: 0.4 }));
+    body.rotation.z = Math.PI / 2;
+    body.scale.set(1.3, 0.6, 1.3);
+    g.add(body);
+    for (const z of [-4, 4]) {
+      const prong = new THREE.Mesh(GEO.unitSphere, BOLT.core);
+      prong.scale.setScalar(3);
+      prong.position.set(14, 0, z);
+      g.add(prong);
+    }
+    const glow = new THREE.Mesh(GEO.unitSphere, BOLT.glow);
+    glow.scale.setScalar(14);
+    glow.position.x = 14;
+    g.add(glow);
+    return g;
+  }
   function makeShot(b) {
+    if (b.weapon === 'stunlauncher') return makeStunDart();
     if (b.thrown) {
       return new THREE.Mesh(GEO.grenade, M.mat('#4E6B3A'));
+    }
+    if (b.weapon === 'energyrpg') return makeEnergyRocket();
+    if (b.weapon === 'grenadelauncher') {
+      const m = new THREE.Mesh(GEO.grenade, M.mat('#3E4A2E', { metal: 0.4, rough: 0.5 }));
+      m.scale.set(1.2, 0.8, 0.8);
+      return m;
     }
     const rockets = { rpg: '#4E6B3A', missile: '#C9CED6', dsmissile: '#3FAE4A', dualrpg: '#7A4A2A', jet: '#D9443A', tank: '#2A2E35', ship: '#2A2E35', turret: '#2A2E35' };
     if (rockets[b.weapon]) return makeRocket(rockets[b.weapon]);
@@ -1174,7 +1267,7 @@ export function createWorld3D(canvas, wrap, assets) {
     const base = stage === 'sky' ? PLANE_Y : GUN_Y;
     const sx = b.startX ?? b.x, sy = b.startY ?? b.y;
     const k = b.range ? clamp01(Math.hypot(b.x - sx, b.y - sy) / b.range) : 0;
-    if (b.thrown) return base + Math.sin(Math.PI * k) * 170;
+    if (b.thrown) return base + (b.z ?? 0) * (1 - k) + Math.sin(Math.PI * k) * 170;
     const from = { jet: JET_ALT, tank: 80, ship: -120, turret: 150 }[b.weapon];
     if (from !== undefined) return from + (16 - from) * k;
     return base + (b.z ?? 0); // 쏜 사람 발 높이만큼(고지대·점프 중)
@@ -1272,9 +1365,11 @@ export function createWorld3D(canvas, wrap, assets) {
     const stageH = currentStage === 'sky' ? PLANE_Y : 0;
     if (kind === 'explode') {
       const r = e.radius ?? 120;
-      const ball = new THREE.Mesh(GEO.unitSphere, new THREE.MeshBasicMaterial({ color: '#FFB040', transparent: true, opacity: 0.9 }));
-      const core = new THREE.Mesh(GEO.unitSphere, new THREE.MeshBasicMaterial({ color: '#FFE070', transparent: true, opacity: 1 }));
-      const light = new THREE.PointLight('#FF9A40', 4, r * 6, 1.5);
+      // 에너지 RPG 폭발은 푸른 전기 폭발(넓게 퍼지는 전기 고리도)
+      const ball = new THREE.Mesh(GEO.unitSphere, new THREE.MeshBasicMaterial({ color: e.energy ? '#3FC8FF' : '#FFB040', transparent: true, opacity: 0.9 }));
+      const core = new THREE.Mesh(GEO.unitSphere, new THREE.MeshBasicMaterial({ color: e.energy ? '#E8FFFF' : '#FFE070', transparent: true, opacity: 1 }));
+      const light = new THREE.PointLight(e.energy ? '#5FEFFF' : '#FF9A40', 4, r * 6, 1.5);
+      if (e.energy) addEffect('field', { x: e.x, y: e.y, h: e.h, radius: r, spread: 0.3, life: 0.7 });
       const g = new THREE.Group();
       g.add(ball, core, light);
       g.position.set(e.x, (e.h ?? stageH) + 30, e.y);
@@ -1286,6 +1381,66 @@ export function createWorld3D(canvas, wrap, assets) {
         light.intensity = 4 * (1 - k);
       } });
       for (let i = 0; i < 5; i++) addEffect('smoke', { x: e.x + (i - 2) * r * 0.2, y: e.y + ((i * 37) % 5 - 2) * r * 0.15, h: (e.h ?? stageH) + 30, big: true });
+      return;
+    }
+    if (kind === 'field') {
+      // 전기 장판: 바닥에서 원형으로 퍼지는 푸른 전기(빛나는 고리 + 지지직 번개 갈래)
+      const g = new THREE.Group();
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshBasicMaterial({ color: '#3FC8FF', transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      disc.rotation.x = -Math.PI / 2;
+      const ring = new THREE.Mesh(GEO.ring, new THREE.MeshBasicMaterial({ color: '#BFF8FF', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 1;
+      g.add(disc, ring);
+      const bolts = [];
+      const boltMat = new THREE.MeshBasicMaterial({ color: '#E8FFFF', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+      for (let i = 0; i < 10; i++) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(1, 3, 3), boltMat);
+        g.add(b);
+        bolts.push(b);
+      }
+      g.position.set(e.x, (e.h ?? stageH) + 3, e.y);
+      scene.add(g);
+      const R = e.radius ?? 200;
+      effects.push({ obj: g, age: 0, life: e.life ?? 1.6, update(k) {
+        const r = R * Math.min(1, (k * (e.life ?? 1.6)) / Math.max(0.01, e.spread ?? 0.45));
+        disc.scale.setScalar(Math.max(1, r));
+        ring.scale.setScalar(Math.max(1, r));
+        const fade = k > 0.8 ? (1 - k) / 0.2 : 1;
+        disc.material.opacity = 0.25 * fade;
+        ring.material.opacity = 0.9 * fade;
+        for (const [i, b] of bolts.entries()) {
+          const a = Math.random() * Math.PI * 2, d = Math.random() * r;
+          b.position.set(Math.cos(a) * d, 4 + Math.random() * 24, Math.sin(a) * d);
+          b.scale.x = 20 + Math.random() * 40;
+          b.rotation.set(0, Math.random() * Math.PI, (Math.random() - 0.5) * 1.2);
+          b.visible = Math.random() < 0.8 && i < 4 + r / 30;
+        }
+        boltMat.opacity = 0.9 * fade;
+      } });
+      return;
+    }
+    if (kind === 'firework') {
+      // 승리 포즈: 하늘에서 터지는 색색의 불꽃
+      const g = new THREE.Group();
+      const color = e.color ?? '#FFD45E';
+      const parts = Array.from({ length: 18 }, (_, i) => {
+        const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+        const a = (i / 18) * Math.PI * 2, up = Math.sin(i * 1.7);
+        m.userData.v = new THREE.Vector3(Math.cos(a) * 220, up * 160, Math.sin(a) * 220);
+        m.scale.setScalar(26);
+        g.add(m);
+        return m;
+      });
+      g.position.set(e.x, e.h, e.y);
+      scene.add(g);
+      effects.push({ obj: g, age: 0, life: 1.2, update(k, dt) {
+        for (const m of parts) {
+          m.userData.v.y -= 160 * dt;
+          m.position.addScaledVector(m.userData.v, dt);
+          m.material.opacity = 1 - k;
+        }
+      } });
       return;
     }
     if (kind === 'smoke') {
@@ -1629,6 +1784,25 @@ export function createWorld3D(canvas, wrap, assets) {
   }
 
   /** 처치 컷씬(킬캠) 카메라: 쓰러진 요원(또는 주인공) 가까이, 확대할수록 가깝게 */
+  /**
+   * 2인 대결 승리 포즈 장면: 이긴 사람 앞에서 천천히 돌며 비춘다(총을 치켜들고 깡충깡충). 하늘에는 그 팀 색과 금빛 불꽃.
+   */
+  let nextFirework = 0;
+  function victoryShot(match, time, reducedMotion) {
+    const v = match.victory;
+    const p = match.players.find((q) => q.id === v.id);
+    const z = p.z ?? 0;
+    const ang = p.aim + (reducedMotion ? 0.3 : 0.3 + v.t * 0.35);
+    if (!reducedMotion && v.t >= nextFirework) {
+      nextFirework = v.t + 0.45;
+      const a = Math.random() * Math.PI * 2;
+      addEffect('firework', { x: p.x + Math.cos(a) * 260, y: p.y + Math.sin(a) * 260, h: z + 380 + Math.random() * 160,
+        color: Math.random() < 0.5 ? TEAM_COLOR[p.team] : '#FFD45E' });
+    }
+    if (v.t < 0.05) { nextFirework = 0.2; label('WINNER!', p.x, p.y, z + 270, '#FFD45E', 3.4, 64); }
+    return { pos: toV(p.x + Math.cos(ang) * 380, z + 200, p.y + Math.sin(ang) * 380), look: toV(p.x, z + 110, p.y) };
+  }
+
   function killcamShot(match, k) {
     const shot = k.shot;
     const focus = shot.focus ? k[shot.focus] : null;
@@ -1703,7 +1877,13 @@ export function createWorld3D(canvas, wrap, assets) {
           muzzleFx(lastMatch, e);
         }
         const h = lastMatch ? heightOf(lastMatch, e.x, e.y) : GUN_Y;
-        if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, h: currentStage === 'sky' ? PLANE_Y : currentStage === 'road' ? CAR_ROOF : 0 });
+        if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, energy: e.energy, h: currentStage === 'sky' ? PLANE_Y : currentStage === 'road' ? CAR_ROOF : e.z ?? 0 });
+        if (e.type === 'field') addEffect('field', { x: e.x, y: e.y, radius: e.radius, spread: e.spread, life: e.life, h: e.h ?? 0 });
+        if (e.type === 'stun') {
+          const p = lastMatch?.players.find((q) => q.id === e.playerId);
+          label(e.kind === 'shock' ? '⚡ 감전!' : '⚡ 마비!', e.x, e.y, (p?.z ?? 0) + 230, '#7FF4FF', 1.1, 34);
+        }
+        if (e.type === 'pad') addEffect('ring', { x: e.x, y: e.y, color: '#5FEFFF' });
         if (e.type === 'hit') { addEffect('spark', { x: e.x, y: e.y, h }); label(`-${e.damage}`, e.x, e.y, h + 80, '#FF5A4A'); }
         if (e.type === 'block') addEffect('spark', { x: e.x, y: e.y, h, size: 34 });
         if (e.type === 'bounce') addEffect('spark', { x: e.x, y: e.y, h: (currentStage === 'sky' ? PLANE_Y : GUN_Y), size: 46, color: '#5FEFFF' });
@@ -1738,9 +1918,11 @@ export function createWorld3D(canvas, wrap, assets) {
       lastMatch = match;
       const cut = match.cutscene;
       currentStage = match.story?.stage ?? null;
-      const key = !match.story ? (match.wide ? 'field' : 'arena')
+      const key = !match.story ? (match.map === 'fortress' ? 'fortress' : match.wide ? 'field' : 'arena')
         : cut?.kind === 'drive' && !cut.switched ? 'drive'
         : cut?.kind === 'lightning' && !cut.switched ? (cut.scene === 'roof' ? 'rooftop' : 'corridor')
+        // 스토리 1스테이지 옥상은 고공 요새(넓은 맵)
+        : match.story.stage === 'rooftop' && match.map === 'fortress' ? 'fortress'
         : match.story.stage;
       setEnv(key, match);
       env.update(match, time, reducedMotion, dt);
@@ -1749,7 +1931,7 @@ export function createWorld3D(canvas, wrap, assets) {
       const seen = new Set();
       let views;
       // 장면이 바뀌면(컷씬 종류·킬캠) 카메라를 새 자리로 바로 옮긴다
-      const sceneKey = cut ? `${cut.kind}:${cut.switched ?? ''}` : match.killcam ? 'killcam' : 'fps';
+      const sceneKey = cut ? `${cut.kind}:${cut.switched ?? ''}` : match.killcam ? 'killcam' : match.victory ? 'victory' : 'fps';
       if (sceneKey !== lastScene) { camState.ready = false; lastScene = sceneKey; }
       if (cut) {
         // 컷씬: 플레이어는 숨기고 장면 배우만(대교 가는 길·킬캠은 아래)
@@ -1766,6 +1948,8 @@ export function createWorld3D(canvas, wrap, assets) {
         placeJet(match.jet, time, reducedMotion);
         if (match.killcam) {
           views = [{ id: null, target: killcamShot(match, match.killcam), rect: { x: 0, y: 0, w: 1600, h: 1000 } }];
+        } else if (match.victory && match.players.some((p) => p.id === match.victory.id)) {
+          views = [{ id: null, target: victoryShot(match, time, reducedMotion), rect: { x: 0, y: 0, w: 1600, h: 1000 } }];
         } else {
           const ids = viewIds.length ? viewIds : [match.players[0]?.id];
           views = ids.map((id, i) => ({ id, rect: ids.length > 1 ? { x: i * 800, y: 0, w: 800, h: 1000 } : { x: 0, y: 0, w: 1600, h: 1000 } }));

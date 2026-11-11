@@ -40,6 +40,7 @@ export const MOD_WEAPONS = {
   // 전설 무기(상점에서 산 뒤에만 작업실에 나온다)
   energyrifle: ['stock', 'muzzle', 'scope', 'skin'],
   energydual: ['muzzle', 'scope', 'skin'],
+  energyrpg: ['scope', 'skin'],
 };
 /** 상점 총기 스킨을 나눠 주는 총 8가지(전설 무기는 빼고, 목록이 바뀌지 않게 고정) */
 const SKIN_WEAPONS = ['rifle', 'smg', 'sniper', 'shotgun', 'pistol', 'dual', 'rpg', 'crossbow'];
@@ -187,7 +188,7 @@ const SHOP_WEAPON_NAME = {
 };
 /** 개조할 수 있는 총 중 지금 작업실에 보일 총: 전설 무기는 산 것만 */
 export const moddableWeapons = (owns = () => true) => Object.keys(MOD_WEAPONS).filter((id) => !LEGEND_IDS.has(id) || owns(id));
-const LEGEND_IDS = new Set(['energyrifle', 'energydual']);
+const LEGEND_IDS = new Set(['energyrifle', 'energydual', 'energyrpg']);
 const SHOP_THEMES = {
   rare: ['코발트', '스펙터', '사이클론', '블루 팬서', '썬더', '아이스 울프', '나이트 오울', '스톰 이글', '딥 오션', '바이퍼',
     '레드 호크', '실버 팽', '퍼플 헤이즈', '그린 맘바', '스틸 레인', '블랙 미스트', '아틱 폭스', '코럴 리프', '샌드 스톰', '앰버 라이트',
@@ -221,6 +222,8 @@ export const LEGEND_SHOP = [
     info: '푸른 에너지 볼트 · 탄속 매우 빠름 · 엄폐물·벽에 3번 튕김' },
   { id: 'legend-energydual', weapon: 'energydual', unlocks: 'energydual', grade: 'legendary', name: '에너지 쌍권총', price: LEGEND_PRICE, parts: [],
     info: '푸른 에너지 볼트를 엄청난 연사로 · 250발 · 탄속 매우 빠름 · 피해 낮음' },
+  { id: 'legend-energyrpg', weapon: 'energyrpg', unlocks: 'energyrpg', grade: 'legendary', name: '에너지 RPG', price: LEGEND_PRICE, parts: [],
+    info: '약하게 유도되는 에너지 로켓 · 폭발 범위가 RPG보다 훨씬 큼 · 맞은 적은 4초 감전(못 움직이고 못 쏨) · 피해는 RPG보다 낮음' },
 ];
 export const SHOP_BY_ID = Object.fromEntries([...LEGEND_SHOP, ...SHOP].map((g) => [g.id, g]));
 /** 그 무기를 살 수 있는 상점 항목(전설 무기가 아니면 null) */
@@ -228,6 +231,8 @@ export const legendFor = (weaponId) => LEGEND_SHOP.find((g) => g.unlocks === wea
 
 // ── 배낭·장착 저장 ──
 const KEY = 'haha2.mods.v1';
+/** 계정별 저장 이름: 계정 1은 예전 이름 그대로(예전에 하던 저장이 계정 1로 이어짐), 계정 2~4는 뒤에 '.a2' 등을 붙인다 */
+export const accountKey = (base, account = 1) => (account > 1 ? `${base}.a${account}` : base);
 /** localStorage를 쓸 수 없는 곳(테스트·사생활 보호 모드)에서는 메모리에만 둔다 */
 function defaultStorage() {
   try { if (globalThis.localStorage) { globalThis.localStorage.getItem(KEY); return globalThis.localStorage; } } catch { /* 저장 불가 */ }
@@ -240,38 +245,51 @@ function defaultStorage() {
  * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws, coins, owned, starter }
  * starter: 지금까지 받은 기본 코인 수(예전 저장의 true는 10코인을 받았다는 뜻). STARTER_COINS보다 적으면 모자란 만큼 한 번 더 받는다.
  */
-export function createModStore(storage = defaultStorage(), { starterCoins = STARTER_COINS } = {}) {
-  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [], starter: 0 };
-  try {
-    const saved = JSON.parse(storage.getItem(KEY));
-    if (saved && Array.isArray(saved.items)) {
-      state = {
-        items: saved.items.filter((i) => SLOT[i?.slot] && GRADE[i?.grade] && Number.isFinite(i?.seed)).map((i) => ({ ...i, name: i.name ?? nameOf(i) })),
-        equips: saved.equips && typeof saved.equips === 'object' ? saved.equips : {},
-        nextId: Number.isFinite(saved.nextId) ? saved.nextId : 1,
-        draws: Number.isFinite(saved.draws) ? saved.draws : 0,
-        coins: Number.isFinite(saved.coins) && saved.coins > 0 ? Math.floor(saved.coins) : 0,
-        owned: Array.isArray(saved.owned) ? saved.owned.filter((id) => SHOP_BY_ID[id]) : [],
-        starter: saved.starter === true ? 10 : Number.isFinite(saved.starter) && saved.starter > 0 ? saved.starter : 0,
-      };
-      state.nextId = Math.max(state.nextId, ...state.items.map((i) => i.id + 1), 1);
-    }
-  } catch { /* 깨진 저장은 버린다 */ }
+export function createModStore(storage = defaultStorage(), { starterCoins = STARTER_COINS, account = 1 } = {}) {
+  let key = accountKey(KEY, account);
+  let state;
   const listeners = new Set();
   let version = 0;
   const save = () => {
     version++;
-    try { storage.setItem(KEY, JSON.stringify(state)); } catch { /* 저장 불가 */ }
+    try { storage.setItem(key, JSON.stringify(state)); } catch { /* 저장 불가 */ }
     for (const fn of listeners) fn(state);
   };
-  const byId = (id) => state.items.find((i) => i.id === id) ?? null;
-  // 시작 기본 코인: 한 번만
-  if (state.starter < starterCoins) {
-    state.coins += starterCoins - state.starter;
-    state.starter = starterCoins;
-    save();
+  /** 지금 계정의 저장을 읽는다(없으면 새 배낭). 처음이면 기본 코인을 준다 */
+  function load() {
+    state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [], starter: 0 };
+    try {
+      const saved = JSON.parse(storage.getItem(key));
+      if (saved && Array.isArray(saved.items)) {
+        state = {
+          items: saved.items.filter((i) => SLOT[i?.slot] && GRADE[i?.grade] && Number.isFinite(i?.seed)).map((i) => ({ ...i, name: i.name ?? nameOf(i) })),
+          equips: saved.equips && typeof saved.equips === 'object' ? saved.equips : {},
+          nextId: Number.isFinite(saved.nextId) ? saved.nextId : 1,
+          draws: Number.isFinite(saved.draws) ? saved.draws : 0,
+          coins: Number.isFinite(saved.coins) && saved.coins > 0 ? Math.floor(saved.coins) : 0,
+          owned: Array.isArray(saved.owned) ? saved.owned.filter((id) => SHOP_BY_ID[id]) : [],
+          starter: saved.starter === true ? 10 : Number.isFinite(saved.starter) && saved.starter > 0 ? saved.starter : 0,
+        };
+        state.nextId = Math.max(state.nextId, ...state.items.map((i) => i.id + 1), 1);
+      }
+    } catch { /* 깨진 저장은 버린다 */ }
+    // 시작 기본 코인: 계정마다 한 번만
+    if (state.starter < starterCoins) {
+      state.coins += starterCoins - state.starter;
+      state.starter = starterCoins;
+      save();
+    }
   }
+  load();
+  const byId = (id) => state.items.find((i) => i.id === id) ?? null;
   return {
+    /** 계정 바꾸기: 그 계정의 배낭·코인·산 무기를 읽는다(다른 계정에는 영향 없음). 구독한 화면은 새 계정으로 다시 그린다 */
+    useAccount(n) {
+      key = accountKey(KEY, n);
+      load();
+      version++;
+      for (const fn of listeners) fn(state);
+    },
     get items() { return state.items; },
     get draws() { return state.draws; },
     get coins() { return state.coins; },
