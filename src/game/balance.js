@@ -63,6 +63,12 @@ export const SECTIONS = [
       param('즉사기', '사용 가능 시각(전투 시작 후)', ['weapons', 'instakill', 'readyAfter'], { max: 600, step: 1, unit: SEC }),
       param('즉사기', '쿨타임(쏜 뒤 다시 쓸 때까지)', ['weapons', 'instakill', 'interval'], { min: 0.5, max: 600, step: 0.5, unit: SEC }),
       ...gun('crossbow', [['두 화살 간격', ['arrowGap'], { max: 120, step: 1 }]]),
+      ...gun('flamethrower', [
+        ['불꽃이 날아가는 시간(사거리)', ['flame', 'life'], { min: 0.05, max: 3, step: 0.05, unit: SEC }],
+        ['흩어지는 각도(도)', ['flame', 'spread'], { max: 90, step: 1 }],
+      ]),
+      ...gun('energyrifle', [['튕기는 횟수', ['bounces'], { max: 20, step: 1 }]]),
+      ...gun('energydual'),
     ],
   },
   {

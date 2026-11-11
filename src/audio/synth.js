@@ -480,6 +480,33 @@ function laserZap() {
   osc.stop(start + 0.1);
 }
 
+/** 에너지 무기: 맑은 사인파 '퓻'(쌍권총은 짧고 작게, 돌격소총은 낮게 깔리는 울림까지) */
+function energyZap(big) {
+  if (!ctx || muted) return;
+  const start = ctx.currentTime;
+  for (const [type, from, to, vol, len] of big
+    ? [['sine', 2600, 700, 0.75, 0.11], ['triangle', 520, 160, 0.5, 0.14]]
+    : [['sine', 3200, 1300, 0.38, 0.05]]) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, start);
+    osc.frequency.exponentialRampToValueAtTime(to, start + len * 0.9);
+    gain.gain.setValueAtTime(GAIN * vol, start);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + len);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + len + 0.02);
+  }
+}
+/** 화염방사기: 쏘는 동안 '화르륵' 바람 소리(불꽃마다 내면 너무 잦아 0.09초에 한 번) */
+let lastFlame = -1;
+function flameRoar() {
+  if (!ctx || muted || ctx.currentTime - lastFlame < 0.09) return;
+  lastFlame = ctx.currentTime;
+  gunshot({ filter: 700, q: 0.4, decay: 0.16, thump: 0, volume: 0.55 });
+}
+
 /** 전투 배경음악: 매 프레임 호출. on이면 재생(경기·카운트다운·컷씬), 아니면 줄여서 멈춤. song은 틀 곡(music.js SONGS). */
 export function updateBattleMusic(on, song = 'battle') {
   updateMusic(ctx, on, song);
@@ -537,6 +564,8 @@ export function playEvents(events) {
     if (e.type === 'megalaser') { gunshot({ filter: 300, q: 0.4, decay: 1.2, thump: 50, volume: 1.8 }); [880, 660, 440, 220].forEach((f, i) => tone(f, 0.25, 'sawtooth', i * 0.06)); }
     if (e.type === 'fire' && e.weapon === 'instakill') { /* 소리는 megalaser에서 */ }
     else if (e.type === 'fire' && e.weapon === 'laser') laserZap();
+    else if (e.type === 'fire' && (e.weapon === 'energyrifle' || e.weapon === 'energydual')) energyZap(e.weapon === 'energyrifle');
+    else if (e.type === 'fire' && e.weapon === 'flamethrower') flameRoar();
     else if (e.type === 'fire' && e.weapon === 'dagger') { if (!playRecorded('knife-swing')) gunshot(SHOT.dagger); }
     else if (e.type === 'fire' && REAL[e.weapon] && playRecorded(`shot-${e.weapon}`)) { /* 녹음본 재생 */ }
     else if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
@@ -559,6 +588,7 @@ export function playEvents(events) {
     if (e.type === 'hit' && e.weapon === 'dagger') { if (!playRecorded('knife-slash')) tone(880, 0.07, 'square'); } // 써걱
     else if (e.type === 'hit') tone(880, 0.07, 'square');
     if (e.type === 'block') tone(300, 0.05, 'triangle');
+    if (e.type === 'bounce') tone(1500, 0.04, 'sine'); // 에너지 볼트 튕김: 띵
     if (e.type === 'explode') { gunshot({ filter: 250, q: 0.4, decay: 0.6, thump: 90, volume: 1.4 }); tone(60, 0.4, 'square', 0.05); }
     if (e.type === 'cover-hit') tone(180, 0.04, 'triangle');
     if (e.type === 'cover-break') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 70, volume: 1.3 }); tone(120, 0.2, 'sawtooth', 0.04); }

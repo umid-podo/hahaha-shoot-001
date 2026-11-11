@@ -490,10 +490,20 @@ button.small { padding: 4px 10px; font-size: 13px; min-height: 30px; }
 .grade-uncommon { background: #36A858; }
 .grade-rare { background: #3C78F0; }
 .grade-elite { background: linear-gradient(90deg, #FFB020, #FF6A2A); box-shadow: 0 0 8px rgba(255, 176, 32, 0.8); }
+.grade-legendary { background: linear-gradient(90deg, #B45CFF, #3FD8FF); box-shadow: 0 0 10px rgba(120, 140, 255, 0.9); }
 .grade-border-common { border-color: #B9BEC6; }
 .grade-border-uncommon { border-color: #4CC26A; background: #F3FBF5; }
 .grade-border-rare { border-color: #4C8DFF; background: #F2F6FF; }
 .grade-border-elite { border-color: #FFB020; background: linear-gradient(135deg, #FFF8E6, #FFEFD6); box-shadow: 0 0 10px rgba(255, 176, 32, 0.5); }
+.grade-border-legendary { border-color: #8E5CFF; background: linear-gradient(135deg, #F3ECFF, #E4F8FF); box-shadow: 0 0 12px rgba(120, 140, 255, 0.6); }
+.shop-item .legend-thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 8px; border: 2px solid #8E5CFF; background: #fff; }
+.shop-item .shop-info { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; color: #4A3A80; }
+/* 무기 선택: 전설 무기(상점 구매) */
+.choice.legendary { border-color: #8E5CFF; }
+.choice.legendary > span:first-of-type { color: #6A3FD8; }
+.choice.legendary[aria-pressed="true"] { background: linear-gradient(135deg, #7A4CFF, #2FB8E8); color: #fff; }
+.choice.legendary[aria-pressed="true"] > span:first-of-type { color: #fff; }
+.choice.legendary.locked { opacity: 0.6; border-style: dashed; cursor: not-allowed; }
 .grade-text-uncommon { color: #23863f; }
 .grade-text-rare { color: #2a5fd0; }
 .grade-text-elite { color: #c27400; }

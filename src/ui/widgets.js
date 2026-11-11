@@ -1,4 +1,5 @@
 /** 여러 화면에서 쓰는 작은 DOM 조각 */
+import { modStore, legendFor } from '../game/mods.js';
 
 export function weaponInfo(w) {
   if (w.battery) return `${w.interval}초마다 ${w.burst}점사 레이저 탄 · 한 발 ${w.damage} · 배터리 ${w.battery.shots}발, 쉬면 ${w.battery.recharge}초 뒤 완충`;
@@ -9,6 +10,9 @@ export function weaponInfo(w) {
     const hurt = w.damage >= 9999 ? '즉사' : `${w.damage} 피해`;
     return `전투 시작 ${w.readyAfter}초 뒤부터 · 쏘면 거대한 레이저가 ${aim} ${hurt} · 쿨타임 ${w.interval}초`;
   }
+  if (w.flame) return `가까이에 불꽃을 뿜음(사거리 짧음) · ${w.interval}초마다 ${w.damage} · 연료 ${w.mag}`;
+  if (w.energy && w.alternate) return `푸른 에너지 볼트를 엄청난 연사로 · 한 발 ${w.damage} · 탄약 무한 · 탄속 매우 빠름`;
+  if (w.energy) return `푸른 에너지 볼트 · ${w.interval}초마다 ${w.damage} · 탄속 매우 빠름 · 엄폐물·벽에 ${w.bounces}번 튕김`;
   if (w.dash) return `조준 후 떼면 매우 빠르게 돌진 · 닿으면 ${w.damage} · 쿨타임 ${w.interval}초`;
   if (w.pellets) return `조준 후 떼면 부채꼴로 ${w.pellets}발 · 한 발 ${w.damage} · 쿨타임 ${w.interval}초`;
   if (w.trigger === 'release') {
@@ -23,7 +27,13 @@ export function weaponInfo(w) {
 }
 
 /** 그림이 있는 무기 */
-const WEAPON_ICON = { crossbow: 'assets/ui/akimbo-crossbow.svg' };
+const WEAPON_ICON = {
+  crossbow: 'assets/ui/akimbo-crossbow.svg',
+  // 전설 무기: 사용자가 준 디자인 그림
+  energyrifle: 'assets/weapons/energy-rifle.jpg',
+  energydual: 'assets/weapons/energy-dual.jpg',
+};
+export const weaponIcon = (id) => WEAPON_ICON[id] ?? null;
 
 /** 무기 선택 버튼 안의 내용: [그림], 이름, 설명 */
 export function weaponLabel(w) {
@@ -36,7 +46,7 @@ export function weaponLabel(w) {
     nodes.push(img);
   }
   const name = document.createElement('span');
-  name.textContent = w.name;
+  name.textContent = w.legendary ? `★ ${w.name}` : w.name;
   const info = document.createElement('small');
   info.textContent = weaponInfo(w);
   nodes.push(name, info);
@@ -71,11 +81,37 @@ export function secretChoiceButton(base, secrets, currentId, label, onPick) {
   return btn;
 }
 
-/** ids 중 보이는 무기마다 숨겨진 무기가 딸린 선택 버튼 */
+/**
+ * ids 중 보이는 무기마다 숨겨진 무기가 딸린 선택 버튼. 전설 무기(상점 구매)는 산 뒤에만 고를 수 있고,
+ * 아직 안 샀으면 자물쇠 버튼(누를 수 없음, 상점 가격 안내)으로 보인다.
+ */
 export function weaponButtons(WEAPONS, ids, currentId, onPick) {
+  const store = modStore();
   return ids.filter((id) => !WEAPONS[id].hidden).map((id) => {
-    const secrets = ids.map((h) => WEAPONS[h]).filter((w) => w.hidden && w.unlockFrom === id);
-    return secretChoiceButton(WEAPONS[id], secrets, currentId, weaponLabel, (w) => onPick(w.id));
+    const w = WEAPONS[id];
+    if (w.legendary && !store.ownsWeapon(id)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice legendary locked';
+      btn.disabled = true;
+      const name = document.createElement('span');
+      name.textContent = `🔒 ${w.name}`;
+      const info = document.createElement('small');
+      info.textContent = `전설 무기 · 총기 개조 → 상점에서 ${legendFor(id)?.price ?? 50}코인`;
+      if (WEAPON_ICON[id]) {
+        const img = document.createElement('img');
+        img.className = 'weapon-icon';
+        img.src = WEAPON_ICON[id];
+        img.alt = '';
+        btn.append(img);
+      }
+      btn.append(name, info);
+      return btn;
+    }
+    const secrets = ids.map((h) => WEAPONS[h]).filter((s) => s.hidden && s.unlockFrom === id);
+    const btn = secretChoiceButton(w, secrets, currentId, weaponLabel, (picked) => onPick(picked.id));
+    if (w.legendary) btn.classList.add('legendary');
+    return btn;
   });
 }
 

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GRADES, PART_SLOTS, MOD_WEAPONS, canMount, seededRng, rollGrade, rollItem, designOf, nameOf, createModStore, SHOP, SHOP_BY_ID, SHOP_PRICE } from '../src/game/mods.js';
+import {
+  GRADES, PART_SLOTS, MOD_WEAPONS, canMount, seededRng, rollGrade, rollItem, designOf, nameOf, createModStore, SHOP, SHOP_BY_ID, SHOP_PRICE, STARTER_COINS,
+} from '../src/game/mods.js';
 
 const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) }; };
 
@@ -30,8 +32,9 @@ test('개조 파츠: 칸 5종, 같은 seed면 같은 디자인·이름, 다른 s
 test('개조 배낭: 뽑으면 배낭에 저장되고, 총마다 붙일 수 있는 칸만 장착, 분해하면 장착도 풀림, 다시 열어도 그대로', () => {
   const storage = memory();
   const store = createModStore(storage);
-  assert.deepEqual(store.draw(1, seededRng(3)), [], '코인이 없으면 못 뽑음');
-  store.addCoins(11);
+  assert.equal(store.coins, STARTER_COINS, '처음엔 기본 10코인');
+  assert.deepEqual(store.draw(11, seededRng(3)), [], '코인이 모자라면 못 뽑음');
+  store.addCoins(1);
   const got = store.draw(10, seededRng(3));
   assert.equal(store.coins, 1, '1번에 1코인');
   assert.equal(got.length, 10);
@@ -92,8 +95,8 @@ test('상점 구매: 코인을 내고 파츠 한 벌을 받아 바로 장착, �
   const storage = memory();
   const store = createModStore(storage);
   const rare = SHOP.find((g) => g.grade === 'rare'), elite = SHOP.find((g) => g.grade === 'elite');
-  assert.deepEqual(store.buy(rare.id), [], '코인이 없으면 못 삼');
-  store.addCoins(10);
+  assert.equal(store.coins, STARTER_COINS);
+  assert.equal(store.canBuy('legend-energyrifle'), false, '기본 10코인으로 전설 무기(50코인)는 못 삼');
   const got = store.buy(rare.id);
   assert.equal(got.length, rare.parts.length);
   assert.equal(store.coins, 7);
@@ -116,4 +119,40 @@ test('상점 구매: 코인을 내고 파츠 한 벌을 받아 바로 장착, �
   assert.ok(again.shopEquipped(rare.id));
   assert.equal(again.items.filter((i) => i.shop).length, rare.parts.length + elite.parts.length);
   assert.equal(SHOP_BY_ID[rare.id], rare);
+});
+
+test('상점 전설 무기: 에너지 돌격소총·에너지 쌍권총 50코인, 사야 그 주무기를 쓸 수 있고 저장된다', async () => {
+  const { LEGEND_SHOP, LEGEND_PRICE, legendFor } = await import('../src/game/mods.js');
+  assert.equal(LEGEND_PRICE, 50);
+  assert.deepEqual(LEGEND_SHOP.map((g) => [g.unlocks, g.price, g.grade]), [['energyrifle', 50, 'legendary'], ['energydual', 50, 'legendary']]);
+  assert.equal(legendFor('rifle'), null);
+  const mem = new Map();
+  const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  const store = createModStore(storage);
+  assert.equal(store.ownsWeapon('energyrifle'), false);
+  assert.equal(store.ownsWeapon('flamethrower'), true, '화염방사기는 누구나');
+  store.addCoins(49 - STARTER_COINS);
+  assert.equal(store.canBuy('legend-energyrifle'), false, '49코인으로는 못 산다');
+  store.addCoins(1);
+  assert.deepEqual(store.buy('legend-energyrifle'), [], '파츠는 없다');
+  assert.equal(store.coins, 0);
+  assert.ok(store.owns('legend-energyrifle') && store.ownsWeapon('energyrifle'));
+  assert.equal(store.ownsWeapon('energydual'), false);
+  assert.equal(store.canBuy('legend-energyrifle'), false, '이미 샀음');
+  const again = createModStore(storage);
+  assert.ok(again.ownsWeapon('energyrifle'), '다시 열어도 보유');
+});
+
+test('시작 기본 코인: 처음 열면 10코인, 다시 열어도 또 주지 않고, 기본 코인이 생기기 전 저장에는 한 번만 더해 준다', () => {
+  assert.equal(STARTER_COINS, 10);
+  const mem = new Map();
+  const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  const store = createModStore(storage);
+  assert.equal(store.coins, 10);
+  store.draw(4, seededRng(1));
+  assert.equal(createModStore(storage).coins, 6, '다시 열어도 또 주지 않음');
+  // 예전 저장(starter 표시 없음, 코인 3개): 한 번만 +10
+  mem.set('haha2.mods.v1', JSON.stringify({ items: [], equips: {}, nextId: 1, draws: 0, coins: 3, owned: [] }));
+  assert.equal(createModStore(storage).coins, 13);
+  assert.equal(createModStore(storage).coins, 13, '두 번째부터는 그대로');
 });

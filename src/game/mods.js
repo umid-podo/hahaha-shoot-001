@@ -15,6 +15,8 @@ export const GRADES = [
   { id: 'elite', name: '엘리트', color: '#FFB020', weight: 4 },
 ];
 export const GRADE = Object.fromEntries(GRADES.map((g, i) => [g.id, { ...g, rank: i }]));
+/** 전설 등급: 뽑기에는 나오지 않고 상점에서 전설 무기(새 주무기)로만 산다 */
+GRADE.legendary = { id: 'legendary', name: '전설', color: '#B45CFF', weight: 0, rank: GRADES.length };
 
 export const PART_SLOTS = [
   { id: 'stock', name: '개머리판', icon: '▰' },
@@ -39,6 +41,8 @@ export const MOD_WEAPONS = {
 export const canMount = (weapon, slot) => !!MOD_WEAPONS[weapon]?.includes(slot);
 /** 뽑기 1번에 드는 코인 */
 export const DRAW_COST = 1;
+/** 처음 시작할 때 주는 기본 코인(예전부터 하던 저장에도 한 번만 준다) */
+export const STARTER_COINS = 10;
 
 /** 0~1 난수(시드 고정). mulberry32 */
 export function seededRng(seed) {
@@ -197,7 +201,21 @@ export const SHOP = ['rare', 'elite'].flatMap((grade, g) => SHOP_THEMES[grade].m
   const n = g * 30 + i + 1;
   return { id: `shop-${String(n).padStart(2, '0')}`, weapon, grade, name: `${theme} ${SHOP_WEAPON_NAME[weapon]}`, price: SHOP_PRICE[grade], parts };
 }));
-export const SHOP_BY_ID = Object.fromEntries(SHOP.map((g) => [g.id, g]));
+/** 전설 무기 가격(코인) */
+export const LEGEND_PRICE = 50;
+/**
+ * 상점 전설 무기: 사면 그 무기(config.js의 legendary 무기)가 주무기 선택 목록에 나타난다(영구). 스킨이 아니라 새 총이라 파츠는 없다.
+ * 에너지 돌격소총: 푸른 에너지 볼트, 탄속이 매우 빠르고 엄폐물·벽에 3번 튕김 · 에너지 쌍권총: 엄청난 연사, 탄약 무한, 탄속 매우 빠름, 피해 낮음
+ */
+export const LEGEND_SHOP = [
+  { id: 'legend-energyrifle', weapon: 'energyrifle', unlocks: 'energyrifle', grade: 'legendary', name: '에너지 돌격소총', price: LEGEND_PRICE, parts: [],
+    info: '푸른 에너지 볼트 · 탄속 매우 빠름 · 엄폐물·벽에 3번 튕김' },
+  { id: 'legend-energydual', weapon: 'energydual', unlocks: 'energydual', grade: 'legendary', name: '에너지 쌍권총', price: LEGEND_PRICE, parts: [],
+    info: '푸른 에너지 볼트를 엄청난 연사로 · 탄약 무한 · 탄속 매우 빠름 · 피해 낮음' },
+];
+export const SHOP_BY_ID = Object.fromEntries([...LEGEND_SHOP, ...SHOP].map((g) => [g.id, g]));
+/** 그 무기를 살 수 있는 상점 항목(전설 무기가 아니면 null) */
+export const legendFor = (weaponId) => LEGEND_SHOP.find((g) => g.unlocks === weaponId) ?? null;
 
 // ── 배낭·장착 저장 ──
 const KEY = 'haha2.mods.v1';
@@ -210,10 +228,11 @@ function defaultStorage() {
 
 /**
  * 배낭(뽑은 파츠 목록)과 총별 장착 상태. 바뀔 때마다 저장하고, 구독한 함수(onChange)를 부른다.
- * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws, coins }
+ * state: { items: [{ id, slot, grade, seed, name }], equips: { 무기: { 칸: 파츠 id } }, nextId, draws, coins, owned, starter }
+ * starter: 기본 코인(STARTER_COINS)을 이미 받았는지. 처음 열면(또는 기본 코인이 생기기 전 저장이면) 한 번 받는다.
  */
 export function createModStore(storage = defaultStorage()) {
-  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [] };
+  let state = { items: [], equips: {}, nextId: 1, draws: 0, coins: 0, owned: [], starter: false };
   try {
     const saved = JSON.parse(storage.getItem(KEY));
     if (saved && Array.isArray(saved.items)) {
@@ -224,6 +243,7 @@ export function createModStore(storage = defaultStorage()) {
         draws: Number.isFinite(saved.draws) ? saved.draws : 0,
         coins: Number.isFinite(saved.coins) && saved.coins > 0 ? Math.floor(saved.coins) : 0,
         owned: Array.isArray(saved.owned) ? saved.owned.filter((id) => SHOP_BY_ID[id]) : [],
+        starter: saved.starter === true,
       };
       state.nextId = Math.max(state.nextId, ...state.items.map((i) => i.id + 1), 1);
     }
@@ -236,6 +256,12 @@ export function createModStore(storage = defaultStorage()) {
     for (const fn of listeners) fn(state);
   };
   const byId = (id) => state.items.find((i) => i.id === id) ?? null;
+  // 시작 기본 코인: 한 번만
+  if (!state.starter) {
+    state.coins += STARTER_COINS;
+    state.starter = true;
+    save();
+  }
   return {
     get items() { return state.items; },
     get draws() { return state.draws; },
@@ -265,8 +291,11 @@ export function createModStore(storage = defaultStorage()) {
     get owned() { return state.owned; },
     owns(shopId) { return state.owned.includes(shopId); },
     canBuy(shopId) { const g = SHOP_BY_ID[shopId]; return !!g && !this.owns(shopId) && state.coins >= g.price; },
+    /** 그 무기를 쓸 수 있는지: 전설 무기는 상점에서 샀을 때만, 나머지는 언제나 */
+    ownsWeapon(weaponId) { const g = legendFor(weaponId); return !g || this.owns(g.id); },
     /**
      * 상점 구매: 코인을 내고 그 총기 스킨의 파츠 한 벌을 배낭에 넣는다(영구 보관, 분해 불가). 산 총에 바로 장착한다.
+     * 전설 무기는 파츠 없이 그 무기를 쓸 수 있게 된다(owns·ownsWeapon으로 확인).
      * 이미 샀거나 코인이 모자라면 아무것도 하지 않고 [].
      */
     buy(shopId) {
@@ -274,6 +303,7 @@ export function createModStore(storage = defaultStorage()) {
       if (!this.canBuy(shopId)) return [];
       state.coins -= g.price;
       state.owned.push(shopId);
+      if (g.unlocks) { save(); return []; }
       const got = g.parts.map((part) => ({ id: state.nextId++, ...part, shop: shopId }));
       state.items.push(...got);
       state.equips[g.weapon] = { ...state.equips[g.weapon], ...Object.fromEntries(got.map((i) => [i.slot, i.id])) };

@@ -109,6 +109,10 @@ export const TICK = 1 / 60;
  *   쏜 뒤 interval초(쿨타임)가 지나면 다시 쓸 수 있다(제작자 전용).
  *   beamWidth는 레이저 굵기(명중 판정 여유).
  * hidden: 선택 목록에 보이지 않는 숨겨진 무기. unlockFrom 무기 버튼을 빠르게 unlockTaps번 누르면 그 자리에 나타난다.
+ * flame: 화염방사기. 한 발이 flame.life초만 날아가다 사라지는 불꽃 덩어리이고, 쏠 때마다 ±flame.spread/2도 안에서 흩어진다(짧은 사거리).
+ * bounces: 엄폐물·경기장 끝에 닿으면 그만큼 튕겨 나간다(에너지 돌격소총). 튕길 때도 엄폐물은 깎인다.
+ * energy: 푸른 에너지 볼트를 쏘는 에너지 무기(탄 모양·총구 빛이 푸르다). alternate: 두 자루를 번갈아 쏜다(에너지 쌍권총).
+ * legendary: 전설 무기. 상점에서 사야(50코인) 무기 선택 목록에 나온다.
  * thrown: 던지는 무기. 엄폐물·플레이어 위로 조준 방향으로 RULES.throwRange만큼 날아가 터진다(직격 없음, 폭발 피해만).
  * 폭발 무기(splash)는 맞히지 못하면 벽(경기장 끝)·수명 끝에서 터진다. 전투기·포탑처럼 목표를 노린 폭탄은 목표 자리(range)에서 터진다.
  */
@@ -136,6 +140,22 @@ export const WEAPONS = {
   crossbow: {
     id: 'crossbow', name: '아킴보 석궁', interval: 0.7, damage: 12, speed: 1500, burst: 1, arrows: 2, arrowGap: 26, mag: 6, reload: 1.8,
     hidden: true, unlockFrom: 'dual', unlockTaps: 2,
+  },
+  // 화염방사기: 불꽃을 짧게 뿜는다. 가까이에서 아주 세지만 사거리가 짧다(불꽃 0.45초 ≈ 330 거리)
+  flamethrower: {
+    id: 'flamethrower', name: '화염방사기', interval: 0.05, damage: 4, speed: 650, burst: 1, mag: 80, reload: 2.4,
+    flame: { life: 0.45, spread: 12 },
+  },
+  // ── 전설 무기(상점 50코인) ──
+  // 에너지 돌격소총: 푸른 에너지 볼트. 탄속이 매우 빠르고 엄폐물·경기장 끝에 3번까지 튕긴다
+  energyrifle: {
+    id: 'energyrifle', name: '에너지 돌격소총', interval: 0.16, damage: 9, speed: 2400, burst: 1, mag: 30, reload: 1.8,
+    bounces: 3, energy: true, legendary: true,
+  },
+  // 에너지 쌍권총: 푸른 에너지 볼트를 아주 빠르게 연사한다. 탄약 무한·탄속 매우 빠름, 대신 한 발 피해가 낮다
+  energydual: {
+    id: 'energydual', name: '에너지 쌍권총', interval: 0.06, damage: 3, speed: 2400, burst: 1, mag: 0, reload: 1,
+    energy: true, alternate: true, legendary: true,
   },
   sniper: {
     id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release', mag: 5, reload: 2.4,
@@ -205,7 +225,9 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
  * 준비 화면에서 고르는 주무기·보조무기(숨겨진 무기 포함, 목록에는 hidden이 아닌 것만 보인다). 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,
  * 수류탄은 아이템 버튼으로 바로 던진다.
  */
-export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow'];
+export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'energyrifle', 'energydual'];
+/** 상점에서 사야 쓸 수 있는 전설 무기 */
+export const LEGENDARY_IDS = PRIMARY_IDS.filter((id) => WEAPONS[id].legendary);
 export const SECONDARY_IDS = ['smg', 'dagger', 'shotgun'];
 export const DEFAULT_SECONDARY = 'smg';
 export const SLOT_ORDER = ['primary', 'secondary'];
