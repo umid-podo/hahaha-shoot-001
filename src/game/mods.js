@@ -37,7 +37,12 @@ export const MOD_WEAPONS = {
   dual: ['muzzle', 'scope', 'mag', 'skin'],
   rpg: ['scope', 'skin'],
   crossbow: ['scope', 'skin'],
+  // 전설 무기(상점에서 산 뒤에만 작업실에 나온다)
+  energyrifle: ['stock', 'muzzle', 'scope', 'skin'],
+  energydual: ['muzzle', 'scope', 'skin'],
 };
+/** 상점 총기 스킨을 나눠 주는 총 8가지(전설 무기는 빼고, 목록이 바뀌지 않게 고정) */
+const SKIN_WEAPONS = ['rifle', 'smg', 'sniper', 'shotgun', 'pistol', 'dual', 'rpg', 'crossbow'];
 export const canMount = (weapon, slot) => !!MOD_WEAPONS[weapon]?.includes(slot);
 /** 뽑기 1번에 드는 코인 */
 export const DRAW_COST = 1;
@@ -180,6 +185,9 @@ export const SHOP_PRICE = { rare: 3, elite: 8 };
 const SHOP_WEAPON_NAME = {
   rifle: '돌격소총', smg: '기관단총', sniper: '저격총', shotgun: '샷건', pistol: '권총', dual: '쌍권총', rpg: 'RPG', crossbow: '아킴보 석궁',
 };
+/** 개조할 수 있는 총 중 지금 작업실에 보일 총: 전설 무기는 산 것만 */
+export const moddableWeapons = (owns = () => true) => Object.keys(MOD_WEAPONS).filter((id) => !LEGEND_IDS.has(id) || owns(id));
+const LEGEND_IDS = new Set(['energyrifle', 'energydual']);
 const SHOP_THEMES = {
   rare: ['코발트', '스펙터', '사이클론', '블루 팬서', '썬더', '아이스 울프', '나이트 오울', '스톰 이글', '딥 오션', '바이퍼',
     '레드 호크', '실버 팽', '퍼플 헤이즈', '그린 맘바', '스틸 레인', '블랙 미스트', '아틱 폭스', '코럴 리프', '샌드 스톰', '앰버 라이트',
@@ -193,8 +201,7 @@ const SHOP_THEMES = {
  * 레어 30·엘리트 30, 8가지 총에 골고루. 모양만 바꾸고 수치는 그대로다. 디자인은 고정 seed라 늘 같다.
  */
 export const SHOP = ['rare', 'elite'].flatMap((grade, g) => SHOP_THEMES[grade].map((theme, i) => {
-  const weapons = Object.keys(MOD_WEAPONS);
-  const weapon = weapons[(i + g * 3) % weapons.length];
+  const weapon = SKIN_WEAPONS[(i + g * 3) % SKIN_WEAPONS.length];
   const rng = seededRng(0x5a0b + g * 1000 + i * 7919);
   const parts = MOD_WEAPONS[weapon].map((slot) => {
     const part = { slot, grade, seed: Math.floor(rng() * 2 ** 32) >>> 0 };

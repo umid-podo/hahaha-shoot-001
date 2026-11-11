@@ -1,6 +1,8 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { WEAPONS } from '../game/config.js';
-import { GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, SHOP, SHOP_BY_ID, SHOP_PRICE, LEGEND_SHOP, LEGEND_PRICE, canMount, modStore } from '../game/mods.js';
+import {
+  GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, SHOP, SHOP_BY_ID, SHOP_PRICE, LEGEND_SHOP, LEGEND_PRICE, canMount, modStore, moddableWeapons,
+} from '../game/mods.js';
 import { buildShowcase, environmentMap } from '../render/guns.js';
 import { weaponIcon } from './widgets.js';
 import { makePartPreview } from '../render/parts.js';
@@ -16,7 +18,8 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
  */
 export function createWorkshop({ show, onClose }) {
   const store = modStore();
-  const weapons = Object.keys(MOD_WEAPONS);
+  // 개조할 총: 전설 무기는 상점에서 산 뒤에만 나온다
+  const weapons = () => moddableWeapons((id) => store.ownsWeapon(id));
   let weapon = 'rifle';
   let filter = 'all';
   let selected = null; // 배낭에서 눌러 본 파츠 id
@@ -286,8 +289,8 @@ export function createWorkshop({ show, onClose }) {
   const gradeChip = (grade) => { const c = el('span', `grade grade-${grade}`, GRADE[grade].name); return c; };
   function renderWeapons() {
     const box = $('#mod-weapons');
-    box.replaceChildren(...weapons.map((id) => {
-      const b = el('button', 'mod-weapon', WEAPONS[id].name);
+    box.replaceChildren(...weapons().map((id) => {
+      const b = el('button', `mod-weapon${WEAPONS[id].legendary ? ' legendary' : ''}`, WEAPONS[id].legendary ? `★ ${WEAPONS[id].name}` : WEAPONS[id].name);
       b.type = 'button';
       b.setAttribute('aria-pressed', String(id === weapon));
       b.addEventListener('click', () => { weapon = id; previewShop = null; renderAll(); });
@@ -462,7 +465,8 @@ export function createWorkshop({ show, onClose }) {
     btn.addEventListener('click', () => {
       store.buy(g.id);
       if (!store.owns(g.id)) return;
-      previewShop = g.id;
+      // 산 전설 무기를 바로 개조할 총으로 골라 책상에 올린다
+      weapon = g.unlocks; previewShop = null;
       renderAll();
     });
     btn.setAttribute('aria-label', `${g.name} ${btn.textContent}`);
