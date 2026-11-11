@@ -4,6 +4,9 @@ import { modStore, legendFor } from '../game/mods.js';
 export function weaponInfo(w) {
   if (w.battery) return `${w.interval}초마다 ${w.burst}점사 레이저 탄 · 한 발 ${w.damage} · 배터리 ${w.battery.shots}발, 쉬면 ${w.battery.recharge}초 뒤 완충`;
   if (w.heat) return `${w.interval}초마다 ${w.damage} · ${w.heat.max}초 연사하면 과열 ${w.heat.cooldown}초`;
+  if (w.field) return `조준 후 떼면 전기충격기를 포물선으로 발사 · 떨어진 곳에 반경 ${w.field.radius} 전기가 퍼짐 · 닿으면 ${w.field.freeze}초 못 움직임 · 쿨타임 ${w.interval}초`;
+  if (w.shock) return `조준 후 떼면 약하게 유도되는 에너지 로켓 · 직격 ${w.damage} · 폭발 반경 ${w.splash.radius}(피해 ${w.splash.damage}) · 맞으면 ${w.shock}초 감전(못 움직이고 못 쏨)`;
+  if (w.scoped && w.burst > 1) return `스코프 달림 · 조준 후 떼면 유탄 ${w.burst}발 · 한 발 ${w.damage}(주변 폭발 ${w.splash.damage}) · 쿨타임 ${w.interval}초`;
   if (w.thrown) return `아이템 버튼으로 던짐 · 반경 ${w.splash.radius} 폭발 ${w.splash.damage} · 쿨타임 ${w.interval}초`;
   if (w.instakill) {
     const aim = w.homing >= 180 ? '반드시 맞아' : `최대 ${w.homing}도 휘어 맞으면`;
@@ -32,6 +35,9 @@ const WEAPON_ICON = {
   // 전설 무기: 사용자가 준 디자인 그림
   energyrifle: 'assets/weapons/energy-rifle.jpg',
   energydual: 'assets/weapons/energy-dual.jpg',
+  energyrpg: 'assets/weapons/energy-rpg.svg',
+  grenadelauncher: 'assets/weapons/grenade-launcher.svg',
+  stunlauncher: 'assets/weapons/stun-launcher.svg',
 };
 export const weaponIcon = (id) => WEAPON_ICON[id] ?? null;
 

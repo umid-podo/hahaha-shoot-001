@@ -76,6 +76,49 @@ export const WIDE_COVERS = [
   { id: 'w15', x: 1700, y: -900, w: 200, h: 44 }, { id: 'w16', x: -100, y: 1900, w: 200, h: 44 },
   { id: 'w17', x: 400, y: -1300, w: 44, h: 200 }, { id: 'w18', x: 1200, y: 2300, w: 44, h: 200 },
 ];
+/**
+ * 고공 요새 맵(스토리 1스테이지 옥상·2인 대결에서 고를 수 있음): 넓은 맵(FIELD) 크기에 원래 옥상 경기장을 가운데 두고,
+ * 북쪽 양옆에 매우 높은 고지대 2개(높이 340), 그 둘을 잇는 높은 다리(같은 높이, 밑으로 지나다닐 수 있음),
+ * 서쪽 고지대로 올라가는 오르막길 1개, 매우 높이 튀어 오르는 점프 패드 3개, 동쪽 고지대보다 조금 낮은(270) 남북으로 긴 다리.
+ * bridge: 위에 설 수 있지만 그보다 아래에서는 밑으로 지나간다(벽이 아님). ramp: { axis, dir } 그 축을 따라 dir 쪽으로 0에서 height까지 오르는 비탈.
+ */
+export const FORTRESS_HEIGHT = 340;
+export const FORTRESS_HIGHS = [
+  { id: 'fort-west', x: -700, y: -700, w: 700, h: 600, height: FORTRESS_HEIGHT, kind: 'fortress' },
+  { id: 'fort-east', x: 2300, y: -700, w: 700, h: 600, height: FORTRESS_HEIGHT, kind: 'fortress' },
+  // 두 고지대를 잇는 높은 다리(가운데 탑 위를 지나감)
+  { id: 'fort-bridge', x: 800, y: -700, w: 2340, h: 150, height: FORTRESS_HEIGHT, bridge: true },
+  // 서쪽 고지대로 올라가는 오르막길(남쪽에서 북쪽으로 오른다)
+  { id: 'fort-ramp', x: -700, y: 45, w: 220, h: 930, height: FORTRESS_HEIGHT, ramp: { axis: 'y', dir: -1 } },
+  // 동쪽 고지대 남쪽 끝에서 남쪽으로 길게 뻗은, 고지대보다 조금 낮은 다리(끝에서 뛰면 고지대로 올라감)
+  { id: 'fort-long', x: 2300, y: 860, w: 170, h: 2480, height: 270, bridge: true },
+];
+/** 점프 패드: 밟으면 power(초당) 속도로 매우 높이 튀어 오른다(고지대·다리로 올라가는 길). r은 밟는 판 반지름 */
+export const PAD = { power: 1300, r: 70 };
+export const FORTRESS_PADS = [
+  { id: 'pad-west', x: -1000, y: -230 },
+  { id: 'pad-east', x: 1950, y: -230 },
+  { id: 'pad-long', x: 2080, y: 1300 },
+];
+/** 고공 요새의 엄폐물(내구도 COVER.hp): 고지대 아래·다리 밑·오르막길 둘레 */
+export const FORTRESS_COVERS = [
+  { id: 'f1', x: -350, y: -200, w: 180, h: 44 }, { id: 'f2', x: 1950, y: 300, w: 180, h: 44 },
+  { id: 'f3', x: 800, y: -380, w: 260, h: 44 }, { id: 'f4', x: 800, y: 1400, w: 260, h: 44 },
+  { id: 'f5', x: -350, y: 900, w: 44, h: 200 }, { id: 'f6', x: 2700, y: 600, w: 44, h: 200 },
+  { id: 'f7', x: 2300, y: 1900, w: 200, h: 44 }, { id: 'f8', x: -900, y: 1600, w: 200, h: 44 },
+  { id: 'f9', x: 300, y: -1100, w: 200, h: 44 }, { id: 'f10', x: 1300, y: -1100, w: 200, h: 44 },
+  { id: 'f11', x: 1200, y: 2100, w: 44, h: 200 }, { id: 'f12', x: 400, y: 2100, w: 44, h: 200 },
+];
+/** 2인 대결에서 고르는 경기장 */
+export const MAPS = {
+  wide: { id: 'wide', name: '넓은 옥상', info: '계단식 탑·컨테이너·전망대가 흩어진 거대한 옥상' },
+  fortress: { id: 'fortress', name: '고공 요새', info: '매우 높은 고지대 2개와 잇는 다리·오르막길·점프 패드 3개·긴 다리' },
+};
+/**
+ * 위아래 자동 조준: 높이가 다른 상대(고지대·다리 위, 또는 그 아래)를 조준 방향 cone도 안에서 겨누면,
+ * 높이 차이가 minDz보다 클 때 탄이 그 높이로 기울어 날아간다(1인칭 화면은 위아래로 고개를 들지 않으므로).
+ */
+export const VERTICAL_AIM = { cone: 14, minDz: 30 };
 export const MIN_X = 80;
 export const MAX_X = 1520;
 /** 원래 크기 경기장의 이동 범위(스토리 모드·건 카타 수련장) */
@@ -113,6 +156,9 @@ export const TICK = 1 / 60;
  * bounces: 엄폐물·경기장 끝에 닿으면 그만큼 튕겨 나간다(에너지 돌격소총). 튕길 때도 엄폐물은 깎인다.
  * energy: 푸른 에너지 볼트를 쏘는 에너지 무기(탄 모양·총구 빛이 푸르다). alternate: 두 자루를 번갈아 쏜다(에너지 쌍권총).
  * legendary: 전설 무기. 상점에서 사야(50코인) 무기 선택 목록에 나온다.
+ * homing: { turnRate } 가장 가까운 적 쪽으로 초당 turnRate(라디안)까지 휘어 날아간다. shock: 폭발에 맞은 적이 감전되어 그 초만큼 움직이지도 쏘지도 못한다.
+ * life: 탄 수명(초, 없으면 RULES.bulletLife). range: 던지는 무기가 날아가는 거리(없으면 RULES.throwRange).
+ * field: 떨어진 자리에 퍼지는 전기 장판(전기충격기 발사기). 닿은 적은 field.freeze초 동안 움직이지 못한다.
  * thrown: 던지는 무기. 엄폐물·플레이어 위로 조준 방향으로 RULES.throwRange만큼 날아가 터진다(직격 없음, 폭발 피해만).
  * 폭발 무기(splash)는 맞히지 못하면 벽(경기장 끝)·수명 끝에서 터진다. 전투기·포탑처럼 목표를 노린 폭탄은 목표 자리(range)에서 터진다.
  */
@@ -157,6 +203,12 @@ export const WEAPONS = {
     id: 'energydual', name: '에너지 쌍권총', interval: 0.06, damage: 3, speed: 2400, burst: 1, mag: 250, reload: 1.2,
     energy: true, alternate: true, legendary: true,
   },
+  // 에너지 RPG: 푸른 에너지 로켓. 가장 가까운 적 쪽으로 약하게 휘어 날아가고(유도), 폭발 범위가 RPG보다 훨씬 크다.
+  // 폭발(직격 포함)에 맞은 적은 감전되어 shock초 동안 움직이지도 공격하지도 못한다. 대신 피해는 RPG보다 낮다.
+  energyrpg: {
+    id: 'energyrpg', name: '에너지 RPG', interval: 1.2, damage: 25, speed: 820, burst: 1, trigger: 'release', mag: 1, reload: 1.2,
+    splash: { damage: 6, radius: 320 }, homing: { turnRate: 0.75 }, shock: 4, energy: true, legendary: true,
+  },
   sniper: {
     id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release', mag: 5, reload: 2.4,
     note: '팀 진영에 강철 엄폐물',
@@ -182,6 +234,19 @@ export const WEAPONS = {
   shotgun: {
     id: 'shotgun', name: '샷건', interval: 10, damage: 40, speed: 900, burst: 1, trigger: 'release', ownCooldown: true, mag: 0, reload: 1.5,
     pellets: 5, spread: 40,
+  },
+  // 유탄 발사기(보조무기, 스코프 달림): 조준한 뒤 떼면 유탄 3발을 연달아 쏜다(burst). 유탄은 맞거나 엄폐물에 닿거나 life초 뒤 터진다.
+  // 직격 25, 주변 폭발 25(직격 맞은 사람은 폭발 피해를 또 받지 않음). 다 쏜 뒤 쿨타임 15초(이 무기만 따로)
+  grenadelauncher: {
+    id: 'grenadelauncher', name: '유탄 발사기', interval: 15, damage: 25, speed: 860, burst: 3, burstGap: 0.22, trigger: 'release', ownCooldown: true,
+    splash: { damage: 25, radius: 110 }, life: 1.25, scoped: true,
+  },
+  // 전기충격기 발사기(보조무기): 조준한 뒤 떼면 전기충격기를 포물선으로 던지듯 쏜다(엄폐물·사람 위로 range만큼).
+  // 떨어진 자리에서 원형으로 전기가 퍼져 나가고(field.spread초 동안 반지름 field.radius까지, field.life초 동안 남음),
+  // 그 전기에 닿은 적은 freeze초 동안 움직이지 못한다(공중에 높이 뛰어 있으면 닿지 않음). 쿨타임 10초
+  stunlauncher: {
+    id: 'stunlauncher', name: '전기충격기 발사기', interval: 10, damage: 0, speed: 760, burst: 1, trigger: 'release', ownCooldown: true,
+    thrown: true, range: 650, field: { radius: 210, spread: 0.45, life: 1.6, freeze: 2 },
   },
   // 수류탄(아이템): 아이템 버튼으로 지금 조준 방향에 바로 던진다. interval은 던진 뒤의 쿨타임
   grenade: {
@@ -225,10 +290,10 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
  * 준비 화면에서 고르는 주무기·보조무기(숨겨진 무기 포함, 목록에는 hidden이 아닌 것만 보인다). 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,
  * 수류탄은 아이템 버튼으로 바로 던진다.
  */
-export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'energyrifle', 'energydual'];
+export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'energyrifle', 'energydual', 'energyrpg'];
 /** 상점에서 사야 쓸 수 있는 전설 무기 */
 export const LEGENDARY_IDS = PRIMARY_IDS.filter((id) => WEAPONS[id].legendary);
-export const SECONDARY_IDS = ['smg', 'dagger', 'shotgun'];
+export const SECONDARY_IDS = ['smg', 'dagger', 'shotgun', 'grenadelauncher', 'stunlauncher'];
 export const DEFAULT_SECONDARY = 'smg';
 export const SLOT_ORDER = ['primary', 'secondary'];
 export const SLOT_NAME = { primary: '주무기', secondary: '보조무기' };

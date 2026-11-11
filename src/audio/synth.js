@@ -565,6 +565,9 @@ export function playEvents(events) {
     if (e.type === 'fire' && e.weapon === 'instakill') { /* 소리는 megalaser에서 */ }
     else if (e.type === 'fire' && e.weapon === 'laser') laserZap();
     else if (e.type === 'fire' && (e.weapon === 'energyrifle' || e.weapon === 'energydual')) energyZap(e.weapon === 'energyrifle');
+    else if (e.type === 'fire' && e.weapon === 'energyrpg') { energyZap(true); gunshot({ filter: 600, q: 0.5, decay: 0.45, thump: 80, volume: 1.2 }); slide(240, 1400, 0.4, 'sawtooth', 0.4); } // 에너지 로켓: 위이잉 + 쾅
+    else if (e.type === 'fire' && e.weapon === 'grenadelauncher') { gunshot({ filter: 500, q: 0.6, decay: 0.22, thump: 140, volume: 1.1 }); tone(140, 0.08, 'square'); } // 유탄: 퉁!
+    else if (e.type === 'fire' && e.weapon === 'stunlauncher') { gunshot({ filter: 1400, q: 0.8, decay: 0.18, thump: 60, volume: 0.9 }); slide(1800, 600, 0.25, 'square', 0.35); } // 전기충격기: 퓽
     else if (e.type === 'fire' && e.weapon === 'flamethrower') flameRoar();
     else if (e.type === 'fire' && e.weapon === 'dagger') { if (!playRecorded('knife-swing')) gunshot(SHOT.dagger); }
     else if (e.type === 'fire' && REAL[e.weapon] && playRecorded(`shot-${e.weapon}`)) { /* 녹음본 재생 */ }
@@ -590,6 +593,10 @@ export function playEvents(events) {
     if (e.type === 'block') tone(300, 0.05, 'triangle');
     if (e.type === 'bounce') tone(1500, 0.04, 'sine'); // 에너지 볼트 튕김: 띵
     if (e.type === 'explode') { gunshot({ filter: 250, q: 0.4, decay: 0.6, thump: 90, volume: 1.4 }); tone(60, 0.4, 'square', 0.05); }
+    if (e.type === 'explode' && e.energy) [1800, 2600, 1400, 3000].forEach((f, i) => tone(f, 0.05, 'sawtooth', 0.05 + i * 0.06)); // 전기 지지직
+    if (e.type === 'field') { gunshot({ filter: 3200, q: 2, decay: 0.6, thump: 0, volume: 0.8 }); [2200, 3100, 1700].forEach((f, i) => tone(f, 0.05, 'sawtooth', i * 0.08)); }
+    if (e.type === 'stun') [2400, 1200, 2800, 900].forEach((f, i) => tone(f, 0.06, 'square', i * 0.07)); // 감전·마비: 찌릿찌릿
+    if (e.type === 'pad') slide(200, 1400, 0.45, 'sine', 0.9); // 점프 패드: 뿅
     if (e.type === 'cover-hit') tone(180, 0.04, 'triangle');
     if (e.type === 'cover-break') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 70, volume: 1.3 }); tone(120, 0.2, 'sawtooth', 0.04); }
     if (e.type === 'down') [660, 440, 220].forEach((f, i) => tone(f, 0.12, 'square', i * 0.1));

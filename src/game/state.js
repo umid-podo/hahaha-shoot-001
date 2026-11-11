@@ -1,6 +1,6 @@
 import {
   RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, JET, COVERS, COVER,
-  STEEL, STEEL_SPOTS, HIGHS, FIELD, ARENA_BOUNDS, WIDE_HIGHS, WIDE_COVERS, EVADE,
+  STEEL, STEEL_SPOTS, HIGHS, FIELD, ARENA_BOUNDS, WIDE_HIGHS, WIDE_COVERS, EVADE, FORTRESS_HIGHS, FORTRESS_COVERS, FORTRESS_PADS, PAD,
 } from './config.js';
 
 // 2인 전용. 자리(P1·P2)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
@@ -80,6 +80,8 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
     ammo: {}, reload: null,
     // z: 발 높이(점프·고지대), vz: 위로 가는 속도
     z: 0, vz: 0,
+    // shock: 감전 남은 초(움직이지도 쏘지도 못함), freeze: 마비 남은 초(움직이지 못함)
+    shock: 0, freeze: 0,
     // evade: 회피 돌진 중이면 { dx, dy, t(남은 초) }, evadeCharges: 남은 연속 회피 횟수, evadeCooldown: 다시 채워질 때까지 남은 초
     evade: null, evadeCharges: EVADE.charges, evadeCooldown: 0,
     cooldown: 0, cooldowns: {}, dash: null, burstLeft: 0, burstTimer: 0, wasAiming: false,
@@ -98,7 +100,9 @@ export function createMatchWith(players, seed = Date.now()) {
     // highs: 고지대(올라설 수 있는 높은 단). 공중전·도로·대교 스테이지에서는 비운다
     highs: HIGHS.map((h) => ({ ...h })),
     // bounds: 움직일 수 있는 범위(원래 크기). createMatch(2인 대결·자유 대전)는 넓은 맵으로 넓힌다
-    bounds: { ...ARENA_BOUNDS }, wide: false,
+    bounds: { ...ARENA_BOUNDS }, wide: false, map: null,
+    // pads: 점프 패드(고공 요새), fields: 퍼져 나가는 전기 장판(전기충격기 발사기)
+    pads: [], fields: [],
     jet: null, jetTimer: between(rng, JET.firstDelay), rng,
     tick: 0, winner: null, stats: createStats(players),
   };
@@ -108,18 +112,40 @@ export function createMatchWith(players, seed = Date.now()) {
  * @param {Record<string, {characterId: string, weapon: string}>} [loadout]
  * 자리별 선택(createPlayer의 pick)으로 P1·P2 경기를 만든다.
  */
-export function createMatch(loadout = defaultLoadout(), seed = Date.now(), { wide = false } = {}) {
+export function createMatch(loadout = defaultLoadout(), seed = Date.now(), { wide = false, map = 'wide' } = {}) {
   const match = createMatchWith(SLOTS.map((slot) => createPlayer(slot, loadout[slot.id] ?? {})), seed);
-  if (wide) widen(match);
+  if (wide) widen(match, map);
   return match;
 }
 
-/** 넓은 맵으로: 이동 범위를 FIELD로 넓히고 둘레에 엄폐물·고지대를 더 놓는다(2인 대결·자유 대전) */
-export function widen(match) {
+/**
+ * 넓은 맵으로: 이동 범위를 FIELD로 넓히고 둘레에 엄폐물·고지대를 더 놓는다(2인 대결·자유 대전).
+ * map 'fortress'(고공 요새)는 계단식 탑·컨테이너 대신 매우 높은 고지대 2개·잇는 다리·오르막길·점프 패드 3개·긴 다리를 놓는다
+ * (스토리 1스테이지 옥상, 2인 대결에서 고를 수 있음).
+ */
+export function widen(match, map = 'wide') {
   match.wide = true;
+  match.map = map === 'fortress' ? 'fortress' : 'wide';
   match.bounds = { ...FIELD };
-  match.covers.push(...WIDE_COVERS.map((c) => ({ ...c, hp: COVER.hp })));
-  match.highs.push(...WIDE_HIGHS.map((h) => ({ ...h })));
+  if (match.map === 'fortress') {
+    match.covers.push(...FORTRESS_COVERS.map((c) => ({ ...c, hp: COVER.hp })));
+    match.highs.push(...FORTRESS_HIGHS.map((h) => ({ ...h, ...(h.ramp ? { ramp: { ...h.ramp } } : {}) })));
+    match.pads = FORTRESS_PADS.map((pad) => ({ ...pad, r: PAD.r, power: PAD.power }));
+  } else {
+    match.covers.push(...WIDE_COVERS.map((c) => ({ ...c, hp: COVER.hp })));
+    match.highs.push(...WIDE_HIGHS.map((h) => ({ ...h })));
+  }
+  return match;
+}
+
+/** 원래 크기 경기장으로 되돌린다(스토리 모드에서 옥상 → 복도로 넘어갈 때). 고지대는 원래 4개, 점프 패드는 없앤다 */
+export function unwiden(match) {
+  match.wide = false;
+  match.map = null;
+  match.bounds = { ...ARENA_BOUNDS };
+  match.highs = HIGHS.map((h) => ({ ...h }));
+  match.pads = [];
+  match.fields = [];
   return match;
 }
 

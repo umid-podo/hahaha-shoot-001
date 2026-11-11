@@ -1,8 +1,11 @@
 import { createWorkshop } from './workshop.js';
 import { modStore } from '../game/mods.js';
 import {
-  TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, TICK,
+  TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, TICK, MAPS,
 } from '../game/config.js';
+import { TIERS, ACCOUNTS, MAX_LEVEL, accountName, rankLabel, rankProgress } from '../game/rank.js';
+import { loadRank } from '../storage/settings.js';
+import { accountKey } from '../game/mods.js';
 import { KEY_LABELS } from '../input/keyboard.js';
 import { PAD_LABEL } from '../input/gamepad.js';
 import { createBalanceScreens } from './balance.js';
@@ -130,6 +133,7 @@ export function createScreens(handlers) {
   const screens = {
     menu: $('#screen-menu'), ready: $('#screen-ready'), pause: $('#screen-pause'), result: $('#screen-result'),
     balance: $('#screen-balance'), summary: $('#screen-summary'), single: $('#screen-single'), mod: $('#screen-mod'),
+    account: $('#screen-account'),
   };
 
   /** 메인 메뉴 '총기 개조' 버튼의 가진 코인 표시 */
@@ -158,6 +162,7 @@ export function createScreens(handlers) {
     onClose() { handlers.onMenu(); },
   });
   $('#balance-btn').addEventListener('click', balance.open);
+  $('#account-btn').addEventListener('click', handlers.onAccounts);
   // 총기 개조 작업실(랜덤 뽑기·배낭·장착)
   const workshop = createWorkshop({ show, onClose() { handlers.onMenu(); } });
   $('#mod-btn').addEventListener('click', workshop.open);
@@ -221,8 +226,57 @@ export function createScreens(handlers) {
       $('#balance-status').hidden = changedCount === 0;
       $('#balance-status').textContent = `밸런스 수치 ${changedCount}개가 기본값과 다릅니다.`;
     },
-    /** 2인 대결: 자리마다 캐릭터(5명 중 자유)와 주무기를 고른다. 고를 때마다 handlers.onPick(slotId, key, value) */
-    showReady(slots, loadout) {
+    /**
+     * 계정 선택 화면: 계정 1~4 버튼(계정마다 랭크·코인). 고르면 handlers.onAccount(n). current는 지금(마지막) 계정.
+     */
+    showAccounts(current) {
+      const list = $('#account-list');
+      list.replaceChildren(...ACCOUNTS.map((n) => {
+        const r = loadRank(n);
+        // 그 계정의 코인(읽기만, 기본 코인은 그 계정을 처음 고를 때 받는다)
+        const coins = (() => {
+          try {
+            const saved = JSON.parse(localStorage.getItem(accountKey('haha2.mods.v1', n)));
+            return Number.isFinite(saved?.coins) ? saved.coins : null;
+          } catch { return null; }
+        })();
+        const btn = el('button', `account-card${n === current ? ' current' : ''}`);
+        btn.type = 'button';
+        btn.style.setProperty('--tier', TIERS[r.tier].color);
+        btn.append(
+          el('b', 'account-title', accountName(n)),
+          el('span', 'rank-badge', `${TIERS[r.tier].icon} ${rankLabel(r)}`),
+          el('small', '', `승리 ${r.wins}번 · ${coins === null ? '새 계정' : `🪙 ${coins}`}`),
+        );
+        btn.addEventListener('click', () => handlers.onAccount(n));
+        return btn;
+      }));
+      show('account');
+    },
+    /** 메인 메뉴 위 계정·랭크 표시 */
+    setAccount(n, rank) {
+      $('#account-name').textContent = accountName(n);
+      const tier = TIERS[rank.tier];
+      $('#rank-badge').textContent = `${tier.icon} ${rankLabel(rank)}`;
+      $('#rank-badge').style.setProperty('--tier', tier.color);
+      $('#rank-fill').style.width = `${Math.round(rankProgress(rank) * 100)}%`;
+      $('#rank-fill').style.background = tier.color;
+      $('#account-bar').title = rank.tier === TIERS.length - 1 ? `최고 등급 · ${MAX_LEVEL}레벨까지` : `${MAX_LEVEL}레벨이 되면 20코인과 함께 ${TIERS[rank.tier + 1].name}으로 승급`;
+      syncMenuCoins();
+    },
+    /** 2인 대결: 경기장과 자리마다 캐릭터(5명 중 자유)·주무기를 고른다. 고를 때마다 handlers.onPick(slotId, key, value) */
+    showReady(slots, loadout, map = 'wide') {
+      $('#map-choices').replaceChildren(...Object.values(MAPS).map((m) => {
+        const btn = el('button', 'choice');
+        btn.type = 'button';
+        btn.setAttribute('aria-pressed', String(m.id === map));
+        btn.append(el('span', '', m.name), el('small', '', m.info));
+        btn.addEventListener('click', () => {
+          for (const b of btn.parentElement.children) b.setAttribute('aria-pressed', String(b === btn));
+          handlers.onMap(m.id);
+        });
+        return btn;
+      }));
       $('#slot-list').replaceChildren(...slots.map((s) => slotItem(s, loadout, handlers.onPick)));
       $('#narrow-warning').hidden = window.innerWidth / slots.length >= MIN_PANEL_WIDTH;
       show('ready');
@@ -239,8 +293,25 @@ export function createScreens(handlers) {
       storySetup.open(story);
       show('single');
     },
-    showResult(match) {
+    showResult(match, ranked = null) {
       const { winner, stats, story } = match;
+      // 랭크: 오른 레벨·승급 안내
+      $('#result-rank').hidden = !ranked;
+      if (ranked) {
+        $('#result-rank').textContent = `${TIERS[ranked.result.rank.tier].icon} ${ranked.message}`;
+        $('#result-rank').classList.toggle('promoted', !!ranked.result.promoted);
+      }
+      // 2인 대결 승리 포즈: 이긴 캐릭터가 뛰어오르며 총을 치켜든다
+      const champ = match.victory && match.players.find((p) => p.id === match.victory.id);
+      $('#result-victory').hidden = !champ;
+      if (champ) {
+        const img = el('img', 'victory-pose');
+        img.src = CHARACTERS.find((c) => c.id === champ.characterId)?.image ?? `assets/characters/${champ.characterId}.png`;
+        img.alt = `${champ.name} 승리 포즈`;
+        const card = el('div', `victory-card team-${champ.team}`);
+        card.append(el('span', 'victory-confetti', '🎉'), img, el('b', '', `WINNER · ${champ.id} ${champ.name}`), el('span', 'victory-confetti right', '🏆'));
+        $('#result-victory').replaceChildren(card);
+      }
       // 스토리 모드는 경기장에서 치운 요원까지 나온 요원 전원을 보여 준다
       const players = story ? [...match.players.filter((p) => p.team === 'earth'), ...story.roster] : match.players;
       const time = match.tick * TICK;

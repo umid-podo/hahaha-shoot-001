@@ -2,7 +2,7 @@ import {
   ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS, CHARACTERS,
   MAX_SPEED as MAX_SPEED_BASE, SKY, TANK, SHIP, DRIVE, RULES, WEAPONS,
 } from './config.js';
-import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers, between } from './state.js';
+import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers, between, widen, unwiden } from './state.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
 
 /**
@@ -297,6 +297,8 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
       if (p.hp === 0) p.alive = false;
     });
   }
+  // 1스테이지 옥상은 2인 대결의 넓은 맵만큼 넓은 '고공 요새'(매우 높은 고지대 2개·다리·오르막길·점프 패드·긴 다리)
+  if (WAVES[start].stage === 'rooftop') widen(match, 'fortress');
   if (start === 0) {
     spawnWave(match, {}, 0); // 입력 칸은 경기를 시작할 때 createInputs(match.players)로 만든다
     return match;
@@ -435,6 +437,8 @@ const killerOf = (match, victim) => match.stats?.[victim.id]?.killedBy?.ownerId 
 function setupCorridor(match) {
   const story = match.story;
   story.stage = 'corridor';
+  // 옥상(고공 요새)의 넓은 맵에서 원래 크기 복도로
+  if (match.wide) unwiden(match);
   story.elevator = { open: 0, target: 0 };
   story.turrets = TURRETS.map((t) => ({ ...t, aim: t.dir > 0 ? 0 : Math.PI, fireTimer: 0 }));
   story.turretTimer = TURRET.firstDelay;
@@ -618,7 +622,8 @@ function moveToCorridor(match, events) {
   const xs = heroXs(list.length);
   list.forEach((hero, i) => {
     Object.assign(hero, {
-      hp: hero.maxHp, alive: true, hurt: 0, x: xs[i], previousX: xs[i], y: RAIL_Y.earth, dash: null,
+      hp: hero.maxHp, alive: true, hurt: 0, x: xs[i], previousX: xs[i], y: RAIL_Y.earth, previousY: RAIL_Y.earth, dash: null,
+      z: 0, vz: 0, evade: null, shock: 0, freeze: 0,
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, sinceShot: Infinity,
     });
   });
@@ -989,7 +994,11 @@ export function normalizeStorySave(save) {
   const pickOf = ({ characterId, weapon, secondary }) => ({ characterId, weapon, secondary });
   const savedAt = Number(save.savedAt) || 0;
   const allies = allyCount(save.allies);
-  const withAllies = (out) => (allies ? { ...out, allies, allyPicks: normalizeAllyPicks(save.allyPicks).slice(0, allies) } : out);
+  // clean: 처음부터 스테이지 건너뛰기 없이 해 온 판(끝까지 깨면 랭크가 오른다)
+  const withAllies = (out) => ({
+    ...(allies ? { ...out, allies, allyPicks: normalizeAllyPicks(save.allyPicks).slice(0, allies) } : out),
+    ...(save.clean === true ? { clean: true } : {}),
+  });
   if (save.coop) {
     const hp2 = Number(save.hp2);
     if (!isPick(save.pick2) || !(hp >= 0) || !(hp2 >= 0) || !(hp > 0 || hp2 > 0)) return null;

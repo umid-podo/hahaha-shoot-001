@@ -21,6 +21,16 @@
     <p id="live" class="sr-only" aria-live="polite"></p>
   </main>
 
+  <!-- 처음 시작할 때 계정 1~4 중 하나를 고른다. 계정마다 랭크·코인·배낭·산 무기·스토리 저장이 따로다 -->
+  <section id="screen-account" class="screen" hidden>
+    <div class="card">
+      <p class="eyebrow">스파이 대전쟁</p>
+      <h2 tabindex="-1">계정 선택</h2>
+      <p class="hint">플레이할 계정을 고르세요. 계정마다 랭크·코인·총기 개조(배낭·산 무기)·스토리 저장이 따로 저장되어, 한 계정에서 플레이해도 다른 계정에는 영향이 없습니다.</p>
+      <div id="account-list" class="account-list" role="group" aria-label="계정"></div>
+    </div>
+  </section>
+
   <section id="screen-menu" class="screen">
     <div class="card">
       <p class="eyebrow">2인 슈팅게임 <span class="badge">알파</span></p>
@@ -39,6 +49,12 @@
       <p class="teams">
         <img src="assets/ui/earth-badge.svg" alt=""> 지구방위팀 <span>vs</span> ISB팀 <img src="assets/ui/isb-badge.svg" alt="">
       </p>
+      <div id="account-bar" class="account-bar">
+        <span id="account-name" class="account-name"></span>
+        <span id="rank-badge" class="rank-badge"></span>
+        <span class="rank-meter" aria-hidden="true"><i id="rank-fill"></i></span>
+        <button id="account-btn" type="button">계정 바꾸기</button>
+      </div>
       <p id="load-status" role="status">에셋을 불러오는 중…</p>
       <button id="retry-btn" type="button" hidden>다시 시도</button>
       <div class="row">
@@ -84,6 +100,8 @@
   <section id="screen-ready" class="screen" hidden>
     <div class="card">
       <h2 tabindex="-1">캐릭터·무기 선택</h2>
+      <div class="field-label">경기장</div>
+      <div id="map-choices" class="choices maps" role="group" aria-label="경기장"></div>
       <ul id="slot-list"></ul>
       <p class="hint">주무기·보조무기는 경기 전에 고르고 경기 중에는 바꿀 수 없습니다. 경기 중에는 패널 가운데 버튼으로 둘 중 들 무기를 고르고, 아이템 버튼으로 수류탄을 던집니다.</p>
       <p class="hint">터치: 화면 아래 자기 패널의 이동키(앞뒤·옆걸음)·시선·발사키(옆으로 밀면 고개 돌리기, 밀고 있으면 발사)·버튼을 사용합니다. 키보드와 함께 써도 됩니다.</p>
@@ -170,6 +188,8 @@
     <div class="card result-card">
       <p id="result-time" class="eyebrow"></p>
       <h2 id="result-title" tabindex="-1"></h2>
+      <div id="result-victory" class="result-victory" hidden></div>
+      <p id="result-rank" class="result-rank" hidden></p>
       <div id="result-players" class="result-players"></div>
       <div id="result-damage" class="damage-compare" role="img"></div>
       <h3>무기별 통계</h3>
