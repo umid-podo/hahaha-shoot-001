@@ -111,7 +111,7 @@ test('AI 한 발 피하기: 정면으로 오는 탄을 옆으로 비킴', () => 
   brain.diff = { ...brain.diff, dodge: 1 };
   P1.x = P1.previousX = P2.x;
   const b = spawnProjectile(match, P1, -Math.PI / 2);
-  b.y = b.previousY = P2.y + 500; // 약 0.3초 뒤 도착
+  b.y = b.previousY = P2.y + 800; // 빠른 저격탄이 조금 뒤 도착(비킬 틈)
   run(match, inputs, brain, 1);
   assert.equal(match.stats.P2.taken, 0);
   assert.ok(Math.abs(P2.x - P1.x) > P2.radius, '옆으로 비킴');

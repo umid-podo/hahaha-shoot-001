@@ -317,7 +317,7 @@ test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이�
   const [agent] = enemies(match);
   assert.equal(agent.hp, 1234);
   assert.equal(agent.radius, 45);
-  assert.equal(agent.speed, MAX_SPEED * 0.5, '이동 속도 50%(기본 속도는 원래의 4배)');
+  assert.equal(agent.speed, MAX_SPEED * 0.5, '이동 속도 50%');
   assert.equal(match.story.brains[0].diff.name, '어려움');
   const b = spawnProjectile(match, agent, Math.PI / 2);
   assert.equal(b.damage, WEAPONS.rifle.damage * 2, '피해 200%');

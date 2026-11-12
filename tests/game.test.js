@@ -1077,7 +1077,7 @@ test('즉사기 사용 가능 시각은 밸런스로 조절', () => {
   }
 });
 
-test('아크 트루퍼는 제트팩으로 다른 캐릭터보다 빠르게 움직임(초당 420의 4배), 모두 원래의 4배 빠르기', () => {
+test('아크 트루퍼는 제트팩으로 다른 캐릭터보다 빠르게 움직임(초당 420의 4/1.5배), 모두 원래의 4/1.5배 빠르기', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'arc-trooper' } });
   assert.ok(P1.jetpack, '제트팩');
   assert.equal(P2.jetpack, null);
@@ -1086,7 +1086,7 @@ test('아크 트루퍼는 제트팩으로 다른 캐릭터보다 빠르게 움�
   run(match, inputs, 0.25);
   assert.ok(Math.abs(P1.x - 100 - 420 * SPEED_SCALE * 0.25) < 8, `아크 트루퍼 ${P1.x - 100}`);
   assert.ok(Math.abs(P2.x - 100 - 300 * SPEED_SCALE * 0.25) < 8, `다른 캐릭터 ${P2.x - 100}`);
-  assert.equal(MAX_SPEED, 1200, '원래 300의 4배');
+  assert.equal(MAX_SPEED, 800, '원래 300의 4배를 1.5배 줄임');
 });
 
 test('즉사기 피해·유도 각도 조절: 피해를 줄이면 그만큼만, 유도가 작으면 빗나감', () => {
@@ -1231,8 +1231,12 @@ test('점프: 뛰어올라 약 120 높이까지 갔다가 내려오고, 공중�
   run(match, inputs, 0.8);
   assert.ok(P1.y >= cover.y + cover.h / 2, '걸어서는 막힘');
   P1.y = P1.previousY = cover.y + 60;
+  // 살짝 뛰면(약 80) 엄폐물(84)보다 낮으므로 조금 꾹 눌러 넘는다
   inputs.P1.jump = true;
-  run(match, inputs, 0.8);
+  inputs.P1.jumpHeld = true;
+  run(match, inputs, 0.15);
+  inputs.P1.jumpHeld = false;
+  run(match, inputs, 0.65);
   assert.ok(P1.y < cover.y - cover.h / 2, '뛰어서 넘어감');
 });
 
@@ -1240,14 +1244,17 @@ test('고지대: 걸어서는 못 올라가고 뛰어오르면 올라서며(그 
   const { match, inputs, P1 } = playing(undefined, { highs: true });
   P1.speed = MAX_SPEED / SPEED_SCALE; // 한 칸에 올라서는 거리를 보려고 원래 걷는 속도로
   const g = match.highs.find((h) => h.id === 'high-west');
-  assert.ok(g.height > JUMP.step && g.height < JUMP.jump ** 2 / (2 * JUMP.gravity), '뛰면 닿는 높이');
+  assert.ok(g.height > JUMP.step && g.height > JUMP.jump ** 2 / (2 * JUMP.gravity), '살짝 뛰어서는 못 닿고 조금 꾹 눌러야 닿는 높이');
   P1.x = P1.previousX = g.x; P1.y = P1.previousY = g.y + g.h / 2 + 40;
   inputs.P1.moveY = -1;
   run(match, inputs, 0.6);
   assert.ok(P1.y >= g.y + g.h / 2 - 1, '옆면에 막힘');
   assert.equal(P1.z, 0);
   inputs.P1.jump = true;
-  run(match, inputs, 0.7);
+  inputs.P1.jumpHeld = true;
+  run(match, inputs, 0.15);
+  inputs.P1.jumpHeld = false;
+  run(match, inputs, 0.55);
   assert.ok(P1.y < g.y + g.h / 2, '올라섬');
   inputs.P1.moveY = 0;
   run(match, inputs, 0.5);

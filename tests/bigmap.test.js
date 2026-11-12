@@ -1,4 +1,4 @@
-// 거대한 경기장(모든 스테이지 넓이 10배)·꾹 누르는 점프·위아래 시선·구조물 관통 금지·탄속 3배·이동 속도 4배
+// 거대한 경기장(모든 스테이지 넓이 10배)·꾹 누르는 점프·위아래 시선·구조물 관통 금지·탄속 3배·이동 속도(원래의 4/1.5배)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch, createInputs } from '../src/game/state.js';
@@ -37,13 +37,14 @@ function jumpWith(holdSeconds, move = 0) {
   return { peak, dist: P1.x - x0 };
 }
 
-test('점프: 살짝 누르면 원래처럼 약 120, 꾹 누를수록 훨씬 높이·멀리 뛴다', () => {
+test('점프: 살짝 누르면 약 80, 꾹 누를수록 훨씬 높이(약 600)·멀리 뛴다(예전 높이의 1/1.5)', () => {
   const tap = jumpWith(0);
   assert.ok(Math.abs(tap.peak - JUMP.jump ** 2 / (2 * JUMP.gravity)) < 8, `살짝: ${tap.peak}`);
+  assert.ok(Math.abs(tap.peak - 120 / 1.5) < 6, '예전(120)의 1/1.5');
   const half = jumpWith(JUMP.holdTime / 2);
   const full = jumpWith(5);
   assert.ok(half.peak > tap.peak * 2 && full.peak > half.peak, `반쯤 ${half.peak}, 끝까지 ${full.peak}`);
-  assert.ok(full.peak > 800, `꾹 누르면 매우 높이 ${full.peak}`);
+  assert.ok(Math.abs(full.peak - 900 / 1.5) < 30, `꾹 누르면 약 600(예전 900의 1/1.5): ${full.peak}`);
   // 멀리: 같은 쪽으로 걸으며 뛰면 꾹 누른 점프가 훨씬 멀리 간다(공중에 오래 떠 있고 공중에서 더 빠름)
   const tapFar = jumpWith(0, 1), fullFar = jumpWith(5, 1);
   assert.ok(fullFar.dist > tapFar.dist * 3, `거리 ${tapFar.dist.toFixed(0)} → ${fullFar.dist.toFixed(0)}`);
@@ -55,18 +56,18 @@ test('점프: 살짝 누르면 원래처럼 약 120, 꾹 누를수록 훨씬 높
   assert.ok(P1.vz < 0, '공중에서는 새로 뛰지 못함');
 });
 
-test('이동 속도: 플레이어·요원 모두 원래의 4배(초당 1200)', () => {
+test('이동 속도: 플레이어·요원 모두 초당 800(1200에서 1.5배 줄임)', () => {
   const { match, inputs, P1, P2 } = playing();
-  assert.equal(P1.speed, 1200);
-  assert.equal(P2.speed, 1200);
-  assert.equal(MAX_SPEED, 1200);
+  assert.ok(Math.abs(P1.speed - 800) < 1e-9);
+  assert.ok(Math.abs(P2.speed - 800) < 1e-9);
+  assert.ok(Math.abs(MAX_SPEED - 800) < 1e-9);
   match.highs = []; match.covers = [];
   P1.x = P1.previousX = 0; P1.y = 500;
   inputs.P1.moveAxis = -1;
   for (let i = 0; i < 30; i++) step(match, inputs);
-  assert.ok(Math.abs(P1.x + 600) < 2, `0.5초에 600: ${P1.x}`);
+  assert.ok(Math.abs(P1.x + 400) < 2, `0.5초에 400: ${P1.x}`);
   const s = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 1);
-  assert.ok(s.players.filter((p) => p.team === 'isb').every((p) => p.speed === 1200), '스토리 요원도 4배');
+  assert.ok(s.players.filter((p) => p.team === 'isb').every((p) => Math.abs(p.speed - 800) < 1e-9), '스토리 요원도 같은 속도');
 });
 
 test('탄속: 모든 총기가 원래 표의 3배(던지는 무기는 그대로)', () => {

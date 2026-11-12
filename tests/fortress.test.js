@@ -157,7 +157,7 @@ test('고공 요새: 넓은 맵 크기에 매우 높은 고지대 2개·잇는 �
   for (const f of forts) assert.ok(Math.abs(link.x - f.x) - link.w / 2 <= f.w / 2 + 1);
   assert.equal(match.highs.filter((h) => h.ramp && h.id.startsWith('fort-')).length, 1, '원래 오르막길 1개');
   const long = match.highs.find((h) => h.id === 'fort-long');
-  assert.ok(long.bridge && long.height < FORTRESS_HEIGHT && long.height > FORTRESS_HEIGHT - JUMP.jump ** 2 / (2 * JUMP.gravity) + JUMP.step, '고지대보다 약간 낮고, 끝에서 뛰면 고지대로 올라감');
+  assert.ok(long.bridge && long.height < FORTRESS_HEIGHT && long.height > FORTRESS_HEIGHT - JUMP.jump ** 2 / (2 * JUMP.gravity) - JUMP.step, '고지대보다 약간 낮고, 끝에서 뛰면 고지대로 올라감');
   assert.ok(Math.max(long.w, long.h) >= 2000, '긴 다리');
   assert.equal(match.pads.filter((p) => p.id.startsWith('pad-')).length, 3, '원래 점프 패드 3개');
   assert.ok(match.pads.length > 10, '둘레에 점프 패드가 더 많다');
