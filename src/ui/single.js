@@ -1,7 +1,7 @@
 import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP, CHARACTERS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
-import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart, ENDLESS } from '../game/story.js';
+import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart, ENDLESS, ENDLESS_MAPS, endlessMapOf } from '../game/story.js';
 import { weaponLabel, weaponInfo, choiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -227,6 +227,7 @@ export function createSingleSetup(onChange) {
       info.textContent = id === 'rooftop' ? '처음부터' : `앞 스테이지 건너뛰기 · ${waveLabel(stageStart(id))}`;
       return choiceButton([label, info], single.storyStart === id, () => {
         single.storyStart = id;
+        syncEndlessMaps();
         onChange(single);
       });
     }), (() => {
@@ -234,19 +235,54 @@ export function createSingleSetup(onChange) {
       const label = document.createElement('span');
       label.textContent = '♾️ 연속 플레이 모드';
       const info = document.createElement('small');
-      info.textContent = `1스테이지 옥상만 · 요원 ${ENDLESS.count}명씩 무한 웨이브 · 웨이브마다 랭크 1레벨 · ${ENDLESS.reward}웨이브마다 1코인(중간에 그만둬도 보상 유지)`;
+      info.textContent = `스테이지를 골라서 · 요원 ${ENDLESS.count}명씩 무한 웨이브 · 웨이브마다 랭크 1레벨 · ${ENDLESS.reward}웨이브마다 1코인(중간에 그만둬도 보상 유지)`;
       const btn = choiceButton([label, info], single.storyStart === 'endless', () => {
         single.storyStart = 'endless';
+        syncEndlessMaps();
         onChange(single);
       });
       btn.classList.add('endless-choice');
       return btn;
     })());
+    // 연속 플레이 스테이지 고르기(연속 플레이를 골랐을 때만 보인다)
+    let maps = $('#endless-maps');
+    if (!maps) {
+      maps = document.createElement('div');
+      maps.id = 'endless-maps';
+      maps.className = 'choices endless-maps';
+      maps.setAttribute('role', 'group');
+      maps.setAttribute('aria-label', '연속 플레이 스테이지');
+      $('#story-start').after(maps);
+    }
+    single.endlessMap = endlessMapOf(single.endlessMap).id;
+    const title = document.createElement('div');
+    title.className = 'field-label';
+    title.textContent = '♾️ 연속 플레이 스테이지';
+    const buttons = document.createElement('div');
+    buttons.className = 'choices';
+    buttons.append(...ENDLESS_MAPS.map((m) => {
+      const name = document.createElement('span');
+      name.textContent = m.name;
+      const info = document.createElement('small');
+      info.textContent = m.info;
+      return choiceButton([name, info], single.endlessMap === m.id, () => {
+        single.endlessMap = m.id;
+        onChange(single);
+      });
+    }));
+    maps.replaceChildren(title, buttons);
+    syncEndlessMaps();
+  }
+
+  function syncEndlessMaps() {
+    const maps = $('#endless-maps');
+    if (maps) maps.hidden = !(single.mode === 'story' && single.storyStart === 'endless');
   }
 
   function syncMode() {
     const story = single.mode === 'story';
     $('#story-start').hidden = !story;
+    syncEndlessMaps();
     $('#story-allies').hidden = !story;
     $('#ally-picks').hidden = !story;
     $('#free-setup').hidden = story;

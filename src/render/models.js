@@ -301,10 +301,11 @@ export function makeChute(height = 180) {
  */
 export function makeHigh(g) {
   if (g.kind === 'container') return makeContainer(g);
+  if (g.style === 'white' && !g.bridge && !g.ramp) return makeWhiteBlock(g);
   if (g.kind === 'tower' || g.kind === 'block' || g.kind === 'pylon') return makeBuilding(g);
   if (g.kind === 'trailer' || g.kind === 'bus') return makeVehicleBlock(g);
-  if (g.bridge) return makeBridgeDeck(g);
-  if (g.ramp) return makeRamp(g);
+  if (g.bridge) return g.style === 'white' ? makeWhiteBridge(g) : makeBridgeDeck(g);
+  if (g.ramp) return g.style === 'white' ? makeWhiteRamp(g) : makeRamp(g);
   if (g.kind === 'fortress') return makeFortress(g);
   const out = new THREE.Group();
   const H = g.height;
@@ -566,16 +567,39 @@ function facadeTexture(style) {
   facades.set(style, t);
   return t;
 }
-/** 겉면 재질: 텍스처를 u×v번 반복(밤 빌딩 창문은 스스로 빛난다) */
-function facadeMat(style, u, v, tint = '#FFFFFF') {
-  const t = facadeTexture(style).clone();
-  t.needsUpdate = true;
-  t.repeat.set(Math.max(1, Math.round(u)), Math.max(1, Math.round(v)));
-  const glow = style === 'tower';
-  return new THREE.MeshStandardMaterial({
-    map: t, color: tint, roughness: style === 'tower' ? 0.5 : 0.85, metalness: style === 'tower' ? 0.3 : 0.15,
-    ...(glow ? { emissive: '#FFFFFF', emissiveMap: t, emissiveIntensity: 0.55 } : {}),
-  });
+/** 겉면 재질(무늬·색마다 하나만 만들어 함께 쓴다. 반복 횟수는 tiledBox가 면마다 UV로 정한다). 밤 빌딩 창문은 스스로 빛난다 */
+const facadeMats = new Map();
+function facadeMat(style, tint = '#FFFFFF') {
+  const key = `${style}|${tint}`;
+  if (!facadeMats.has(key)) {
+    const t = facadeTexture(style);
+    const glow = style === 'tower';
+    const m = new THREE.MeshStandardMaterial({
+      map: t, color: tint, roughness: style === 'tower' ? 0.5 : 0.85, metalness: style === 'tower' ? 0.3 : 0.15,
+      ...(glow ? { emissive: '#FFFFFF', emissiveMap: t, emissiveIntensity: 0.55 } : {}),
+    });
+    m.userData.shared = true;
+    facadeMats.set(key, m);
+  }
+  return facadeMats.get(key);
+}
+/**
+ * 상자(w×h×d)의 UV를 면마다 그 면 크기/tile만큼 늘려, 같은 텍스처·재질을 크기가 다른 상자들이 함께 써도 무늬 크기가 같게 한다.
+ * three.js 상자 면 순서: +X·-X(d×h), +Y·-Y(w×d), +Z·-Z(w×h), 면마다 꼭짓점 4개.
+ */
+function tiledBox(w, h, d, tile) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const uv = geo.attributes.uv;
+  const size = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+  for (let f = 0; f < 6; f++) {
+    const [u, v] = size[f].map((n) => Math.max(1, Math.round(n / tile)));
+    for (let k = 0; k < 4; k++) {
+      const i = f * 4 + k;
+      uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
+    }
+  }
+  uv.needsUpdate = true;
+  return geo;
 }
 /** 윗면 가장자리 노랑 띠(네 변, 얇은 상자 넷) */
 function rimStripes(out, w, d, H, color = '#FFC53D') {
@@ -594,9 +618,9 @@ export function makeBuilding(g) {
   const out = new THREE.Group();
   const H = g.height, style = g.kind;
   const per = style === 'tower' ? 120 : style === 'pylon' ? 200 : 160;
-  const front = facadeMat(style, g.w / per, H / per), side = facadeMat(style, g.h / per, H / per);
+  const face = facadeMat(style);
   const top = mat(style === 'pylon' ? '#F4F7FB' : style === 'block' ? '#7C858F' : '#5A5F68', { metal: 0.4, rough: 0.7 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(g.w, H, g.h), [side, side, top, top, front, front]);
+  const body = new THREE.Mesh(tiledBox(g.w, H, g.h, per), [face, face, top, top, face, face]);
   body.position.y = H / 2;
   out.add(body);
   if (g.core) return out;
@@ -630,10 +654,10 @@ export function makeVehicleBlock(g) {
   const long = g.w >= g.h, L = long ? g.w : g.h, W = long ? g.h : g.w;
   const inner = new THREE.Group();
   const style = g.kind;
-  const sideMat = facadeMat(style, L / 128, 1, style === 'trailer' ? g.color ?? '#FFFFFF' : g.color ?? '#FFFFFF');
+  const sideMat = facadeMat(style, g.color ?? '#FFFFFF');
   const end = mat(style === 'bus' ? '#26303E' : '#AEB4BE', { metal: 0.4, rough: 0.6 });
   const roof = mat(style === 'bus' ? '#C9CED6' : '#9AA3B1', { metal: 0.4, rough: 0.6 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(L, H - chassis, W), [end, end, roof, roof, sideMat, sideMat]);
+  const body = new THREE.Mesh(tiledBox(L, H - chassis, W, 128), [end, end, roof, roof, sideMat, sideMat]);
   body.position.y = chassis + (H - chassis) / 2;
   inner.add(body);
   inner.add(at(box(L * 0.96, chassis, W * 0.7, mat('#1A1C20', { metal: 0.5, rough: 0.6 })), 0, chassis / 2, 0));
@@ -666,4 +690,84 @@ export function makeBalloon(c) {
   out.add(at(sphere(8, mat('#FF3B30', { emissive: '#FF2A1A' }), 8, 6), r * 1.4, 70, 0));
   out.userData.block = body;
   return out;
+}
+
+/* ───────── 구름 위 하얀 섬(cloud 맵): 하얀 타일 블록 ───────── */
+let whiteTile = null;
+/** 하얀 타일 무늬(옅은 회색 줄눈과 모서리 점) 한 칸 = 120 */
+function whiteTileTexture() {
+  if (whiteTile) return whiteTile;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#F4F6FA'; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = '#C9D0DB'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, 125, 125);
+  g.strokeStyle = 'rgba(160,170,186,0.35)'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(64, 0); g.lineTo(64, 128); g.moveTo(0, 64); g.lineTo(128, 64); g.stroke();
+  g.fillStyle = '#B8C0CC';
+  for (const [x, y] of [[0, 0], [128, 0], [0, 128], [128, 128], [64, 64]]) { g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill(); }
+  whiteTile = new THREE.CanvasTexture(c);
+  whiteTile.colorSpace = THREE.SRGBColorSpace;
+  whiteTile.wrapS = whiteTile.wrapT = THREE.RepeatWrapping;
+  return whiteTile;
+}
+/** 하얀 타일 재질(하나만 만들어 함께 쓴다, 무늬 크기는 tiledBox UV로) */
+let whiteShared = null;
+export function whiteMat() {
+  if (!whiteShared) {
+    whiteShared = new THREE.MeshStandardMaterial({ map: whiteTileTexture(), color: '#FFFFFF', roughness: 0.75, metalness: 0.02 });
+    whiteShared.userData.shared = true;
+  }
+  return whiteShared;
+}
+const WHITE_TILE = 120;
+/** 하얀 블록(탑·기둥·계단): 면마다 크기에 맞춰 타일을 되풀이하고, 꼭대기 가장자리에 옅은 하늘색 빛 띠 */
+export function makeWhiteBlock(g) {
+  const out = new THREE.Group();
+  const H = g.height;
+  const body = new THREE.Mesh(tiledBox(g.w, H, g.h, WHITE_TILE), whiteMat());
+  body.position.y = H / 2;
+  out.add(body);
+  rimStripes(out, g.w, g.h, H - 2, '#BFF4FF');
+  return out;
+}
+/** 하얀 공중 다리: 두꺼운 하얀 상판과 아래 아치 모양 받침(가운데는 뚫려 밑으로 지나다님) */
+function makeWhiteBridge(g) {
+  const out = new THREE.Group();
+  const H = g.height, long = g.w >= g.h, L = long ? g.w : g.h, W = long ? g.h : g.w;
+  const inner = new THREE.Group();
+  const deck = new THREE.Mesh(tiledBox(L, 30, W, WHITE_TILE), whiteMat());
+  deck.position.y = H - 15;
+  inner.add(deck);
+  // 상판 아래 양 끝을 둥글게 받치는 아치 턱
+  for (const s of [-1, 1]) {
+    const c = new THREE.Mesh(tiledBox(Math.min(160, L * 0.15), 60, W, WHITE_TILE), whiteMat());
+    c.position.set(s * (L / 2 - Math.min(80, L * 0.075)), H - 60, 0);
+    inner.add(c);
+  }
+  rimStripes(inner, L, W, H - 2, '#BFF4FF');
+  if (!long) inner.rotation.y = Math.PI / 2;
+  out.add(inner);
+  return out;
+}
+/** 하얀 오르막길(계단처럼 보이는 타일 비탈) */
+function makeWhiteRamp(g) {
+  const out = makeRamp(g);
+  const white = mat('#EEF1F6', { rough: 0.75 });
+  out.traverse((m) => { if (m.isMesh) m.material = white; });
+  return out;
+}
+/** 하얀 엄폐물(낮은 하얀 블록 + 하늘색 띠) */
+export function makeWhiteCover(c, h = 84) {
+  const g = new THREE.Group();
+  // 깎이면 색을 바꾸므로 재질은 엄폐물마다 따로
+  const m = whiteMat().clone();
+  m.userData.shared = false;
+  const block = new THREE.Mesh(tiledBox(c.w, h, c.h, 60), m);
+  block.position.y = h / 2;
+  g.add(block);
+  g.add(at(box(c.w + 2, 5, c.h + 2, mat('#7FE7FF', { emissive: '#2AB8E0' })), 0, h - 2, 0));
+  g.userData.block = block;
+  g.userData.white = true;
+  return g;
 }

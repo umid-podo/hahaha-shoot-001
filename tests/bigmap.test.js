@@ -194,3 +194,40 @@ test('AI는 높은 구조물에 막히면 점프키를 꾹 눌러 높이 뛴다'
   }
   assert.ok(peak > 300, `높이 뛰어오름 ${peak.toFixed(0)}`);
 });
+
+test('구름 위 하얀 섬: 2인 대결에서 고르는 경기장(넓이 10배, 하얀 블록 탑·아치·공중 다리·계단·점프 패드, 점대칭)', () => {
+  const { match } = playing({ wide: true, map: 'cloud' });
+  assert.equal(match.map, 'cloud');
+  assert.deepEqual(match.bounds, BIG_FIELD);
+  assert.ok(match.highs.every((h) => h.style === 'white'), '모두 하얀 블록');
+  assert.ok(match.highs.some((h) => h.id === 'c-arch' && h.bridge), '가운데 아치(밑으로 지나다님)');
+  assert.ok(match.highs.length > 150 && match.pads.length > 20);
+  assert.ok(match.highs.filter((h) => h.bridge).length >= 10 && match.highs.some((h) => h.ramp));
+  // 시작 자리는 막히지 않는다
+  for (const p of match.players) assert.equal(groundAt(match, p.x, p.y, 0), 0, `${p.id} 시작 자리`);
+  for (const h of match.highs) assert.ok(match.highs.some((g) => g.x === ARENA_WIDTH - h.x && g.y === ARENA_HEIGHT - h.y && g.height === h.height), h.id);
+});
+
+test('연속 플레이: 스테이지를 골라서(옥상·넓은 옥상·구름 위 하얀 섬·본부 홀·도로·대교) 무한 웨이브', async () => {
+  const { ENDLESS_MAPS } = await import('../src/game/story.js');
+  assert.deepEqual(ENDLESS_MAPS.map((m) => m.id), ['fortress', 'wide', 'cloud', 'corridor', 'road', 'bridge']);
+  const pick = { characterId: 'earth-arrow', weapon: 'rifle' };
+  for (const m of ENDLESS_MAPS) {
+    const match = createStoryMatch(pick, undefined, 2, null, null, 0, { endless: true, endlessMap: m.id });
+    assert.equal(match.map, m.id, m.id);
+    assert.equal(match.story.stage, m.stage ?? 'rooftop', `${m.id} 스테이지 연출`);
+    assert.ok(match.story.endless && match.wide);
+    // 요원이 헬리콥터로 와서 싸우고, 다 쓰러뜨리면 다음 웨이브
+    const inputs = createInputs(match.players);
+    match.phase = 'playing';
+    let spawned = false;
+    for (let i = 0; i < 60 * 8 && !spawned; i++) {
+      for (const p of match.players) inputs[p.id] ??= createInputs([p])[p.id];
+      step(match, inputs);
+      spawned = match.players.some((p) => p.team === 'isb');
+    }
+    assert.ok(spawned, `${m.id}: 요원이 온다`);
+  }
+  // 모르는 값이면 옥상(고공 요새)
+  assert.equal(createStoryMatch(pick, undefined, 2, null, null, 0, { endless: true, endlessMap: 'nope' }).map, 'fortress');
+});

@@ -110,6 +110,8 @@ export function defaultSingle() {
     storyAllyPicks: normalizeAllyPicks(),
     // storyStart: 스토리 모드를 시작할 스테이지('rooftop' 옥상·'corridor' 복도·'sky' 하늘). 건너뛴 스테이지는 체력 가득으로 시작
     storyStart: 'rooftop',
+    // endlessMap: 연속 플레이 스테이지(story.js ENDLESS_MAPS의 id)
+    endlessMap: 'fortress',
     aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100, aiRadius: 30,
     aiDamage: { primary: null, secondary: null, grenade: null },
   };

@@ -40,6 +40,33 @@ export const HALL_CEILING = 2000;
 export const padPower = (height) => Math.round(Math.sqrt(2 * JUMP.gravity * (height + 140)));
 
 /**
+ * 구름 위 하얀 섬의 가운데(손으로 놓은 배치, 점대칭): 시작 자리 사이를 가르는 커다란 아치(두 기둥 + 높은 다리, 밑으로 지나다님),
+ * 남북 끝의 높은 하얀 탑(옆에 점프 패드), 동서의 계단식 탑, 낮은 블록 몇 개.
+ */
+const W = { kind: 'white', style: 'white' };
+const CLOUD_CORE = [
+  { id: 'c-arch-w', x: CX - 460, y: CY, w: 140, h: 140, height: 520, ...W },
+  { id: 'c-arch-e', x: CX + 460, y: CY, w: 140, h: 140, height: 520, ...W },
+  { id: 'c-arch', x: CX, y: CY, w: 1060, h: 160, height: 520, bridge: true, ...W },
+  { id: 'c-tower-n', x: CX, y: -760, w: 420, h: 300, height: 780, ...W },
+  { id: 'c-tower-s', x: CX, y: 1760, w: 420, h: 300, height: 780, ...W },
+  ...[[-600, 0.34], [-600, 0.67], [-600, 1]].flatMap(([dx, k], i) => [
+    { id: `c-step-w${i}`, x: CX + dx, y: CY, w: 520 - i * 150, h: 420 - i * 120, height: Math.round(600 * k), ...W },
+    { id: `c-step-e${i}`, x: CX - dx, y: CY, w: 520 - i * 150, h: 420 - i * 120, height: Math.round(600 * k), ...W },
+  ]),
+  { id: 'c-block-1', x: 260, y: 300, w: 160, h: 160, height: 200, ...W },
+  { id: 'c-block-2', x: ARENA_WIDTH - 260, y: ARENA_HEIGHT - 300, w: 160, h: 160, height: 200, ...W },
+];
+const CLOUD_PADS = [
+  { id: 'c-pad-n', x: CX, y: -480, power: padPower(780) },
+  { id: 'c-pad-s', x: CX, y: 1480, power: padPower(780) },
+];
+/** 가운데 배치 자리(덧붙는 건축물이 겹치지 않게) */
+function CLOUD_KEEP() {
+  return [...CLOUD_CORE, ...CLOUD_PADS.map((p) => ({ ...p, w: 160, h: 160 }))].map((o) => ({ minX: o.x - o.w / 2, maxX: o.x + o.w / 2, minY: o.y - o.h / 2, maxY: o.y + o.h / 2 }));
+}
+
+/**
  * 스테이지별 맵 설정. keep: 새 건축물을 놓지 않는 가운데 자리(원래 배치·연출 자리), lanes: 건물을 놓지 않는 가로 띠(배·탱크가 지나는 길),
  * theme: 건축물 모양, count: 만들 건축물 무리 수(점대칭 쌍이므로 실제로는 두 배), covers: 덧놓을 엄폐물 쌍 수,
  * gap: 무리 사이 최소 간격(기본 140), size: 무리의 가로·세로 크기 배율(좁은 둘레에 맞춰 줄임, 높이는 그대로).
@@ -51,6 +78,8 @@ const MAPS = {
   sky: { bounds: STAGE_FIELD, keep: [arenaKeep(250)], theme: 'sky', count: 0, covers: 9, seed: 41 },
   road: { bounds: STAGE_FIELD, keep: [arenaKeep(120)], lanes: [[380, 160]], theme: 'convoy', count: 12, covers: 16, seed: 53, gap: 70, size: 0.75 },
   bridge: { bounds: STAGE_FIELD, keep: [arenaKeep(120)], lanes: [[CY, 260]], theme: 'bridge', count: 12, covers: 16, seed: 67, gap: 70, size: 0.75 },
+  // 구름 위 하얀 섬(2인 대결·연속 플레이): 가운데 시작 자리만 비우고 섬 전체를 하얀 블록 건축물로 빽빽하게
+  cloud: { bounds: BIG_FIELD, keep: [arenaKeep(60), ...CLOUD_KEEP()], theme: 'cloud', count: 46, covers: 46, seed: 89, gap: 90 },
 };
 export const MAP_IDS = Object.keys(MAPS);
 export const mapBounds = (id) => ({ ...(MAPS[id] ?? MAPS.wide).bounds });
@@ -158,6 +187,11 @@ const THEMES = {
     yardKind: 'trailer', unit: [360, 110], yardH: [150, 200], colors: ['#C9CED6', '#B4472F', '#2F6FB4'],
     mix: ['tower', 'stepped', 'twin', 'plateau', 'yard'],
   },
+  cloud: {
+    kind: 'white', tall: [560, 900], stepTop: [420, 640], mid: [360, 600], low: [200, 340],
+    yardKind: 'white', unit: [220, 220], yardH: [180, 320, 460, 620], colors: ['#F2F4F8'],
+    mix: ['tower', 'stepped', 'twin', 'twin', 'plateau', 'yard', 'yard'],
+  },
   bridge: {
     kind: 'pylon', tall: [700, 1000], stepTop: [440, 600], mid: [360, 520], low: [200, 300],
     yardKind: 'bus', unit: [300, 100], yardH: [150], colors: ['#E0A22A', '#3A6FB4', '#B4472F'],
@@ -172,7 +206,7 @@ function place(group, ox, oy, mirror, tag) {
     return mirror ? { x: 2 * CX - x, y: 2 * CY - y } : { x, y };
   };
   const highs = group.highs.map((g, i) => ({
-    ...g, id: `${tag}-h${i}`, ...at(g), ...(g.ramp ? { ramp: { ...g.ramp, dir: mirror ? -g.ramp.dir : g.ramp.dir } } : {}),
+    ...g, id: `${tag}-h${i}`, ...(group.style ? { style: group.style } : {}), ...at(g), ...(g.ramp ? { ramp: { ...g.ramp, dir: mirror ? -g.ramp.dir : g.ramp.dir } } : {}),
   }));
   const pads = group.pads.map((p, i) => ({ ...p, id: `${tag}-p${i}`, ...at(p) }));
   const covers = group.covers.map((c, i) => ({ ...c, id: `${tag}-c${i}`, ...at(c) }));
@@ -212,6 +246,7 @@ export function buildExtras(id) {
     const kinds = [...new Set(theme.mix)];
     const kind = made < kinds.length ? kinds[made] : theme.mix[Math.floor(rng() * theme.mix.length)];
     const group = shrink(TEMPLATES[kind](rng, theme), cfg.size ?? 1);
+    if (cfg.theme === 'cloud') group.style = 'white'; // 다리·오르막길도 하얀 블록으로
     const ox = roundTo(span(rng, B.minX, B.maxX)), oy = roundTo(span(rng, B.minY, CY));
     const local = extent(group);
     const r = { minX: local.minX + ox, maxX: local.maxX + ox, minY: local.minY + oy, maxY: local.maxY + oy };
@@ -288,6 +323,9 @@ export function applyMap(match, id) {
     covers = WIDE_COVERS;
   } else if (id === 'corridor') {
     highs = [...HIGHS, ...CORRIDOR_CORE];
+  } else if (id === 'cloud') {
+    highs = CLOUD_CORE;
+    pads = CLOUD_PADS;
   }
   match.highs = [...highs, ...extra.highs].map(copyHigh);
   match.pads = [...pads, ...extra.pads].map((p) => ({ r: PAD.r, power: PAD.power, h: 0, ...p }));
