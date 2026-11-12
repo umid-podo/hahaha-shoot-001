@@ -82,7 +82,8 @@ test('스토리 모드 전체 흐름: 1웨이브 → 헬기 2명 → 헬기 3명
   assert.equal(wave[0].primary, 'rifle');
   assert.equal(wave[0].hp, 500);
   assert.equal(wave[0].entering, null);
-  assert.equal(wave[0].primaryOnly, true, '일반 요원은 보조무기·수류탄 없음');
+  assert.equal(wave[0].primaryOnly, false, '일반 요원도 보조무기(기관단총·샷건)·수류탄을 쓴다');
+  assert.ok(['smg', 'shotgun'].includes(wave[0].secondary));
   assert.equal(match.story.brains[0].diff.name, '보통');
 
   // 쓰러뜨려도 경기는 끝나지 않고 다음 웨이브로
@@ -273,15 +274,15 @@ test('무작위 무기는 RPG·저격총·아킴보 석궁을 뺀 무기 중 하
   assert.deepEqual([...seen].sort(), ['dual', 'pistol', 'rifle']);
 });
 
-test('플레이어가 쓰러지면 패배, 일반 요원은 수류탄·무기 전환을 하지 않음', () => {
+test('플레이어가 쓰러지면 패배, 일반 요원도 수류탄을 던지고 보조무기(기관단총·샷건)로 바꾼다', () => {
   const { match, inputs } = story();
   const [P1] = match.players;
   const [agent] = enemies(match);
   inputs[agent.id].item = true;
   inputs[agent.id].select = 'secondary';
   step(match, inputs);
-  assert.equal(match.projectiles.length, 0, '수류탄 없음');
-  assert.equal(agent.weapon, 'rifle');
+  assert.ok(match.projectiles.some((b) => b.weapon === 'grenade' && b.ownerId === agent.id), '수류탄');
+  assert.ok(['smg', 'shotgun'].includes(agent.weapon), '보조무기로 바꿈');
   P1.hp = 0;
   step(match, inputs);
   assert.equal(match.phase, 'result');

@@ -13,19 +13,25 @@ export const AI_CHARACTERS = ['isb-agent-1', 'isb-agent-2'];
  * grenade: 수류탄을 던지고 다음에 던질 생각을 하기까지의 추가 대기.
  * coverAware: 엄폐물에 막히면 상대가 보이는 자리로 옮긴다. 자동 연사 무기는 막혀도 쏴서 엄폐물을 깎고,
  * 떼면 쏘는 무기(RPG·저격총)는 BLOCKED_PATIENCE초까지 트인 자리를 기다린다.
+ * assist: 조준 보정. AI가 쏜 총알이 가장 가까운 상대 쪽으로 초당 이만큼(라디안) 살짝 휘어 날아간다(명중률 향상, 폭발·화염·던지는 무기 제외).
+ * jump: 날아오는 탄을 점프로 피하려 할 확률. hop: 평소에 가끔 뛰는 간격 [최소, 최대](초).
+ * 명중률을 크게 올리려고 모든 난이도가 상대 이동을 예측해 겨눈다(lead).
  */
 export const DIFFICULTY = {
   easy: {
-    name: '쉬움', reaction: 0.5, dodge: 0.2, lead: 0, move: 0.55,
-    fire: [[0.8, 1.6], [0.8, 1.6]], charge: [0.7, 1.2], grenade: [10, 18], swap: [10, 16], coverAware: false,
+    name: '쉬움', reaction: 0.5, dodge: 0.2, lead: 0.85, move: 0.55,
+    fire: [[1.2, 2.2], [0.5, 1.0]], charge: [0.4, 0.7], grenade: [10, 18], swap: [10, 16], coverAware: false,
+    jump: 0.2, hop: [4, 8], assist: 0.9,
   },
   normal: {
-    name: '보통', reaction: 0.3, dodge: 0.5, lead: 0.6, move: 0.8,
-    fire: [[1.5, 3], [0.3, 0.8]], charge: [0.35, 0.6], grenade: [5, 10], swap: [8, 12], coverAware: true,
+    name: '보통', reaction: 0.3, dodge: 0.5, lead: 1, move: 0.8,
+    fire: [[2, 3.5], [0.2, 0.5]], charge: [0.2, 0.4], grenade: [5, 10], swap: [8, 12], coverAware: true,
+    jump: 0.45, hop: [2.5, 5], assist: 1.4,
   },
   hard: {
     name: '어려움', reaction: 0.15, dodge: 0.8, lead: 1, move: 1,
-    fire: [[3, 5], [0, 0.15]], charge: [0.15, 0.3], grenade: [1, 4], swap: [6, 10], coverAware: true,
+    fire: [[3, 5], [0, 0.15]], charge: [0.12, 0.22], grenade: [1, 4], swap: [6, 10], coverAware: true,
+    jump: 0.7, hop: [1.5, 3.5], assist: 2,
   },
 };
 export const DIFFICULTY_IDS = Object.keys(DIFFICULTY);
@@ -47,6 +53,8 @@ export function createAI(playerId, difficulty = 'normal', seed = Date.now()) {
     blockedFor: 0, // 떼면 쏘는 무기가 엄폐물에 막혀 기다린 시간
     grenadeTimer: between(rng, diff.grenade),
     swapTimer: between(rng, diff.swap),
+    hopTimer: between(rng, diff.hop),
+    jumpDecisions: new Map(), // 탄 id → 점프로 피할지(탄마다 한 번만 정한다)
   };
 }
 
@@ -69,14 +77,17 @@ function projectileSpeed(me, weaponId) {
 /**
  * 상대 플레이어를 향한 조준 각도(1인칭 3D에서는 바라보는 방향도 된다). lead만큼 상대가 움직일 곳을 예측한다.
  */
-export function aimAtTarget(me, target, speed, lead) {
+export function aimAtTarget(me, target, speed, lead, bounds = null) {
   let tx = target.x, ty = target.y;
   if (lead > 0 && Number.isFinite(speed)) {
     const vx = velocityX(target), vy = velocityY(target);
-    for (let i = 0; i < 2; i++) {
+    // 예측한 자리는 상대가 갈 수 있는 범위 안으로(넓은 맵이면 그 맵 범위)
+    const minX = bounds?.minX ?? MIN_X, maxX = bounds?.maxX ?? MAX_X;
+    const minY = bounds?.minY ?? -Infinity, maxY = bounds?.maxY ?? Infinity;
+    for (let i = 0; i < 4; i++) {
       const t = Math.hypot(tx - me.x, ty - me.y) / speed;
-      tx = Math.min(MAX_X, Math.max(MIN_X, target.x + vx * t * lead));
-      ty = target.y + vy * t * lead;
+      tx = Math.min(maxX, Math.max(minX, target.x + vx * t * lead));
+      ty = Math.min(maxY, Math.max(minY, target.y + vy * t * lead));
     }
   }
   return Math.atan2(ty - me.y, tx - me.x);
@@ -96,7 +107,7 @@ function blockedAt(match, me, x, target, y = me.y) {
 function threats(ai, match, me) {
   const list = [];
   const seen = new Set();
-  const approach = (key, x, y, vx, vy, reach, age) => {
+  const approach = (key, x, y, vx, vy, reach, age, splashy = false) => {
     seen.add(key);
     const rx = me.x - x, ry = me.y - y, v2 = vx * vx + vy * vy;
     if (!v2) return;
@@ -105,14 +116,14 @@ function threats(ai, match, me) {
     if (age < ai.diff.reaction) return;
     if (!ai.dodgeDecisions.has(key)) ai.dodgeDecisions.set(key, ai.rng() < ai.diff.dodge);
     if (!ai.dodgeDecisions.get(key)) return;
-    list.push({ t, x: x + vx * t, y: y + vy * t, reach });
+    list.push({ t, x: x + vx * t, y: y + vy * t, reach, key, splash: splashy });
   };
   for (const b of match.projectiles) {
     if (b.team === me.team || b.ownerId === me.id) continue;
     // 폭발 무기는 폭발 반경까지, 던진 무기는 직격 없이 폭발만
     const direct = b.thrown ? 0 : me.radius + BULLET_RADIUS;
     const reach = Math.max(direct, b.splash ? b.splash.radius + me.radius : 0) + DODGE_MARGIN;
-    approach(b.id, b.x, b.y, b.vx, b.vy, reach, RULES.bulletLife - b.life);
+    approach(b.id, b.x, b.y, b.vx, b.vy, reach, RULES.bulletLife - b.life, !!(b.splash || b.field));
   }
   // 상대의 단검 돌진도 날아오는 탄처럼 피한다(몸끼리 닿는 거리)
   for (const q of match.players) {
@@ -206,9 +217,10 @@ export function updateAI(ai, match, inputs, dt = TICK) {
     return;
   }
   const weapon = WEAPONS[me.weapon];
+  me.aimAssist = ai.diff.assist ?? 0;
 
-  // 조준: 무조건 상대 플레이어
-  frame.aim = aimAtTarget(me, target, projectileSpeed(me, me.weapon), ai.diff.lead);
+  // 조준: 무조건 상대 플레이어(이동을 예측해 앞을 겨눈다)
+  frame.aim = aimAtTarget(me, target, projectileSpeed(me, me.weapon), ai.diff.lead, match.bounds);
 
   // 이동: 위험한 탄이 있으면 가장 안전한 방향(8방향·가만히 중), 없으면 평소 이동(자기 진영 안 이곳저곳)
   const speed = me.speed * ai.diff.move;
@@ -230,6 +242,18 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   ai.stuck = wants && moved < speed * dt * 0.25 ? (ai.stuck ?? 0) + dt : 0;
   if (ai.stuck > 0.25) { frame.jump = true; ai.stuck = 0; }
   ai.lastX = me.x; ai.lastY = me.y;
+  // 점프: 곧 닿을 탄은 난이도별 확률로 뛰어올라 피하고(탄은 발 높이로 날아와 높이 뛰면 밑으로 지나감), 평소에도 가끔 뛴다
+  const soon = list.filter((th) => th.t < 0.35 && !th.splash);
+  for (const th of soon) {
+    if (!ai.jumpDecisions.has(th.key)) ai.jumpDecisions.set(th.key, ai.rng() < (ai.diff.jump ?? 0));
+    if (ai.jumpDecisions.get(th.key)) frame.jump = true;
+  }
+  if (ai.jumpDecisions.size > 200) ai.jumpDecisions.clear();
+  ai.hopTimer = (ai.hopTimer ?? 3) - dt;
+  if (ai.hopTimer <= 0) {
+    frame.jump = true;
+    ai.hopTimer = between(ai.rng, ai.diff.hop ?? [3, 6]);
+  }
 
   // 무기 전환: 가끔 주무기 ↔ 보조무기. 기관단총이 과열되거나 단검·샷건이 쿨타임이면 바로 주무기로,
   // 쿨타임 중인 보조무기로는 바꾸지 않는다.

@@ -57,7 +57,7 @@ test('AI 캐릭터 후보는 요원들뿐', () => {
   assert.deepEqual(DIFFICULTY_IDS, ['easy', 'normal', 'hard']);
 });
 
-test('AI는 언제나 상대 플레이어를 향해 조준 (쉬움은 지금 위치, 어려움은 이동 방향 앞)', () => {
+test('AI는 언제나 상대 플레이어를 향해 조준 (모든 난이도가 이동 방향 앞을 예측)', () => {
   for (const level of DIFFICULTY_IDS) {
     const { match, inputs, P1, P2 } = single({}, {}, 3);
     const brain = createAI('P2', level, 3);
@@ -71,7 +71,6 @@ test('AI는 언제나 상대 플레이어를 향해 조준 (쉬움은 지금 위
       // 예측해도 상대가 움직일 수 있는 거리 안쪽만 겨눈다
       const maxLead = Math.atan2(P1.y - P2.y, Math.min(MAX_X, P1.x + 300) - P2.x);
       assert.ok(Math.abs(aim - direct) <= Math.abs(maxLead - direct) + 0.2, `${level}: 플레이어 쪽`);
-      if (level === 'easy') assert.ok(Math.abs(aim - direct) < 1e-9, '쉬움은 지금 위치를 정확히 겨눔');
       step(match, inputs);
     }
   }
@@ -172,4 +171,25 @@ test('AI 히트박스 반지름을 설정할 수 있다', () => {
   const { P2 } = single({ radius: 70 });
   assert.equal(P2.radius, 70);
   assert.equal(single().P2.radius, 30, '기본은 캐릭터 값');
+});
+
+test('AI 명중률: 좌우로 움직이는 상대도 이동을 예측해 많이 맞히고, 점프도 한다', () => {
+  for (const level of DIFFICULTY_IDS) {
+    const { match, inputs, P1, P2 } = single({ weapon: 'rifle' }, {}, 5);
+    match.covers = [];
+    P1.hp = P1.maxHp = 1e9;
+    P2.hp = P2.maxHp = 1e9;
+    const brain = createAI('P2', level, 5);
+    const events = [];
+    for (let t = 0; t < 12; t += TICK) {
+      inputs.P1.moveAxis = Math.sin(t * 1.5) > 0 ? 1 : -1; // 계속 좌우로 달림
+      updateAI(brain, match, inputs);
+      events.push(...step(match, inputs));
+    }
+    const shots = events.filter((e) => e.type === 'fire' && e.playerId === 'P2').length;
+    const hits = events.filter((e) => e.type === 'hit' && e.ownerId === 'P2').length;
+    assert.ok(shots > 10, `${level}: 쏨`);
+    assert.ok(hits / shots >= 0.4, `${level}: 명중률 ${(hits / shots).toFixed(2)}`);
+    assert.ok(events.some((e) => e.type === 'jump' && e.playerId === 'P2'), `${level}: 점프`);
+  }
 });

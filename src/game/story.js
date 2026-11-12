@@ -102,7 +102,24 @@ export const waveLabel = (i) => `${STAGES[WAVES[i].stage].name} ${WAVES[i].title
  * 웨이브는 옥상 2웨이브(wave) 설정(체력·무기 등, 스토리 설정)을 쓰고 요원 수만 count명. 보스·다음 스테이지는 없다.
  * reward웨이브를 깰 때마다 보상(1코인 + 1승리, main.js가 바로 저장하므로 중간에 그만둬도 남음).
  */
-export const ENDLESS = { wave: 1, count: 3, reward: 3 };
+export const ENDLESS = {
+  wave: 1, count: 3, reward: 3,
+  // 웨이브마다 요원이 강해진다(깬 웨이브 수 n만큼): 체력 ×(1 + hp·n), 피해 ×(1 + damage·n, 최대 damageMax배),
+  // 이동 속도·탄속 ×(1 + speed·n, 최대 speedMax배). normalAt웨이브부터 적어도 보통, hardAt웨이브부터 어려움 난이도
+  grow: { hp: 0.12, damage: 0.06, damageMax: 3, speed: 0.02, speedMax: 1.5, normalAt: 3, hardAt: 6 },
+};
+/** 연속 플레이에서 깬 웨이브 수 n일 때 요원 강화 배율 { hp, damage, speed, difficulty(최소 난이도 또는 null) } */
+export function endlessBoost(n) {
+  const g = ENDLESS.grow;
+  return {
+    hp: 1 + g.hp * n,
+    damage: Math.min(g.damageMax, 1 + g.damage * n),
+    speed: Math.min(g.speedMax, 1 + g.speed * n),
+    difficulty: n >= g.hardAt ? 'hard' : n >= g.normalAt ? 'normal' : null,
+  };
+}
+/** 일반 요원이 들고 오는 보조무기(무작위 하나). 수류탄도 던진다 */
+export const AGENT_SECONDARIES = ['smg', 'shotgun'];
 /** 연속 플레이에서 지금(또는 다음에 올) 웨이브 번호(1부터) */
 export const endlessWave = (story) => story.endless.cleared + 1;
 export const endlessLabel = (story) => `연속 플레이 ${endlessWave(story)}웨이브`;
@@ -369,8 +386,11 @@ function spawnWave(match, inputs, index) {
   // AI 동료 수만큼 쉬움 돌격소총 요원이 웨이브 끝에 덧붙는다(보스전 제외)
   const total = (story.endless ? ENDLESS.count : wave.count) + extraAgents(index, story.allies);
   const spread = total > 4 ? Math.min(DROP_SPREAD, (MAX_X - MIN_X) / (total - 1)) : DROP_SPREAD;
+  const base = story.endless ? ENDLESS.count : wave.count;
+  // 연속 플레이: 깬 웨이브 수만큼 요원이 강해진다
+  const boost = story.endless ? endlessBoost(story.endless.cleared) : null;
   for (let i = 0; i < total; i++) {
-    const extra = i >= wave.count;
+    const extra = i >= base;
     const spec = extra ? EXTRA_AGENT : wave.agents?.[i] ?? {};
     const x = Math.min(MAX_X, Math.max(MIN_X, center + (i - (total - 1) / 2) * spread));
     // 스토리 설정에서 요원마다 고른 주무기(없으면 기획 무기). R-10은 레이저 캐논 고정. 덤 요원은 돌격소총.
@@ -378,6 +398,8 @@ function spawnWave(match, inputs, index) {
     const weapon = kind === 'random' ? pick(story.rng, STORY_WEAPONS) : kind;
     const id = wave.boss ? 'BOSS' : `E${story.nextId++}`;
     const smith = wave.boss === 'smith', r10 = wave.boss === 'r10', wilson = wave.boss === 'wilson', johnson = wave.boss === 'johnson';
+    // 일반 요원(보스·하늘의 건쉽이 아닌): 보조무기(기관단총·샷건 중 하나)와 수류탄도 쓴다
+    const normal = !wave.boss && !sky;
     const p = createPlayer({ ...ISB, id }, {
       ai: true, x, weapon,
       // 스미스 요원은 권총을 든 요원 1 그림을 크게, R-10은 드론 그림을 크게 그린다. 하늘에서는 요원 대신 건쉽·데스스타.
@@ -385,11 +407,12 @@ function spawnWave(match, inputs, index) {
         : johnson ? 'johnson' : pick(story.rng, AI_CHARACTERS),
       name: deathstar ? DEATHSTAR_NAME : sky ? GUNSHIP_NAME : smith ? BOSS_NAME : r10 ? R10_NAME : wilson ? WILSON_NAME
         : johnson ? JOHNSON_NAME : undefined,
-      // 스미스 요원만 보조무기·수류탄을 쓴다(R-10은 레이저 캐논 전용)
-      primaryOnly: !smith, boss: !!wave.boss, scale: smith || wilson || johnson ? 1.2 : r10 ? 1.6 : undefined,
-      secondary: smith ? (cfg.secondary === 'random' ? pick(story.rng, SECONDARY_IDS) : cfg.secondary) : undefined,
-      maxHp: cfg.hp, radius: cfg.radius, bulletSpeedScale: cfg.bulletSpeed / 100,
-      damageScale: cfg.damage / 100, speedScale: cfg.speed / 100,
+      // 일반 요원과 스미스 요원은 보조무기·수류탄을 쓴다(R-10·윌슨·존슨·건쉽은 전용 무기만)
+      primaryOnly: !smith && !normal, boss: !!wave.boss, scale: smith || wilson || johnson ? 1.2 : r10 ? 1.6 : undefined,
+      secondary: smith ? (cfg.secondary === 'random' ? pick(story.rng, SECONDARY_IDS) : cfg.secondary)
+        : normal ? pick(story.rng, AGENT_SECONDARIES) : undefined,
+      maxHp: Math.round(cfg.hp * (boost?.hp ?? 1)), radius: cfg.radius, bulletSpeedScale: (cfg.bulletSpeed / 100) * (boost?.speed ?? 1),
+      damageScale: (cfg.damage / 100) * (boost?.damage ?? 1), speedScale: (cfg.speed / 100) * (boost?.speed ?? 1),
     });
     if (wave.from === 'heli' || wave.from === 'gunship') {
       p.entering = { kind: 'rope', t: -i * DROP_GAP, duration: DROP_TIME, fromY: CARRIER_Y };
@@ -424,7 +447,10 @@ function spawnWave(match, inputs, index) {
     match.players.push(p);
     inputs[id] = createInput(p);
     addStats(match, p);
-    const difficulty = extra ? EXTRA_AGENT.difficulty : cfg.difficulty === 'mixed' ? spec.difficulty ?? 'normal' : cfg.difficulty;
+    let difficulty = extra ? EXTRA_AGENT.difficulty : cfg.difficulty === 'mixed' ? spec.difficulty ?? 'normal' : cfg.difficulty;
+    // 연속 플레이: 웨이브가 쌓이면 적어도 보통, 더 쌓이면 어려움
+    const rankOf = { easy: 0, normal: 1, hard: 2 };
+    if (boost?.difficulty && rankOf[boost.difficulty] > (rankOf[difficulty] ?? 1)) difficulty = boost.difficulty;
     if (spec.kata) p.kataGoal = spec.kata;
     story.brains.push(createAI(id, difficulty, Math.floor(story.rng() * 2 ** 32)));
     story.roster.push(p);
@@ -955,7 +981,8 @@ export function updateStory(match, inputs, dt, events) {
       }
       story.phase = 'drop';
       story.wave = next;
-      story.banner = story.endless ? banner(endlessLabel(story), `요원 ${ENDLESS.count + extraAgents(next, story.allies)}명 · 체력 ${story.settings.waves[next].hp}`)
+      story.banner = story.endless ? banner(endlessLabel(story), `요원 ${ENDLESS.count + extraAgents(next, story.allies)}명 · 체력 ${Math.round(story.settings.waves[next].hp * endlessBoost(story.endless.cleared).hp)}`
+        + (story.endless.cleared ? ` · 강화 +${story.endless.cleared}` : ''))
         : banner(WAVES[next].title, waveInfo(next, story.settings));
       spawnWave(match, inputs, next);
       events.push({ type: 'wave', wave: next, title: WAVES[next].title, ...(story.endless ? { endless: endlessWave(story) } : {}) });

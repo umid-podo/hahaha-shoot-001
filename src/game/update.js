@@ -75,7 +75,8 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
     x, y, previousX: x, previousY: y,
     vx: Math.cos(aim) * speed, vy: Math.sin(aim) * speed,
     life, damage,
-    splash, homing: weapon.homing,
+    // AI 조준 보정(player.aimAssist): 폭발·화염·던지는 무기가 아닌 총알은 상대 쪽으로 살짝 휘어 날아간다
+    splash, homing: weapon.homing ?? (player.aimAssist > 0 && !splash && !weapon.flame && !weapon.thrown ? { turnRate: player.aimAssist } : undefined),
     ...(vz ? { vz } : {}),
     // 감전(에너지 RPG 폭발): 맞은 적이 shock초 동안 움직이지도 쏘지도 못함. 전기 장판(전기충격기 발사기): 떨어진 자리에 퍼짐
     ...(weapon.shock ? { shock: weapon.shock } : {}),
@@ -196,7 +197,11 @@ function steer(match, b, turnRate, dt) {
   }
   if (!target) return;
   const heading = Math.atan2(b.vy, b.vx);
-  let diff = Math.atan2(target.y - b.y, target.x - b.x) - heading;
+  // 상대가 움직이는 쪽 조금 앞(탄이 닿을 때쯤 있을 자리 쪽으로 1/4만큼)을 노린다
+  const speed0 = Math.hypot(b.vx, b.vy) || 1;
+  const lead = Math.hypot(target.x - b.x, target.y - b.y) / speed0 * 0.25;
+  const tvx = (target.x - (target.previousX ?? target.x)) / TICK, tvy = (target.y - (target.previousY ?? target.y)) / TICK;
+  let diff = Math.atan2(target.y + tvy * lead - b.y, target.x + tvx * lead - b.x) - heading;
   diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // [-π, π]
   const max = turnRate * dt;
   const next = heading + Math.max(-max, Math.min(max, diff));
