@@ -1,7 +1,7 @@
 import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP, CHARACTERS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
-import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart } from '../game/story.js';
+import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart, ENDLESS } from '../game/story.js';
 import { weaponLabel, weaponInfo, choiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -229,7 +229,19 @@ export function createSingleSetup(onChange) {
         single.storyStart = id;
         onChange(single);
       });
-    }));
+    }), (() => {
+      // 연속 플레이 모드: 옥상에서 요원이 3명씩 끝없이(웨이브 무한), 3웨이브마다 1코인 + 1승리
+      const label = document.createElement('span');
+      label.textContent = '♾️ 연속 플레이 모드';
+      const info = document.createElement('small');
+      info.textContent = `1스테이지 옥상만 · 요원 ${ENDLESS.count}명씩 무한 웨이브 · ${ENDLESS.reward}웨이브마다 1코인 + 1승리(중간에 그만둬도 보상 유지)`;
+      const btn = choiceButton([label, info], single.storyStart === 'endless', () => {
+        single.storyStart = 'endless';
+        onChange(single);
+      });
+      btn.classList.add('endless-choice');
+      return btn;
+    })());
   }
 
   function syncMode() {
@@ -255,7 +267,7 @@ export function createSingleSetup(onChange) {
       buildPlayers();
       buildAllies();
       buildAllyPicks();
-      if (!STAGE_ORDER.includes(single.storyStart)) single.storyStart = 'rooftop';
+      if (!STAGE_ORDER.includes(single.storyStart) && single.storyStart !== 'endless') single.storyStart = 'rooftop';
       buildStart();
       buildMode();
       // 목록에서 빠진 무기(예: 전용 무기가 된 아킴보 석궁)가 저장돼 있으면 기본값으로

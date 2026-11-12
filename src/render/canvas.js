@@ -3,7 +3,7 @@ import {
   MAX_HP, WEAPONS, COVER, TICK, CHARACTERS, TANK, SHIP, KATA, EVADE,
 } from '../game/config.js';
 import {
-  WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel,
+  WAVES, ELEVATOR, CRACK_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, currentWave, stageProgress, waveLabel, endlessLabel, ENDLESS,
   DRIVE_ROAD, DRIVE_Y, DRIVE_CAR,
 } from '../game/story.js';
 import {
@@ -1991,7 +1991,9 @@ export function createRenderer(canvas, wrap, assets) {
     const index = currentWave(story);
     const wave = WAVES[index];
     const { n, total } = stageProgress(index);
-    const text = `${waveLabel(index)} (${n}/${total})`;
+    // 연속 플레이: 몇 번째 웨이브인지와 받은 보상
+    const text = story.endless ? `${endlessLabel(story)} · 보상 ${story.endless.rewards}번 (다음 보상까지 ${ENDLESS.reward - (story.endless.cleared % ENDLESS.reward)}웨이브)`
+      : `${waveLabel(index)} (${n}/${total})`;
     ctx.font = 'bold 20px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';

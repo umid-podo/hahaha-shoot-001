@@ -96,6 +96,16 @@ export const WAVES = [
 
 /** '복도 2웨이브' */
 export const waveLabel = (i) => `${STAGES[WAVES[i].stage].name} ${WAVES[i].title}`;
+
+/**
+ * 연속 플레이 모드(스토리 모드 시작 칸에서 고름): 1스테이지 옥상만, 요원이 헬리콥터로 ENDLESS.count명씩 끝없이 온다(웨이브 무한).
+ * 웨이브는 옥상 2웨이브(wave) 설정(체력·무기 등, 스토리 설정)을 쓰고 요원 수만 count명. 보스·다음 스테이지는 없다.
+ * reward웨이브를 깰 때마다 보상(1코인 + 1승리, main.js가 바로 저장하므로 중간에 그만둬도 남음).
+ */
+export const ENDLESS = { wave: 1, count: 3, reward: 3 };
+/** 연속 플레이에서 지금(또는 다음에 올) 웨이브 번호(1부터) */
+export const endlessWave = (story) => story.endless.cleared + 1;
+export const endlessLabel = (story) => `연속 플레이 ${endlessWave(story)}웨이브`;
 /** 스테이지 안에서 몇 번째 웨이브인지 { n, total } */
 export function stageProgress(i) {
   const list = WAVES.filter((w) => w.stage === WAVES[i].stage);
@@ -264,7 +274,7 @@ export function normalizeAllyPicks(list) {
  * allies: 데려갈 AI 동료 — 수(0~MAX_ALLIES, 캐릭터는 자동) 또는 직접 고른 [{ characterId, weapon }] 목록.
  * 동료는 체력 가득으로 시작하고 주무기만 쓰며(보조무기·수류탄 없음) AI(match.story.allyBrains)가 조작한다.
  */
-export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null, allies = 0) {
+export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null, allies = 0, { endless = false } = {}) {
   const picks = [playerPick, ...(partnerPick ? [partnerPick] : [])];
   const team = Array.isArray(allies)
     ? normalizeAllyPicks(allies).slice(0, allyCount(allies.length))
@@ -298,7 +308,14 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
     });
   }
   // 1스테이지 옥상은 2인 대결의 넓은 맵만큼 넓은 '고공 요새'(매우 높은 고지대 2개·다리·오르막길·점프 패드·긴 다리)
-  if (WAVES[start].stage === 'rooftop') widen(match, 'fortress');
+  if (WAVES[start].stage === 'rooftop' || endless) widen(match, 'fortress');
+  if (endless) {
+    // 연속 플레이: 옥상에서 헬리콥터가 요원 ENDLESS.count명씩 끝없이 데려온다. cleared: 깬 웨이브 수, rewards: 받은 보상 수
+    match.story.endless = { cleared: 0, rewards: 0 };
+    Object.assign(match.story, { wave: ENDLESS.wave, phase: 'clear', timer: CLEAR_TIME / 2, started: false });
+    match.story.banner = banner('연속 플레이 모드', `요원이 ${ENDLESS.count}명씩 끝없이 온다 · ${ENDLESS.reward}웨이브마다 1코인 + 1승리`);
+    return match;
+  }
   if (start === 0) {
     spawnWave(match, {}, 0); // 입력 칸은 경기를 시작할 때 createInputs(match.players)로 만든다
     return match;
@@ -350,7 +367,7 @@ function spawnWave(match, inputs, index) {
     : ['sky', 'car', 'chute'].includes(wave.from) ? ARENA_WIDTH / 2 : story.carrier?.x ?? ARENA_WIDTH / 2;
   const sky = wave.from === 'sky', deathstar = wave.boss === 'deathstar';
   // AI 동료 수만큼 쉬움 돌격소총 요원이 웨이브 끝에 덧붙는다(보스전 제외)
-  const total = wave.count + extraAgents(index, story.allies);
+  const total = (story.endless ? ENDLESS.count : wave.count) + extraAgents(index, story.allies);
   const spread = total > 4 ? Math.min(DROP_SPREAD, (MAX_X - MIN_X) / (total - 1)) : DROP_SPREAD;
   for (let i = 0; i < total; i++) {
     const extra = i >= wave.count;
@@ -878,10 +895,25 @@ export function updateStory(match, inputs, dt, events) {
   // 연출 중에는 평소의 전투기가 나오지 않게 미룬다(복도에는 아예 나오지 않음)
   if (story.phase !== 'fight') match.jetTimer = Math.max(match.jetTimer, 2);
 
-  const next = story.wave + 1;
+  // 연속 플레이는 늘 같은 웨이브(옥상 2웨이브 설정)를 다시 부른다
+  const next = story.endless ? ENDLESS.wave : story.wave + 1;
   switch (story.phase) {
     case 'fight':
-      if (next < WAVES.length && enemies(match).every((p) => !p.alive)) {
+      if (story.endless && enemies(match).every((p) => !p.alive)) {
+        const e = story.endless;
+        e.cleared++;
+        story.phase = 'clear';
+        story.timer = 0;
+        events.push({ type: 'wave-clear', wave: story.wave, endless: e.cleared });
+        // reward웨이브마다 보상(1코인 + 1승리)
+        if (e.cleared % ENDLESS.reward === 0) {
+          e.rewards++;
+          events.push({ type: 'endless-reward', cleared: e.cleared, rewards: e.rewards });
+          story.banner = banner(`${e.cleared}웨이브 클리어! 보상 +1코인 · +1승리`, '다음 요원들이 온다');
+        } else {
+          story.banner = banner(`연속 플레이 ${e.cleared}웨이브 클리어!`, `보상까지 ${ENDLESS.reward - (e.cleared % ENDLESS.reward)}웨이브`);
+        }
+      } else if (!story.endless && next < WAVES.length && enemies(match).every((p) => !p.alive)) {
         story.phase = 'clear';
         story.timer = 0;
         story.banner = banner(`${WAVES[story.wave].title} 클리어!`, WAVES[next].boss ? '' : '다음 요원들이 온다');
@@ -923,9 +955,10 @@ export function updateStory(match, inputs, dt, events) {
       }
       story.phase = 'drop';
       story.wave = next;
-      story.banner = banner(WAVES[next].title, waveInfo(next, story.settings));
+      story.banner = story.endless ? banner(endlessLabel(story), `요원 ${ENDLESS.count + extraAgents(next, story.allies)}명 · 체력 ${story.settings.waves[next].hp}`)
+        : banner(WAVES[next].title, waveInfo(next, story.settings));
       spawnWave(match, inputs, next);
-      events.push({ type: 'wave', wave: next, title: WAVES[next].title });
+      events.push({ type: 'wave', wave: next, title: WAVES[next].title, ...(story.endless ? { endless: endlessWave(story) } : {}) });
       break;
     }
     case 'strike':
@@ -963,6 +996,7 @@ export function checkpoint(match) {
   const story = match.story;
   if (!story || !humanHeroes(match).some((p) => p.alive) || match.phase === 'result') return null;
   if (match.gunkata) return null; // 건 카타 중에는 저장하지 않는다(끝나면 엔딩 컷씬 중에 저장 가능)
+  if (story.endless) return null; // 연속 플레이는 저장하지 않는다(보상은 받을 때마다 바로 저장된다)
   const [hero, partner] = humanHeroes(match);
   let wave = currentWave(story);
   if (match.cutscene) {
