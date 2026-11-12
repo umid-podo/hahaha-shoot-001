@@ -53,3 +53,25 @@ test('연속 플레이 강화 배율: 체력은 계속, 피해·속도는 한도
   assert.equal(endlessBoost(1000).damage, ENDLESS.grow.damageMax);
   assert.equal(endlessBoost(1000).speed, ENDLESS.grow.speedMax);
 });
+
+test('웨이브를 깨면 서 있는 주인공의 체력이 가득 찬다(일반 스토리·연속 플레이)', () => {
+  for (const endless of [false, true]) {
+    const settings = { ...defaultStory(), gunkata: false };
+    const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, settings, 3, null, null, 0, { endless });
+    match.phase = 'playing';
+    const inputs = createInputs(match.players);
+    const hero = match.players[0];
+    let healed = false;
+    for (let i = 0; i < 60 * 60 && !healed; i++) {
+      for (const p of match.players) inputs[p.id] ??= createInput(p);
+      const agents = match.players.filter((p) => p.team === 'isb' && p.alive && !p.entering);
+      if (match.story.phase === 'fight' && match.phase === 'playing' && agents.length) {
+        hero.hp = 123;
+        for (const p of agents) p.hp = 0;
+      }
+      for (const e of step(match, inputs)) if (e.type === 'heal' && e.playerId === hero.id) healed = true;
+    }
+    assert.ok(healed, `${endless ? '연속' : '일반'}: 회복 이벤트`);
+    assert.equal(hero.hp, hero.maxHp);
+  }
+});
