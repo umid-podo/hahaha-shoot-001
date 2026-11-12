@@ -457,6 +457,15 @@ function spawnWave(match, inputs, index) {
   }
 }
 
+/** 웨이브를 깨면 서 있는 지구방위팀(주인공·AI 동료)의 체력을 가득 채운다(쓰러진 동료는 스테이지를 깰 때 일어난다) */
+function healHeroes(match, events) {
+  for (const p of heroes(match)) {
+    if (!p.alive || p.hp >= p.maxHp) continue;
+    p.hp = p.maxHp;
+    events.push({ type: 'heal', playerId: p.id });
+  }
+}
+
 /** 남은 웨이브가 있어 ISB팀이 전멸해도 경기를 끝내지 않아야 하는지 */
 export function holdsResult(match) {
   return !!match.story && match.story.wave < WAVES.length - 1;
@@ -925,6 +934,7 @@ export function updateStory(match, inputs, dt, events) {
   const next = story.endless ? ENDLESS.wave : story.wave + 1;
   switch (story.phase) {
     case 'fight':
+      if (enemies(match).every((p) => !p.alive) && (story.endless || next < WAVES.length)) healHeroes(match, events);
       if (story.endless && enemies(match).every((p) => !p.alive)) {
         const e = story.endless;
         e.cleared++;
