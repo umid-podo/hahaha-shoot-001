@@ -349,6 +349,8 @@ h3 { margin: 16px 0 6px; font-size: 17px; }
 #screen-ready .card { width: min(820px, 100%); }
 .choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .choices.weapons { grid-template-columns: repeat(2, 1fr); }
+.choices.weapons.multi .choice { position: relative; }
+.choices.weapons.multi .pick-order:not(:empty) { position: absolute; top: 4px; right: 6px; min-width: 22px; height: 22px; border-radius: 11px; background: #247BDB; color: #fff; font-size: 13px; display: grid; place-items: center; }
 button.choice {
   display: grid;
   justify-items: center;

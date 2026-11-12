@@ -1172,6 +1172,36 @@ export function createWorld3D(canvas, wrap, assets) {
       l.line.visible = false; l.dot.visible = false;
     }
   }
+  // ── 폭동 진압 방패: 세운 사람 몸 앞에 투명한 큰 방패(내 화면에서는 내 방패를 숨기고 HUD로 보여 준다) ──
+  const shieldGeo = new THREE.BoxGeometry(8, 170, 120);
+  const shieldMat = new THREE.MeshPhysicalMaterial({ color: '#B8D2EA', roughness: 0.15, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false });
+  const shieldRimGeo = new THREE.BoxGeometry(10, 172, 6);
+  const shieldRimMat = M.mat('#15171C', { metal: 0.3, rough: 0.6 });
+  const shieldMeshes = new Map();
+  function placeShields(match) {
+    const stage = match.story?.stage;
+    const live = new Set();
+    if (!match.cutscene && !match.killcam) {
+      for (const p of match.players) {
+        if (!p.alive || !p.shield || p.plane) continue;
+        live.add(p.id);
+        let m = shieldMeshes.get(p.id);
+        if (!m) {
+          m = new THREE.Group();
+          m.add(new THREE.Mesh(shieldGeo, shieldMat));
+          for (const z of [-60, 60]) { const r = new THREE.Mesh(shieldRimGeo, shieldRimMat); r.position.z = z; m.add(r); }
+          scene.add(m);
+          shieldMeshes.set(p.id, m);
+        }
+        const h = (p.z ?? 0) + (stage === 'road' ? CAR_ROOF : 0);
+        m.position.set(p.x + Math.cos(p.aim) * 48, h + 88, p.y + Math.sin(p.aim) * 48);
+        m.rotation.set(0, -p.aim, 0);
+        m.userData.owner = p.id;
+      }
+    }
+    for (const [id, m] of shieldMeshes) m.visible = live.has(id);
+  }
+
   /** 화면 칸 하나를 그리기 직전: 그 화면 주인(viewerId)의 조준선만 보이게 한다(장면 카메라면 모두 숨김) */
   function showAimLinesFor(viewerId) {
     for (const l of aimLines.values()) {
@@ -1290,6 +1320,7 @@ export function createWorld3D(canvas, wrap, assets) {
     rocketFlame: new THREE.ConeGeometry(6, 26, 10),
     grenade: new THREE.SphereGeometry(9, 10, 8),
     unitSphere: new THREE.SphereGeometry(1, 12, 8),
+    flameCone: new THREE.ConeGeometry(14, 30, 8),
     debris: new THREE.BoxGeometry(14, 14, 14),
     ring: new THREE.RingGeometry(0.8, 1, 32),
     // 에너지 볼트: 흰 속심 + 푸른 빛 껍질(X축 방향) + 뒤로 옅게 남는 꼬리
@@ -1353,6 +1384,28 @@ export function createWorld3D(canvas, wrap, assets) {
     g.add(core, glow, trail);
     return g;
   }
+  /** 날아가는 화염폭탄: 초록 병과 불붙은 심지 */
+  function makeFirebombShot() {
+    const g = new THREE.Group();
+    const bottle = new THREE.Mesh(GEO.grenade, M.mat('#4E8A3A', { metal: 0.2, rough: 0.2 }));
+    bottle.scale.set(1.4, 0.8, 0.8);
+    g.add(bottle);
+    const flame = new THREE.Mesh(GEO.unitSphere, new THREE.MeshBasicMaterial({ color: '#FFB040', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    flame.scale.setScalar(8);
+    flame.position.x = 14;
+    g.add(flame);
+    return g;
+  }
+  /** 날아가는 섬광탄: 하얗게 빛나는 불덩이 + 붉은 빛무리 */
+  function makeFlareShot() {
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(GEO.unitSphere, BOLT.core);
+    core.scale.setScalar(6);
+    const glow = new THREE.Mesh(GEO.unitSphere, new THREE.MeshBasicMaterial({ color: '#FF8A4A', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+    glow.scale.setScalar(18);
+    g.add(core, glow);
+    return g;
+  }
   /** 전기충격기(던져 날아가는 탄): 노란 몸통에 푸른 전극 두 개 */
   function makeStunDart() {
     const g = new THREE.Group();
@@ -1374,6 +1427,8 @@ export function createWorld3D(canvas, wrap, assets) {
   }
   function makeShot(b) {
     if (b.weapon === 'stunlauncher') return makeStunDart();
+    if (b.weapon === 'firebomb') return makeFirebombShot();
+    if (b.weapon === 'flaregun') return makeFlareShot();
     if (b.thrown) {
       return new THREE.Mesh(GEO.grenade, M.mat('#4E6B3A'));
     }
@@ -1665,6 +1720,64 @@ export function createWorld3D(canvas, wrap, assets) {
         s.position.z += vz * dt * (1 - k);
         s.position.y += dt * (e.rise ?? 16);
       } });
+      return;
+    }
+    if (kind === 'fire') {
+      // 화염폭탄의 불길: 바닥의 주황 원 + 일렁이는 불꽃 기둥 여러 개 + 따뜻한 빛, life초 동안 타다 꺼진다
+      const g = new THREE.Group();
+      const R = e.radius ?? 200;
+      // 밝은 바닥(하얀 섬·눈)에서도 보이게 더하기 섞기 대신 진한 주황으로
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(R, 40), new THREE.MeshBasicMaterial({ color: '#E8501A', transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+      disc.rotation.x = -Math.PI / 2;
+      g.add(disc);
+      const flameMat = new THREE.MeshBasicMaterial({ color: '#FF7A1A', transparent: true, opacity: 0.8, depthWrite: false });
+      const flames = [];
+      for (let i = 0; i < 16; i++) {
+        const f = new THREE.Mesh(GEO.flameCone, flameMat);
+        const a = (i / 16) * Math.PI * 2 + i, d = R * (0.15 + ((i * 37) % 80) / 100);
+        f.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+        g.add(f);
+        flames.push(f);
+      }
+      const light = new THREE.PointLight('#FF8A3A', 3, R * 4, 1.6);
+      light.position.y = 60;
+      g.add(light);
+      g.position.set(e.x, (e.h ?? 0) + 2, e.y);
+      scene.add(g);
+      effects.push({ obj: g, age: 0, life: e.life ?? 5, update(k) {
+        const fade = k > 0.85 ? (1 - k) / 0.15 : Math.min(1, k * 12);
+        disc.material.opacity = 0.35 * fade;
+        flameMat.opacity = 0.8 * fade;
+        light.intensity = 3 * fade;
+        const t = performance.now() / 1000;
+        flames.forEach((f, i) => { const h = 40 + 50 * Math.abs(Math.sin(t * 7 + i * 1.7)); f.scale.set(1, h / 30, 1); f.position.y = h / 2; });
+      } });
+      return;
+    }
+    if (kind === 'flashbang') {
+      // 섬광: 눈부신 흰 빛 덩어리가 확 커졌다 사라지고 강한 빛
+      const g = new THREE.Group();
+      const ball = new THREE.Mesh(GEO.unitSphere, new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const light = new THREE.PointLight('#FFFFFF', 12, (e.radius ?? 400) * 4, 1.2);
+      g.add(ball, light);
+      g.position.set(e.x, e.h ?? 40, e.y);
+      scene.add(g);
+      const R = e.radius ?? 400;
+      effects.push({ obj: g, age: 0, life: 0.6, update(k) {
+        ball.scale.setScalar(20 + R * 0.6 * Math.sqrt(k));
+        ball.material.opacity = 1 - k;
+        light.intensity = 12 * (1 - k) ** 2;
+      } });
+      return;
+    }
+    if (kind === 'slash') {
+      // 카타나 베기: 몸 앞을 가로지르는 흰 반달 궤적(부채꼴 테두리)
+      const R = e.range ?? 280, arc = ((e.arc ?? 150) * Math.PI) / 180;
+      const m = new THREE.Mesh(new THREE.RingGeometry(R * 0.55, R, 32, 1, -arc / 2, arc), new THREE.MeshBasicMaterial({ color: '#E8F6FF', transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      m.rotation.set(-Math.PI / 2, 0, -(e.aim ?? 0));
+      m.position.set(e.x, (e.h ?? 0) + 95, e.y);
+      scene.add(m);
+      effects.push({ obj: m, age: 0, life: 0.3, update(k) { m.material.opacity = 0.8 * (1 - k); m.scale.setScalar(0.85 + 0.2 * k); } });
       return;
     }
     if (kind === 'spark') {
@@ -2059,7 +2172,18 @@ export function createWorld3D(canvas, wrap, assets) {
         }
         const h = lastMatch ? heightOf(lastMatch, e.x, e.y) : GUN_Y;
         if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, energy: e.energy, h: currentStage === 'sky' ? PLANE_Y : currentStage === 'road' ? CAR_ROOF : e.z ?? 0 });
-        if (e.type === 'field') addEffect('field', { x: e.x, y: e.y, radius: e.radius, spread: e.spread, life: e.life, h: e.h ?? 0 });
+        if (e.type === 'field') addEffect(e.kind === 'fire' ? 'fire' : 'field', { x: e.x, y: e.y, radius: e.radius, spread: e.spread, life: e.life, h: e.h ?? 0 });
+        if (e.type === 'flash') addEffect('flashbang', { x: e.x, y: e.y, h: e.h, radius: e.radius });
+        if (e.type === 'slash') addEffect('slash', { x: e.x, y: e.y, h: e.h, aim: e.aim, range: e.range, arc: e.arc });
+        if (e.type === 'shield-hit') {
+          const p = lastMatch?.players.find((q) => q.id === e.playerId);
+          if (p) {
+            addEffect('spark', { x: p.x + Math.cos(p.aim) * 50, y: p.y + Math.sin(p.aim) * 50, h: (p.z ?? 0) + 100, size: 40, color: '#BFE6FF' });
+            label(`방패 -${e.absorbed}`, p.x, p.y, (p.z ?? 0) + 210, '#9FD8FF', 0.8, 26);
+          }
+        }
+        if (e.type === 'shield-break') label('방패 깨짐!', e.x, e.y, 230, '#FFFFFF', 1, 30);
+        if (e.type === 'burn' && Math.random() < 0.6) addEffect('spark', { x: e.x + (Math.random() - 0.5) * 40, y: e.y + (Math.random() - 0.5) * 40, h: 40 + Math.random() * 80, color: '#FF8A2A', size: 30 });
         if (e.type === 'stun') {
           const p = lastMatch?.players.find((q) => q.id === e.playerId);
           label(e.kind === 'shock' ? '⚡ 감전!' : '⚡ 마비!', e.x, e.y, (p?.z ?? 0) + 230, '#7FF4FF', 1.1, 34);
@@ -2154,6 +2278,7 @@ export function createWorld3D(canvas, wrap, assets) {
       if (!cut) placeShots(match, reducedMotion);
       else for (const [id, m] of shots) { scene.remove(m); shots.delete(id); }
       placeAimLines(match);
+      placeShields(match);
       placeCovers(cut?.kind === 'drive' && !cut.switched ? { covers: [] } : match, time);
       placeHighs(cut?.kind === 'drive' && !cut.switched ? { highs: [] } : match);
       placePads(cut?.kind === 'drive' && !cut.switched ? { pads: [] } : match, time, reducedMotion);
@@ -2207,7 +2332,11 @@ export function createWorld3D(canvas, wrap, assets) {
         renderer.setViewport(px, 0, pw, ph);
         renderer.setScissor(px, 0, pw, ph);
         showAimLinesFor(v.target ? null : viewer?.id ?? null);
+        const ownShield = viewer && !v.target ? shieldMeshes.get(viewer.id) : null;
+        const ownShieldOn = ownShield?.visible;
+        if (ownShield) ownShield.visible = false;
         renderer.render(scene, cam);
+        if (ownShield) ownShield.visible = ownShieldOn;
         for (const fx of ownFx) fx.obj.visible = true;
         // 손에 든 총(3D): 장착한 무기 모양 그대로, 쌍권총·석궁은 양손에 하나씩
         if (viewer?.alive && !viewer.plane && !v.target) {

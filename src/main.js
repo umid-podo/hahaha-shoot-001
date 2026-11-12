@@ -222,7 +222,7 @@ function saveStoryProgress() {
     return;
   }
   const [hero, partner] = match.players.filter((p) => !p.ai);
-  const pickOf = (p) => ({ characterId: p.characterId, weapon: p.primary, secondary: p.secondary });
+  const pickOf = (p) => ({ characterId: p.characterId, weapon: p.primary, secondary: p.ground?.secondary ?? p.secondary, secondaries: p.ground?.secondaries ?? p.secondaries });
   const save = { ...point, pick: pickOf(hero), savedAt: Date.now(), ...(storyClean ? { clean: true } : {}) };
   if (partner) save.pick2 = pickOf(partner);
   saveStorySave(save);

@@ -7,6 +7,8 @@ export function weaponInfo(w) {
   if (w.field) return `조준 후 떼면 전기충격기를 포물선으로 발사 · 떨어진 곳에 반경 ${w.field.radius} 전기가 퍼짐 · 닿으면 ${w.field.freeze}초 못 움직임 · 쿨타임 ${w.interval}초`;
   if (w.shock) return `조준 후 떼면 약하게 유도되는 에너지 로켓 · 직격 ${w.damage} · 폭발 반경 ${w.splash.radius}(피해 ${w.splash.damage}) · 맞으면 ${w.shock}초 감전(못 움직이고 못 쏨)`;
   if (w.scoped && w.burst > 1) return `스코프 달림 · 조준 후 떼면 유탄 ${w.burst}발 · 한 발 ${w.damage}(주변 폭발 ${w.splash.damage}) · 쿨타임 ${w.interval}초`;
+  if (w.fire) return `조준 후 떼면 포물선으로 던짐 · 터지면 바닥에 반경 ${w.fire.radius} 불길이 ${w.fire.life}초 남아 초당 ${w.fire.dps} 피해 · 쿨타임 ${w.interval}초`;
+  if (w.flash) return `조준 후 떼면 섬광탄이 곡선으로 날아가 터짐 · 반경 ${w.flash.radius} 안에서 보면 최대 ${w.flash.blind}초 눈이 멂 · 쿨타임 ${w.interval}초`;
   if (w.thrown) return `아이템 버튼으로 던짐 · 반경 ${w.splash.radius} 폭발 ${w.splash.damage} · 쿨타임 ${w.interval}초`;
   if (w.instakill) {
     const aim = w.homing >= 180 ? '반드시 맞아' : `최대 ${w.homing}도 휘어 맞으면`;
@@ -16,8 +18,10 @@ export function weaponInfo(w) {
   if (w.flame) return `가까이에 불꽃을 뿜음(사거리 짧음) · ${w.interval}초마다 ${w.damage} · 연료 ${w.mag}`;
   if (w.energy && w.alternate) return `푸른 에너지 볼트를 엄청난 연사로 · 한 발 ${w.damage} · ${w.mag > 0 ? `${w.mag}발` : '탄약 무한'} · 탄속 매우 빠름`;
   if (w.energy) return `푸른 에너지 볼트 · ${w.interval}초마다 ${w.damage} · 탄속 매우 빠름 · 엄폐물·벽에 ${w.bounces}번 튕김`;
+  if (w.slash) return `조준 후 떼면 앞을 가로로 크게 벰 · ${w.slash.arc}도 부채꼴, 거리 ${w.slash.range} 안의 적 모두 ${w.damage} · 쿨타임 ${w.interval}초`;
+  if (w.shield) return `누르면 앞에 방패를 세움 · ${w.shield.time}초 동안 앞에서 오는 공격 피해 ${w.shield.hp}까지 막음 · 쿨타임 ${w.interval}초`;
   if (w.dash) return `조준 후 떼면 매우 빠르게 돌진 · 닿으면 ${w.damage} · 쿨타임 ${w.interval}초`;
-  if (w.pellets) return `조준 후 떼면 부채꼴로 ${w.pellets}발 · 한 발 ${w.damage} · 쿨타임 ${w.interval}초`;
+  if (w.pellets) return `조준 후 떼면 부채꼴로 ${w.pellets}발${w.homing ? '(적 쪽으로 유도)' : ''} · 한 발 ${w.damage} · 쿨타임 ${w.interval}초`;
   if (w.trigger === 'release') {
     const splash = w.splash ? ` · 폭발 범위 ${w.splash.damage}` : '';
     const note = w.note ? ` · ${w.note}` : '';

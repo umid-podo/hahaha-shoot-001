@@ -541,12 +541,12 @@ function setupSky(match, { heal = true } = {}) {
   // 땅에서 쓰던 무기·모습은 4스테이지(도로)에서 되돌리려고 남겨 둔다
   for (const p of list) {
     p.ground ??= {
-      primary: p.primary, secondary: p.secondary, weapon: p.primary, item: p.item, primaryOnly: p.primaryOnly,
+      primary: p.primary, secondary: p.secondary, secondaries: p.secondaries, weapon: p.primary, item: p.item, primaryOnly: p.primaryOnly,
       drone: p.drone, jetpack: p.jetpack, scale: p.scale, speed: p.speed,
     };
   }
   list.forEach((p, i) => Object.assign(p, {
-    plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', item: 'missile', slot: 'primary',
+    plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', secondaries: ['overcool'], item: 'missile', slot: 'primary', shield: null,
     primaryOnly: !!p.ai, drone: false, jetpack: null, scale: 1,
     speed: MAX_SPEED_BASE * SKY.planeSpeed, hurt: 0, dash: null, evade: null,
     // 이어하기(heal: false)는 저장한 체력·쓰러짐을 그대로 둔다
@@ -1090,7 +1090,7 @@ export function normalizeStorySave(save) {
   const wave = Number(save?.wave), hp = Number(save?.hp);
   const isPick = (pick) => typeof pick === 'object' && !!pick;
   if (!Number.isInteger(wave) || wave < 0 || wave >= WAVES.length || !isPick(save.pick)) return null;
-  const pickOf = ({ characterId, weapon, secondary }) => ({ characterId, weapon, secondary });
+  const pickOf = ({ characterId, weapon, secondary, secondaries }) => ({ characterId, weapon, secondary, ...(Array.isArray(secondaries) ? { secondaries } : {}) });
   const savedAt = Number(save.savedAt) || 0;
   const allies = allyCount(save.allies);
   // clean: 처음부터 스테이지 건너뛰기 없이 해 온 판(끝까지 깨면 랭크가 오른다)

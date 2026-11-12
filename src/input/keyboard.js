@@ -4,16 +4,18 @@ export const KEYMAP = {
   P1: {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', turnLeft: 'KeyZ', turnRight: 'KeyC',
     fire: 'KeyF', swap: 'KeyE', item: 'KeyQ', jump: 'Space', evade: 'ShiftLeft', lookUp: 'KeyR', lookDown: 'KeyV',
+    slot1: 'Digit1', slot2: 'Digit2', slot3: 'Digit3', slot4: 'Digit4',
   },
   P2: {
     forward: 'ArrowUp', back: 'ArrowDown', left: 'Comma', right: 'Period', turnLeft: 'ArrowLeft', turnRight: 'ArrowRight',
     fire: 'Enter', swap: 'ShiftRight', item: 'Slash', jump: 'ControlRight', evade: 'KeyM', lookUp: 'PageUp', lookDown: 'PageDown',
+    slot1: 'Numpad1', slot2: 'Numpad2', slot3: 'Numpad3', slot4: 'Numpad4',
   },
 };
 const FIRE_HINT = '누르고 있으면 연사(RPG·저격총은 떼면 발사)';
 export const KEY_LABELS = {
-  P1: `W/S 앞뒤 · A/D 옆걸음 · 마우스(화면을 눌러 잠금) 또는 Z/C 고개 돌리기 · 마우스 위아래 또는 R/V 위·아래 보기 · F·왼쪽 클릭 ${FIRE_HINT} · E·휠 무기 전환 · Q·오른쪽 클릭 수류탄 · Space 점프(꾹 누를수록 높이·멀리) · 왼쪽 Shift·휠 클릭 회피(2번 연속 돌진)`,
-  P2: `↑/↓ 앞뒤 · ←/→ 고개 돌리기 · ,/. 옆걸음 · PageUp/PageDown 위·아래 보기 · Enter ${FIRE_HINT} · 오른쪽 Shift 무기 전환 · / 수류탄 · 오른쪽 Ctrl 점프(꾹 누를수록 높이·멀리) · M 회피(2번 연속 돌진)`,
+  P1: `W/S 앞뒤 · A/D 옆걸음 · 마우스(화면을 눌러 잠금) 또는 Z/C 고개 돌리기 · 마우스 위아래 또는 R/V 위·아래 보기 · F·왼쪽 클릭 ${FIRE_HINT} · E·휠 무기 전환(주무기→보조무기 1·2·3) · 1~4 무기 칸 바로 고르기 · Q·오른쪽 클릭 수류탄 · Space 점프(꾹 누를수록 높이·멀리) · 왼쪽 Shift·휠 클릭 회피(2번 연속 돌진)`,
+  P2: `↑/↓ 앞뒤 · ←/→ 고개 돌리기 · ,/. 옆걸음 · PageUp/PageDown 위·아래 보기 · Enter ${FIRE_HINT} · 오른쪽 Shift 무기 전환 · 숫자패드 1~4 무기 칸 · / 수류탄 · 오른쪽 Ctrl 점프(꾹 누를수록 높이·멀리) · M 회피(2번 연속 돌진)`,
 };
 /** 혼자 하면(사람 플레이어 1명) P1은 P2 키(방향키 등)로도 조작한다. */
 export const SOLO_LABEL = '혼자 할 때는 방향키·Enter 등 P2 키로도 조작할 수 있습니다.';
@@ -50,6 +52,11 @@ export function attachKeyboard(getInputs, onEscape) {
     if (thrower) thrower.item = true;
     const shooter = ownerOf(e.code, inputs, 'fire');
     if (shooter) shooter.aiming = true;
+    // 1~4: 주무기·보조무기 1~3 칸을 바로 고른다
+    ['primary', 'secondary', 'secondary2', 'secondary3'].forEach((slot, i) => {
+      const picker = ownerOf(e.code, inputs, `slot${i + 1}`);
+      if (picker) picker.select = slot;
+    });
   });
   window.addEventListener('keyup', (e) => {
     const inputs = getInputs();

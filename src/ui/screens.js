@@ -1,7 +1,7 @@
 import { createWorkshop } from './workshop.js';
 import { modStore } from '../game/mods.js';
 import {
-  TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, TICK, MAPS,
+  TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, MAX_SECONDARIES, normalizeSecondaries, TICK, MAPS,
 } from '../game/config.js';
 import { TIERS, ACCOUNTS, MAX_LEVEL, accountName, rankLabel, rankProgress } from '../game/rank.js';
 import { loadRank } from '../storage/settings.js';
@@ -12,7 +12,7 @@ import { createBalanceScreens } from './balance.js';
 import { createSingleSetup } from './single.js';
 import { createStorySetup } from './story.js';
 import { DEATHSTAR_NAME, COOP_SLOT, waveLabel, ENDLESS } from '../game/story.js';
-import { weaponInfo, secretChoiceButton, weaponButtons } from './widgets.js';
+import { weaponInfo, secretChoiceButton, weaponButtons, weaponLabel } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
 // 2인 조작 패널 한 개(이동키 + 버튼 + 발사키)가 들어가려면 필요한 대략의 화면 폭
@@ -94,13 +94,54 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     heading.textContent = label;
     return [heading, row];
   };
+  /**
+   * 보조무기 줄: 최대 MAX_SECONDARIES개까지 골라 들고 간다(누를 때마다 넣고 빼기, 고른 순서가 보조무기 1·2·3 칸).
+   * 이미 가득이면 가장 먼저 고른 것을 빼고 새로 넣는다. 하나는 꼭 남는다.
+   */
+  const secondaryRow = () => {
+    const now = loadout[s.id];
+    let picked = normalizeSecondaries(now.secondaries ?? [now.secondary ?? DEFAULT_SECONDARY]);
+    const row = document.createElement('div');
+    row.className = 'choices weapons multi';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', `${s.id} 보조무기(최대 ${MAX_SECONDARIES}개)`);
+    const items = SECONDARY_IDS.filter((id) => !WEAPONS[id].hidden).map((id) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice';
+      const order = document.createElement('b');
+      order.className = 'pick-order';
+      btn.append(order, ...weaponLabel(WEAPONS[id]));
+      btn.addEventListener('click', () => {
+        if (picked.includes(id)) { if (picked.length > 1) picked = picked.filter((x) => x !== id); }
+        else picked = [...picked, id].slice(-MAX_SECONDARIES);
+        onPick(s.id, 'secondaries', picked);
+        onPick(s.id, 'secondary', picked[0]);
+        sync();
+      });
+      return { id, btn, order };
+    });
+    function sync() {
+      for (const { id, btn, order } of items) {
+        const i = picked.indexOf(id);
+        btn.setAttribute('aria-pressed', String(i >= 0));
+        order.textContent = i >= 0 ? String(i + 1) : '';
+      }
+    }
+    sync();
+    row.append(...items.map((it) => it.btn));
+    const heading = document.createElement('div');
+    heading.className = 'field-label';
+    heading.textContent = `보조무기 (최대 ${MAX_SECONDARIES}개 · 고른 순서대로 보조무기 1·2·3 칸)`;
+    return [heading, row];
+  };
   const weapons = document.createElement('div');
   weapons.className = 'weapon-picks';
   function buildWeapons() {
     const now = loadout[s.id];
     weapons.replaceChildren(
       ...weaponRow('주무기', PRIMARY_IDS, 'weapon', now.weapon),
-      ...weaponRow('보조무기', SECONDARY_IDS, 'secondary', now.secondary ?? DEFAULT_SECONDARY),
+      ...secondaryRow(),
     );
   }
   buildWeapons();

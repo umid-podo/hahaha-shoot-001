@@ -1,5 +1,5 @@
 import {
-  RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, JET, COVERS, COVER,
+  RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, normalizeSecondaries, JET, COVERS, COVER,
   STEEL, STEEL_SPOTS, HIGHS, ARENA_BOUNDS, EVADE,
 } from './config.js';
 import { applyMap } from './maps.js';
@@ -15,7 +15,7 @@ export const characterName = (id) => characterOf(id)?.name ?? id;
 
 /** 기본 선택. { P1: { characterId, weapon, secondary }, P2: ... } */
 export function defaultLoadout() {
-  return Object.fromEntries(SLOTS.map((s) => [s.id, { characterId: s.characterId, weapon: s.weapon, secondary: DEFAULT_SECONDARY }]));
+  return Object.fromEntries(SLOTS.map((s) => [s.id, { characterId: s.characterId, weapon: s.weapon, secondary: DEFAULT_SECONDARY, secondaries: [DEFAULT_SECONDARY] }]));
 }
 
 export function initialAim(team) {
@@ -57,7 +57,9 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
   const character = characterOf(characterId);
   // R-10·숨겨진 캐릭터는 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
   const weapon = character.weapon ?? (weaponPool.includes(pick.weapon) ? pick.weapon : slot.weapon);
-  const secondary = SECONDARY_IDS.includes(pick.secondary) ? pick.secondary : DEFAULT_SECONDARY;
+  // 보조무기 최대 3개(secondaries). 예전 선택(secondary 하나)도 받는다. secondary는 첫 번째 보조무기
+  const secondaries = normalizeSecondaries(pick.secondaries ?? (SECONDARY_IDS.includes(pick.secondary) ? [pick.secondary] : [DEFAULT_SECONDARY]));
+  const secondary = secondaries[0];
   const maxHp = pick.maxHp > 0 ? Math.round(pick.maxHp) : character.maxHp ?? MAX_HP;
   const name = pick.name ?? character.name;
   return {
@@ -70,7 +72,9 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
     // radius: 싱글플레이에서 AI 히트박스 반지름을 따로 정할 수 있다
     radius: pick.radius > 0 ? pick.radius : character.radius ?? BODY_RADIUS,
     speed: (character.speed ?? MAX_SPEED) * (pick.speedScale > 0 ? pick.speedScale : 1),
-    primary: weapon, secondary, slot: 'primary', weapon,
+    primary: weapon, secondary, secondaries, slot: 'primary', weapon,
+    // shield: 폭동 진압 방패를 세웠으면 { hp(남은 막을 피해), t(남은 초) }, blind: 섬광에 눈이 먼 남은 초
+    shield: null, blind: 0,
     battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
     // item: 아이템 버튼 무기(평소 수류탄, 스토리 공중전은 미사일). boost: 과냉각이 남은 시간(그동안 주무기 연사가 빨라짐)
     item: 'grenade', boost: 0,
@@ -167,7 +171,7 @@ function steelCovers(players) {
  * 바라보는 방향에 맞춰 바꿔 넣는다). fwd·side: 사람 입력의 앞뒤(+앞)·좌우(+오른쪽), touchFwd·touchSide: 그중 터치 스틱 몫, turn: 이번 틱에
  * 고개를 돌리는 속도(-1~1, 키·스틱), aim: 바라보는(쏘는) 방향(라디안, 경기장 기준).
  * evade: 회피(빠른 돌진), pitch: 위아래 시선(+위, 라디안), jumpHeld: 점프키를 누르고 있는지(꾹 누르면 더 높이·멀리),
- * swap: 주무기↔보조무기 전환, select: 누른 무기 칸('primary'·'secondary')으로 바로 전환, item: 수류탄 던지기,
+ * swap: 주무기→보조무기(최대 3개) 차례로 전환, select: 누른 무기 칸('primary'·'secondary'·'secondary2'·'secondary3')으로 바로 전환, item: 수류탄 던지기,
  * kata: 스토리 모드 건 카타에서 누른 버튼(1~4, 안 눌렀으면 0)
  */
 export function createInput(player) {
