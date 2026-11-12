@@ -47,6 +47,8 @@ let resumeFrom = null;
 let storyClean = false;
 // 지금 계정의 랭크 { tier, level, wins }
 let rank = null;
+// 연속 플레이에서 방금 오른 랭크 안내(코인 알림에 함께 보인다)
+let endlessRankMsg = '';
 let match = null;
 let inputs = null;
 let controls = null;
@@ -394,15 +396,19 @@ function frame(now) {
         if (e.type === 'wave') {
           screens.announce(e.endless ? `연속 플레이 ${e.endless}웨이브 시작` : `${waveLabel(e.wave)} 시작`);
         }
-        // 연속 플레이: 3웨이브마다 1코인 + 1승리(랭크 1레벨). 바로 저장되므로 중간에 그만둬도 남는다
-        if (e.type === 'endless-reward') {
-          const coins = modStore().addCoins(1);
+        // 연속 플레이: 웨이브를 깰 때마다 랭크 1레벨, 3웨이브마다 1코인. 바로 저장되므로 중간에 그만둬도 남는다
+        if (e.type === 'wave-clear' && e.endless) {
           const result = addWin(rank);
           rank = result.rank;
           saveRank(rank);
           if (result.coins) modStore().addCoins(result.coins);
           screens.setAccount(currentAccount(), rank);
-          coinToast(`${e.cleared}웨이브 돌파! 코인 +1 (가진 코인 ${coins + result.coins}) · ${rankMessage(result)}`);
+          coinToast(`${e.endless}웨이브 돌파! ${rankMessage(result)}`);
+          endlessRankMsg = rankMessage(result);
+        }
+        if (e.type === 'endless-reward') {
+          const coins = modStore().addCoins(1);
+          coinToast(`${e.cleared}웨이브 돌파! 코인 +1 (가진 코인 ${coins}) · ${endlessRankMsg}`);
         }
         // 스토리 스테이지를 깰 때마다 1코인(바로 저장되므로 중간에 그만둬도 남는다). 마지막 대교는 승리할 때
         if (match.story && (e.type === 'stage' || (e.type === 'result' && e.winner === 'earth'))) {
