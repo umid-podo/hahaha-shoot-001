@@ -8,6 +8,7 @@ import {
 import * as M from './models.js';
 import { createViewmodel, makeBullet, makeArrow, sharedShotGeometries, getFlashTexture, getSmokeTexture, vmFov, makeHeldGun, poseHeldGun, hasHeldGun } from './guns.js';
 import { segmentRectTime } from '../game/collision.js';
+import { structureHit, groundAt } from '../game/terrain.js';
 import { modStore } from '../game/mods.js';
 
 /**
@@ -97,8 +98,9 @@ export function createWorld3D(canvas, wrap, assets) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setScissorTest(true);
   const scene = new THREE.Scene();
-  const cameras = [new THREE.PerspectiveCamera(FOV, 1.6, 4, 12000), new THREE.PerspectiveCamera(FOV, 0.8, 4, 12000)];
-  const cine = new THREE.PerspectiveCamera(58, 1.6, 4, 12000);
+  // 거대한 경기장(가로 1만 5천 넘음) 끝까지 보이게 멀리까지 그린다
+  const cameras = [new THREE.PerspectiveCamera(FOV, 1.6, 4, 40000), new THREE.PerspectiveCamera(FOV, 0.8, 4, 40000)];
+  const cine = new THREE.PerspectiveCamera(58, 1.6, 4, 40000);
   const camState = { pos: new THREE.Vector3(800, 400, 1300), look: new THREE.Vector3(800, 60, 500), ready: false };
   let cssW = 1600, cssH = 1000;
 
@@ -162,11 +164,11 @@ export function createWorld3D(canvas, wrap, assets) {
     return m;
   }
   /** 경기장 둘레를 감싸는 큰 건물들(base 높이부터 위로) */
-  function skyline(group, { base = -1600, minH = 900, maxH = 2400, ring = 900, count = 34, lit = 0.35, seed = 7 } = {}) {
+  function skyline(group, { base = -1600, minH = 900, maxH = 2400, ring = 900, count = 34, lit = 0.35, seed = 7, size = 1 } = {}) {
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2;
       const r = ring + ((i * 977) % 700);
-      const w = 260 + ((i * 131) % 260), d = 260 + ((i * 71) % 220);
+      const w = (260 + ((i * 131) % 260)) * size, d = (260 + ((i * 71) % 220)) * size;
       const h = minH + ((i * 389) % (maxH - minH));
       const tex = windowTexture(seed + i, lit);
       tex.repeat.set(Math.max(1, Math.round(w / 128)), Math.max(1, Math.round(h / 256)));
@@ -230,7 +232,7 @@ export function createWorld3D(canvas, wrap, assets) {
     const B = match.bounds;
     const W = B.maxX - B.minX, D = B.maxY - B.minY, cx = (B.minX + B.maxX) / 2, cz = (B.minY + B.maxY) / 2;
     scene.background = skyTexture([[0, '#0B1030'], [0.55, '#2A1E4A'], [0.8, '#7A3E5C'], [1, '#C9704A']]);
-    scene.fog = new THREE.Fog('#2A1E4A', 3800, 11000);
+    scene.fog = new THREE.Fog('#2A1E4A', Math.max(3800, Math.max(W, D) * 0.3), Math.max(11000, Math.max(W, D) * 1.45));
     hemi.color.set('#C8D2FF'); hemi.groundColor.set('#4A3A44'); hemi.intensity = 1.5;
     sun.color.set('#FFD9B0'); sun.intensity = 1.4;
     // 둘레 타일 바닥(반복 무늬)
@@ -309,7 +311,7 @@ export function createWorld3D(canvas, wrap, assets) {
         group.add(tip);
       }
     });
-    skyline(group, { ring: Math.max(W, D) * 0.45, count: 48, minH: 1100, maxH: 3200 });
+    skyline(group, { ring: Math.max(W, D) * (W > 8000 ? 0.62 : 0.45), count: W > 8000 ? 96 : 48, minH: 1100, maxH: W > 8000 ? 4600 : 3200, size: W > 8000 ? 1.8 : 1 });
     return {};
   }
 
@@ -328,13 +330,6 @@ export function createWorld3D(canvas, wrap, assets) {
     stair.add(door);
     stair.position.set(ROOF_STAIRS.x, 0, ROOF_STAIRS.y - 60);
     group.add(stair);
-    // 점프 패드(빛나는 고리·위쪽 화살표가 둥실둥실)
-    const pads = (match.pads ?? []).map((pad) => {
-      const m = M.makeJumpPad(pad.r);
-      m.position.set(pad.x, 0, pad.y);
-      group.add(m);
-      return m;
-    });
     // 고지대 위 탐조등 빛(밤하늘을 가르는 빛기둥)
     for (const g of (match.highs ?? []).filter((h) => h.kind === 'fortress')) {
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(6, 70, 1400, 16, 1, true),
@@ -348,54 +343,67 @@ export function createWorld3D(canvas, wrap, assets) {
         const cut = m.cutscene;
         door.rotation.y = cut?.kind === 'stairs' && !cut.switched ? -cut.door * 1.4 : 0;
         door.position.x = cut?.kind === 'stairs' && !cut.switched ? -cut.door * 30 : 0;
-        for (const [i, pad] of pads.entries()) {
-          const k = reducedMotion ? 0.5 : (Math.sin(time * 4 + i) + 1) / 2;
-          pad.userData.glow.material.color.setHSL(0.52, 1, 0.55 + 0.2 * k);
-          pad.userData.arrows.forEach((a, j) => { a.position.y = 30 + j * 40 + (reducedMotion ? 0 : ((time * 60) % 40)); });
-        }
       },
     };
   }
 
-  /** 복도(2스테이지): 본부 복도 그림 바닥, 사방 벽·천장 조명, 엘리베이터, 벽 포탑, 계단 문, 천장 구멍(R-10) */
-  function buildCorridor(group) {
+  /**
+   * 복도(2스테이지): 본부의 거대한 홀. 가운데에 원래 복도 그림 바닥, 둘레는 철판 바닥, 사방 벽·높은 천장 조명,
+   * 엘리베이터(엘리베이터 탑), 벽 포탑(기둥), 계단 문(계단실), 천장 구멍(R-10)
+   */
+  function buildCorridor(group, match) {
+    const B = match?.bounds ?? { minX: 0, maxX: ARENA_WIDTH, minY: 0, maxY: ARENA_HEIGHT };
+    const W = B.maxX - B.minX, D = B.maxY - B.minY, cx = (B.minX + B.maxX) / 2, cz = (B.minY + B.maxY) / 2;
     scene.background = new THREE.Color('#1A1E26');
-    scene.fog = new THREE.Fog('#1A1E26', 1800, 4200);
+    scene.fog = new THREE.Fog('#1A1E26', 2600, 9000);
     hemi.color.set('#FFF4E0'); hemi.groundColor.set('#3A3E48'); hemi.intensity = 1.9;
     sun.color.set('#FFFFFF'); sun.intensity = 0.8;
+    const plates = canvasTexture(256, 256, (g, w, h) => {
+      g.fillStyle = '#4A4F58'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#3A3F48'; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
+      g.fillStyle = 'rgba(255,255,255,0.05)';
+      for (let i = 0; i < 30; i++) g.fillRect((i * 97) % 256, (i * 53) % 256, 30, 3);
+      g.fillStyle = 'rgba(255,197,61,0.5)'; g.fillRect(0, 124, 256, 6);
+    }, { repeat: [W / 256, D / 256] });
+    group.add(floorPlane(plates, W + 40, D + 40, cx, cz, -0.5));
     const tex = new THREE.Texture(assets.corridor.img);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.needsUpdate = true;
     group.add(floorPlane(tex));
-    const H = 300;
+    const H = match?.ceiling ?? 300;
     const wallTex = canvasTexture(256, 256, (g, w, h) => {
       g.fillStyle = '#4A505C'; g.fillRect(0, 0, w, h);
       g.fillStyle = '#5E6672'; g.fillRect(0, 0, w, h * 0.55);
       g.fillStyle = '#2A2E35'; g.fillRect(0, h * 0.55, w, 6);
       g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 3;
       g.beginPath(); g.moveTo(w - 1, 0); g.lineTo(w - 1, h); g.stroke();
-    }, { repeat: [8, 1] });
+    }, { repeat: [Math.round(W / 200), Math.max(1, Math.round(H / 300))] });
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.85 });
-    for (const [x, z, w, d] of [[ARENA_WIDTH / 2, -10, ARENA_WIDTH + 40, 20], [ARENA_WIDTH / 2, ARENA_HEIGHT + 10, ARENA_WIDTH + 40, 20],
-      [-10, ARENA_HEIGHT / 2, 20, ARENA_HEIGHT], [ARENA_WIDTH + 10, ARENA_HEIGHT / 2, 20, ARENA_HEIGHT]]) {
+    for (const [x, z, w, d] of [[cx, B.minY - 40, W + 120, 20], [cx, B.maxY + 40, W + 120, 20],
+      [B.minX - 40, cz, 20, D + 120], [B.maxX + 40, cz, 20, D + 120]]) {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(w, H, d), wallMat);
       wall.position.set(x, H / 2, z);
       group.add(wall);
     }
-    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(ARENA_WIDTH + 40, ARENA_HEIGHT + 40), M.mat('#6A707C', { rough: 1, emissive: '#2A2E36' }));
+    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(W + 200, D + 200), M.mat('#6A707C', { rough: 1, emissive: '#2A2E36' }));
     ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.set(ARENA_WIDTH / 2, H, ARENA_HEIGHT / 2);
+    ceiling.position.set(cx, H, cz);
     group.add(ceiling);
+    // 천장 조명(줄지어 빛나는 판)과 천장 철골 보
     const lamp = M.mat('#FFF4D6', { emissive: '#FFF0C8' });
-    for (let x = 140; x < ARENA_WIDTH; x += 330) {
-      for (const z of [250, 750]) {
-        const l = new THREE.Mesh(new THREE.BoxGeometry(160, 6, 30), lamp);
+    const beam = M.mat('#3A3F48', { metal: 0.6, rough: 0.5 });
+    for (let x = B.minX + 300; x < B.maxX; x += 600) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(30, 40, D), beam);
+      b.position.set(x - 300, H - 20, cz);
+      group.add(b);
+      for (let z = B.minY + 300; z < B.maxY; z += 600) {
+        const l = new THREE.Mesh(new THREE.BoxGeometry(220, 8, 40), lamp);
         l.position.set(x, H - 4, z);
         group.add(l);
       }
     }
-    const point = new THREE.PointLight('#FFF0D0', 1.2, 1600, 1.2);
-    point.position.set(ARENA_WIDTH / 2, H - 30, ARENA_HEIGHT / 2);
+    const point = new THREE.PointLight('#FFF0D0', 1.2, 2400, 1.2);
+    point.position.set(ARENA_WIDTH / 2, Math.min(H - 30, 600), ARENA_HEIGHT / 2);
     group.add(point);
     // ISB 간판(위쪽 벽)
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(220, 90), new THREE.MeshBasicMaterial({
@@ -405,7 +413,7 @@ export function createWorld3D(canvas, wrap, assets) {
         g.fillText('ISB', w / 2, h / 2 + 2);
       }),
     }));
-    sign.position.set(ELEVATOR.x + 360, 210, 1);
+    sign.position.set(ELEVATOR.x + 240, 210, -9);
     group.add(sign);
     // 엘리베이터: 문 두 짝이 옆으로 열린다
     const frame = new THREE.Mesh(new THREE.BoxGeometry(ELEVATOR.w + 40, 220, 10), M.mat('#9AA3B1', { metal: 0.7, rough: 0.3 }));
@@ -458,7 +466,8 @@ export function createWorld3D(canvas, wrap, assets) {
   }
 
   /** 하늘(3스테이지): 비 내리는 밤, 아래 멀리 도시가 뒤로 흘러가고 구름이 스쳐 간다(앞은 ISB 쪽 = -Z) */
-  function buildSky(group) {
+  function buildSky(group, match) {
+    const B = match?.bounds ?? { minX: 0, maxX: ARENA_WIDTH, minY: 0, maxY: ARENA_HEIGHT };
     scene.background = skyTexture([[0, '#03050F'], [0.6, '#0C1430'], [1, '#1B2850']]);
     scene.fog = new THREE.Fog('#0C1430', 1500, 6000);
     hemi.color.set('#9FB4E8'); hemi.groundColor.set('#1A2238'); hemi.intensity = 1.3;
@@ -482,7 +491,8 @@ export function createWorld3D(canvas, wrap, assets) {
     group.add(ground);
     const clouds = [];
     const cloudMat = M.mat('#5A6482', { transparent: true, opacity: 0.55, rough: 1 });
-    for (let i = 0; i < 26; i++) {
+    const spanX = B.maxX - B.minX + 3200, spanZ = B.maxY - B.minY + 5000;
+    for (let i = 0; i < 40; i++) {
       const c = new THREE.Group();
       for (let k = 0; k < 4; k++) {
         const s = new THREE.Mesh(new THREE.SphereGeometry(160 + ((i * 37 + k * 53) % 120), 10, 8), cloudMat);
@@ -490,7 +500,7 @@ export function createWorld3D(canvas, wrap, assets) {
         s.scale.y = 0.45;
         c.add(s);
       }
-      c.position.set(((i * 613) % 4800) - 1600, i % 3 === 0 ? 420 + (i % 5) * 60 : -500 - (i % 4) * 200, ((i * 389) % 6000) - 3000);
+      c.position.set(B.minX - 1600 + ((i * 613) % spanX), i % 3 === 0 ? 420 + (i % 5) * 60 : -500 - (i % 4) * 200, B.minY - 2500 + ((i * 389) % spanZ));
       group.add(c);
       clouds.push(c);
     }
@@ -501,7 +511,7 @@ export function createWorld3D(canvas, wrap, assets) {
         city.offset.y = (t * 0.02) % 1;
         for (const c of clouds) {
           if (!reducedMotion) c.position.z += dt * 700;
-          if (c.position.z > 3200) c.position.z -= 6400;
+          if (c.position.z > B.maxY + 2500) c.position.z -= spanZ;
         }
         rain.update(time, reducedMotion, dt);
       },
@@ -538,7 +548,9 @@ export function createWorld3D(canvas, wrap, assets) {
   }
 
   /** 도로(4스테이지): 비 내리는 밤, 넓은 도로가 뒤(-X)로 흐르고(모두 +X로 달림) 양쪽 갓길 너머 건물·가로등 */
-  function buildRoad(group) {
+  function buildRoad(group, match) {
+    const B = match?.bounds ?? { minX: 0, maxX: ARENA_WIDTH, minY: 0, maxY: ARENA_HEIGHT };
+    const L = B.maxX - B.minX + 6000, D = B.maxY - B.minY + 200, cx = (B.minX + B.maxX) / 2, cz = (B.minY + B.maxY) / 2;
     scene.background = skyTexture([[0, '#03050F'], [0.7, '#141A2E'], [1, '#2A2440']]);
     scene.fog = new THREE.Fog('#141A2E', 1400, 5200);
     hemi.color.set('#8FA0C8'); hemi.groundColor.set('#202430'); hemi.intensity = 1.25;
@@ -551,25 +563,27 @@ export function createWorld3D(canvas, wrap, assets) {
         g.fillStyle = i === 2 || i === 3 ? 'rgba(255,214,110,0.8)' : 'rgba(235,240,250,0.75)';
         for (let x = 0; x < w; x += 160) g.fillRect(x, (y / 1000) * h - 3, 90, 6);
       }
-    }, { repeat: [8, 1] });
-    const road = floorPlane(roadTex, 8 * 512, 1000, ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
+    }, { repeat: [L / 512, D / 1000] });
+    // 넓은 도로: 차선 무늬가 1000마다 되풀이되는 여러 차선
+    const road = floorPlane(roadTex, L, D, cx, cz);
     road.material.roughness = 0.35;
     road.material.metalness = 0.2;
     group.add(road);
     const side = M.mat('#2A2E38', { rough: 1 });
-    for (const z of [-260, ARENA_HEIGHT + 260]) {
-      const s = new THREE.Mesh(new THREE.BoxGeometry(8 * 512, 20, 500), side);
-      s.position.set(ARENA_WIDTH / 2, -10, z);
+    for (const z of [B.minY - 360, B.maxY + 360]) {
+      const s = new THREE.Mesh(new THREE.BoxGeometry(L, 20, 500), side);
+      s.position.set(cx, -10, z);
       group.add(s);
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(8 * 512, 30, 8), M.mat('#8A93A3', { metal: 0.6 }));
-      rail.position.set(ARENA_WIDTH / 2, 30, z < 0 ? -12 : ARENA_HEIGHT + 12);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(L, 30, 8), M.mat('#8A93A3', { metal: 0.6 }));
+      rail.position.set(cx, 30, z < cz ? B.minY - 110 : B.maxY + 110);
       group.add(rail);
     }
+    const loopFrom = B.minX - 2400, loopSpan = B.maxX - B.minX + 4800;
     // 흐르는 가로등·건물
     const movers = [];
     const lampMat = M.mat('#FFD08A', { emissive: '#FFB050' });
-    for (let i = 0; i < 12; i++) {
-      for (const z of [-40, ARENA_HEIGHT + 40]) {
+    for (let i = 0; i < Math.ceil(loopSpan / 400); i++) {
+      for (const z of [B.minY - 140, B.maxY + 140]) {
         const pole = new THREE.Group();
         const p = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 320, 8), M.mat('#3A3F4D'));
         p.position.y = 160;
@@ -577,18 +591,18 @@ export function createWorld3D(canvas, wrap, assets) {
         const head = new THREE.Mesh(new THREE.BoxGeometry(60, 10, 26), lampMat);
         head.position.set(0, 320, z < 0 ? 30 : -30);
         pole.add(head);
-        pole.position.set(i * 400 - 1400, 0, z);
+        pole.position.set(loopFrom + i * 400, 0, z);
         group.add(pole);
         movers.push({ obj: pole, speed: 1 });
       }
     }
-    for (let i = 0; i < 18; i++) {
-      for (const z of [-700, ARENA_HEIGHT + 700]) {
+    for (let i = 0; i < Math.ceil(loopSpan / 330); i++) {
+      for (const z of [B.minY - 800, B.maxY + 800]) {
         const w = 300 + ((i * 131) % 200), h = 600 + ((i * 389) % 1400);
         const tex = windowTexture(100 + i + (z > 0 ? 50 : 0), 0.4);
         tex.repeat.set(2, Math.round(h / 256));
         const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 400), new THREE.MeshStandardMaterial({ map: tex, emissive: '#FFFFFF', emissiveMap: tex, emissiveIntensity: 0.28 }));
-        b.position.set(i * 330 - 1600, h / 2 - 20, z < 0 ? z - 500 : z + 500);
+        b.position.set(loopFrom + i * 330, h / 2 - 20, z < cz ? z - 500 : z + 500);
         group.add(b);
         movers.push({ obj: b, speed: 0.97 });
       }
@@ -600,7 +614,7 @@ export function createWorld3D(canvas, wrap, assets) {
         roadTex.offset.x = ((time * speed) / 512) % 1;
         for (const m of movers) {
           m.obj.position.x -= speed * m.speed * dt;
-          if (m.obj.position.x < -1800) m.obj.position.x += 4800;
+          if (m.obj.position.x < loopFrom) m.obj.position.x += loopSpan;
         }
         rain.update(time, reducedMotion, dt);
       },
@@ -608,30 +622,33 @@ export function createWorld3D(canvas, wrap, assets) {
   }
 
   /** 대교(5스테이지): 눈 내리는 밤, 강을 가로지르는 넓은 다리(앞뒤 = Z). 가운데가 들어 올려지며 벌어지면 그 아래로 배가 지나간다 */
-  function buildBridge(group) {
+  function buildBridge(group, match) {
+    const B = match?.bounds ?? { minX: 56, maxX: ARENA_WIDTH - 56, minY: 0, maxY: ARENA_HEIGHT };
     scene.background = skyTexture([[0, '#070B18'], [0.7, '#1A2238'], [1, '#3A4660']]);
     scene.fog = new THREE.Fog('#2A3248', 1500, 5200);
     hemi.color.set('#C8D6F0'); hemi.groundColor.set('#3A4458'); hemi.intensity = 1.5;
     sun.color.set('#DDE6FF'); sun.intensity = 1.0;
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), M.mat('#0E1A2B', { metal: 0.6, rough: 0.3 }));
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), M.mat('#0E1A2B', { metal: 0.6, rough: 0.3 }));
     water.rotation.x = -Math.PI / 2;
     water.position.set(ARENA_WIDTH / 2, -260, ARENA_HEIGHT / 2);
     group.add(water);
+    // 거대한 대교: 상판은 경기장 이동 범위보다 조금 넓다
+    const left = Math.min(56, B.minX - 60), right = Math.max(ARENA_WIDTH - 56, B.maxX + 60), gap = 250, mid = SHIP.y;
+    const z0 = B.minY - 1600, z1 = B.maxY + 1600, zLen = z1 - z0, zMid = (z0 + z1) / 2;
     const deckTex = canvasTexture(256, 256, (g, w, h) => {
       g.fillStyle = '#B4BFCC'; g.fillRect(0, 0, w, h);
       for (let i = 0; i < 300; i++) { g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect((i * 37) % w, (i * 91) % h, 4, 4); }
       g.fillStyle = 'rgba(90,100,120,0.25)'; g.fillRect(60, 0, 14, h); g.fillRect(180, 0, 14, h);
-    }, { repeat: [6, 4] });
+    }, { repeat: [Math.round((right - left) / 256), Math.round(zLen / 1000)] });
     const deckMat = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.95 });
-    const left = 56, right = ARENA_WIDTH - 56, gap = 250, mid = SHIP.y;
     const deck = (z0, z1) => {
       const d = new THREE.Mesh(new THREE.BoxGeometry(right - left, 30, z1 - z0), deckMat);
       d.position.set((left + right) / 2, -15, (z0 + z1) / 2);
       group.add(d);
       return d;
     };
-    deck(-1600, mid - gap / 2);
-    deck(mid + gap / 2, ARENA_HEIGHT + 1600);
+    deck(z0, mid - gap / 2);
+    deck(mid + gap / 2, z1);
     // 들어 올리는 상판 두 쪽(경첩은 틈의 양 끝)
     const leaves = [-1, 1].map((s) => {
       const pivot = new THREE.Group();
@@ -647,15 +664,15 @@ export function createWorld3D(canvas, wrap, assets) {
     });
     // 난간(눈 덮임)과 탑·줄
     for (const x of [left, right]) {
-      const r = new THREE.Mesh(new THREE.BoxGeometry(16, 60, 4000), M.mat('#5E6672', { metal: 0.4 }));
-      r.position.set(x, 30, ARENA_HEIGHT / 2);
+      const r = new THREE.Mesh(new THREE.BoxGeometry(16, 60, zLen), M.mat('#5E6672', { metal: 0.4 }));
+      r.position.set(x, 30, zMid);
       group.add(r);
-      const snowTop = new THREE.Mesh(new THREE.BoxGeometry(18, 8, 4000), M.mat('#F4F7FB'));
-      snowTop.position.set(x, 62, ARENA_HEIGHT / 2);
+      const snowTop = new THREE.Mesh(new THREE.BoxGeometry(18, 8, zLen), M.mat('#F4F7FB'));
+      snowTop.position.set(x, 62, zMid);
       group.add(snowTop);
-      for (const z of [-900, ARENA_HEIGHT + 900]) {
-        const tower = new THREE.Mesh(new THREE.BoxGeometry(80, 900, 80), M.mat('#7A3A2A', { rough: 0.7 }));
-        tower.position.set(x, 450, z);
+      for (const z of [B.minY - 600, B.maxY + 600]) {
+        const tower = new THREE.Mesh(new THREE.BoxGeometry(160, 1800, 160), M.mat('#7A3A2A', { rough: 0.7 }));
+        tower.position.set(x, 900, z);
         group.add(tower);
       }
     }
@@ -663,14 +680,14 @@ export function createWorld3D(canvas, wrap, assets) {
     for (const x of [left, right]) {
       const pts = [];
       for (let i = 0; i <= 40; i++) {
-        const z = -900 + (i / 40) * (ARENA_HEIGHT + 1800);
+        const z = B.minY - 600 + (i / 40) * (B.maxY - B.minY + 1200);
         const k = (i / 40) * 2 - 1;
-        pts.push(new THREE.Vector3(x, 120 + 780 * k * k, z));
+        pts.push(new THREE.Vector3(x, 120 + 1680 * k * k, z));
       }
       group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cable));
     }
     const lampMat = M.mat('#FFE2A8', { emissive: '#FFC870' });
-    for (let z = -600; z < ARENA_HEIGHT + 600; z += 300) {
+    for (let z = B.minY - 600; z < B.maxY + 600; z += 300) {
       for (const x of [left + 20, right - 20]) {
         const p = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, 260, 8), M.mat('#3A3F4D'));
         p.position.set(x, 130, z);
@@ -858,7 +875,7 @@ export function createWorld3D(canvas, wrap, assets) {
       if (e) {
         const k = clamp01(e.t / e.duration);
         if (e.kind === 'rope') h = HELI_ALT * 0.8 * (1 - k);
-        if (e.kind === 'fall') h = 260 * (1 - k * k);
+        if (e.kind === 'fall') h = ((match.ceiling ?? 300) - 40) * (1 - k * k);
         if (e.kind === 'chute') h = 700 * (1 - (1 - (1 - k) ** 2) * 1);
       }
       const onCar = stage === 'road' && !aircraft;
@@ -981,66 +998,86 @@ export function createWorld3D(canvas, wrap, assets) {
     }
   }
 
-  // ── 조준선(빨간 레이저): 총구에서 조준 방향으로, 엄폐물·사람에 닿는 곳까지. 끝에 빨간 점 ──
+  // ── 조준선(빨간 레이저): 내 총구에서 바라보는 방향(위아래 포함)으로, 구조물·엄폐물·사람에 닿는 곳까지. 끝에 빨간 점 ──
+  // 다른 사람(상대·AI·같은 편)의 조준선은 보이지 않는다: 화면 칸마다 그 화면 주인의 조준선만 켠다
   const laserGeo = new THREE.BoxGeometry(1, 1, 1);
   const laserMat = new THREE.MeshBasicMaterial({ color: '#FF2A2A', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
-  const laserMatOther = new THREE.MeshBasicMaterial({ color: '#FF2A2A', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
   const aimLines = new Map();
-  function aimEnd(match, p, sx, sy) {
-    const max = 1700;
-    const ex = sx + Math.cos(p.aim) * max, ey = sy + Math.sin(p.aim) * max;
+  function aimEnd(match, p, sx, sy, sh, pitch) {
+    const max = 4000;
+    const flat = Math.cos(pitch);
+    const ex = sx + Math.cos(p.aim) * max * flat, ey = sy + Math.sin(p.aim) * max * flat, eh = sh + Math.sin(pitch) * max;
     let t = 1;
+    const wall = structureHit(match, sx, sy, sh, ex, ey, eh, { floor: match.story?.stage !== 'sky' });
+    if (wall) t = wall.t;
+    let hit = !!wall;
     for (const c of match.covers ?? []) {
       if (!(c.hp > 0)) continue;
       const k = segmentRectTime(sx - c.x, sy - c.y, ex - c.x, ey - c.y, c.w / 2, c.h / 2);
-      if (k !== null && k < t) t = k;
+      if (k === null || k >= t) continue;
+      const base = c.base ?? groundAt(match, c.x, c.y, 0), hAt = sh + (eh - sh) * k;
+      if (hAt < base || hAt > base + COVER_H + 40) continue;
+      t = k; hit = true;
     }
-    let hit = t < 1;
     const vx = ex - sx, vy = ey - sy, vv = vx * vx + vy * vy;
     for (const q of match.players) {
       if (q === p || !q.alive || q.plane || q.entering) continue;
-      // 선분과 원(몸 반지름)이 처음 만나는 곳
+      // 선분과 원(몸 반지름)이 처음 만나는 곳(그 높이에 몸이 있을 때)
       const fx = sx - q.x, fy = sy - q.y;
       const b = 2 * (fx * vx + fy * vy), c = fx * fx + fy * fy - q.radius * q.radius;
       const disc = b * b - 4 * vv * c;
       if (disc < 0) continue;
       const k = (-b - Math.sqrt(disc)) / (2 * vv);
-      if (k > 0 && k < t) { t = k; hit = true; }
+      const hAt = sh + (eh - sh) * k, foot = (q.z ?? 0) + (match.story?.stage === 'road' ? CAR_ROOF : 0);
+      if (k > 0 && k < t && hAt > foot - 10 && hAt < foot + 200) { t = k; hit = true; }
     }
-    return { x: sx + vx * t, y: sy + vy * t, hit };
+    return { x: sx + vx * t, y: sy + vy * t, h: sh + (eh - sh) * t, hit };
   }
   function placeAimLines(match) {
     const live = new Set();
     const stage = match.story?.stage;
     if (stage !== 'sky' && !match.cutscene && !match.killcam && !match.victory && match.phase !== 'countdown') {
       for (const p of match.players) {
-        const character = CHARACTERS.find((c) => c.id === p.characterId);
-        if (!p.alive || p.entering || p.plane || character?.aircraft || p.scripted || p.dash) continue;
+        // AI(요원·동료)의 조준선은 아예 만들지 않는다
+        if (p.ai || !p.alive || p.entering || p.plane || p.scripted || p.dash) continue;
         const w = WEAPONS[p.weapon];
         if (!w || w.thrown || w.dash) continue;
         let l = aimLines.get(p.id);
         if (!l) {
-          const line = new THREE.Mesh(laserGeo, p.ai ? laserMatOther : laserMat);
+          const line = new THREE.Mesh(laserGeo, laserMat);
           const dot = new THREE.Sprite(new THREE.SpriteMaterial({ map: getFlashTexture(), color: '#FF3030', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
           scene.add(line, dot);
           l = { line, dot, owner: p.id };
           aimLines.set(p.id, l);
         }
         live.add(p.id);
-        const h = GUN_Y + (stage === 'road' ? CAR_ROOF : 0) + (p.z ?? 0);
-        const sx = p.x + Math.cos(p.aim) * MUZZLE_OFFSET, sy = p.y + Math.sin(p.aim) * MUZZLE_OFFSET;
-        const end = aimEnd(match, p, sx, sy);
-        const len = Math.max(1, Math.hypot(end.x - sx, end.y - sy));
-        l.line.visible = true;
-        l.line.position.set((sx + end.x) / 2, h, (sy + end.y) / 2);
-        l.line.rotation.set(0, -p.aim, 0);
-        l.line.scale.set(len, p.ai ? 0.8 : 1.1, p.ai ? 0.8 : 1.1);
-        l.dot.visible = end.hit;
-        l.dot.position.set(end.x - Math.cos(p.aim) * 3, h, end.y - Math.sin(p.aim) * 3);
-        l.dot.scale.setScalar(p.ai ? 9 : 13);
+        const pitch = p.pitch ?? 0, flat = Math.cos(pitch);
+        const road = stage === 'road' ? CAR_ROOF : 0;
+        const sh = GUN_Y + road + (p.z ?? 0) + Math.sin(pitch) * MUZZLE_OFFSET;
+        const sx = p.x + Math.cos(p.aim) * MUZZLE_OFFSET * flat, sy = p.y + Math.sin(p.aim) * MUZZLE_OFFSET * flat;
+        const end = aimEnd(match, p, sx, sy, sh - road, pitch);
+        end.h += road;
+        const len = Math.max(1, Math.hypot(end.x - sx, end.y - sy, end.h - sh));
+        l.line.position.set((sx + end.x) / 2, (sh + end.h) / 2, (sy + end.y) / 2);
+        l.line.rotation.set(0, -p.aim, pitch, 'YZX');
+        l.line.scale.set(len, 1.1, 1.1);
+        l.hit = end.hit;
+        l.dot.position.set(end.x - Math.cos(p.aim) * 3 * flat, end.h - Math.sin(pitch) * 3, end.y - Math.sin(p.aim) * 3 * flat);
+        l.dot.scale.setScalar(13);
       }
     }
-    for (const [id, l] of aimLines) if (!live.has(id)) { l.line.visible = false; l.dot.visible = false; }
+    for (const [id, l] of aimLines) {
+      l.live = live.has(id);
+      l.line.visible = false; l.dot.visible = false;
+    }
+  }
+  /** 화면 칸 하나를 그리기 직전: 그 화면 주인(viewerId)의 조준선만 보이게 한다(장면 카메라면 모두 숨김) */
+  function showAimLinesFor(viewerId) {
+    for (const l of aimLines.values()) {
+      const on = l.live && viewerId !== null && l.owner === viewerId;
+      l.line.visible = on;
+      l.dot.visible = on && l.hit;
+    }
   }
 
   /** 이번 프레임에 쓰지 않은 배우는 숨긴다(쓰러져 치운 요원 등) */
@@ -1313,12 +1350,38 @@ export function createWorld3D(canvas, wrap, assets) {
   function placeHighs(match) {
     const live = new Set();
     for (const g of match.highs ?? []) {
-      live.add(g.id);
-      let m = highs.get(g.id);
-      if (!m) { m = M.makeHigh(g); m.position.set(g.x, 0, g.y); scene.add(m); highs.set(g.id, m); }
+      // 같은 id라도 모양이 다르면(다른 맵) 새로 만든다
+      const key = `${g.id}|${g.x}|${g.y}|${g.w}|${g.h}|${g.height}`;
+      live.add(key);
+      let m = highs.get(key);
+      if (!m) { m = M.makeHigh(g); m.position.set(g.x, 0, g.y); scene.add(m); highs.set(key, m); }
       m.visible = true;
     }
-    for (const [id, m] of highs) if (!live.has(id)) m.visible = false;
+    for (const [key, m] of highs) {
+      if (live.has(key)) continue;
+      scene.remove(m);
+      highs.delete(key);
+    }
+  }
+  // ── 점프 패드(빛나는 고리·위쪽 화살표가 둥실둥실): 바닥 또는 패드가 놓인 높이(h) ──
+  const padModels = new Map();
+  function placePads(match, time, reducedMotion) {
+    const live = new Set();
+    for (const [i, pad] of (match.pads ?? []).entries()) {
+      const key = `${pad.id ?? i}|${pad.x}|${pad.y}`;
+      live.add(key);
+      let m = padModels.get(key);
+      if (!m) { m = M.makeJumpPad(pad.r); m.position.set(pad.x, pad.h ?? 0, pad.y); scene.add(m); padModels.set(key, m); }
+      m.visible = true;
+      const k = reducedMotion ? 0.5 : (Math.sin(time * 4 + i) + 1) / 2;
+      m.userData.glow.material.color.setHSL(0.52, 1, 0.55 + 0.2 * k);
+      m.userData.arrows.forEach((a, j) => { a.position.y = 30 + j * 40 + (reducedMotion ? 0 : ((time * 60) % 40)); });
+    }
+    for (const [key, m] of padModels) {
+      if (live.has(key)) continue;
+      scene.remove(m);
+      padModels.delete(key);
+    }
   }
   function placeCovers(match, time) {
     const road = match.story?.stage === 'road';
@@ -1327,6 +1390,14 @@ export function createWorld3D(canvas, wrap, assets) {
       const key = `${c.id}|${road}`;
       live.add(key);
       let g = covers.get(key);
+      if (!g && c.kind === 'balloon') {
+        // 하늘의 방공 기구(떠 있는 엄폐물)
+        g = M.makeBalloon(c);
+        g.userData.balloon = true;
+        g.position.set(c.x, 0, c.y);
+        scene.add(g);
+        covers.set(key, g);
+      }
       if (!g) {
         g = M.makeCover(c, c.team ? TEAM_COLOR[c.team] : '#FFD45E', COVER_H);
         if (road) {
@@ -1335,13 +1406,16 @@ export function createWorld3D(canvas, wrap, assets) {
           g.add(truck);
           g.userData.lift = 46;
         }
-        g.position.set(c.x, g.userData.lift ?? 0, c.y);
+        // 고지대 위에 놓인 엄폐물은 그 높이에
+        g.position.set(c.x, (g.userData.lift ?? 0) + (c.base ?? groundAt(match, c.x, c.y, 0)), c.y);
         scene.add(g);
         covers.set(key, g);
       }
       g.visible = c.hp > 0;
       // 깎일수록 어둡게
-      if (!c.steel && Number.isFinite(c.hp)) {
+      if (g.userData.balloon) {
+        g.position.y = (time ? Math.sin(time * 1.2 + c.x * 0.01) * 8 : 0);
+      } else if (!c.steel && Number.isFinite(c.hp)) {
         const k = 0.45 + 0.55 * (c.hp / 200);
         g.userData.block.material = M.mat(`rgb(${Math.round(143 * k)},${Math.round(138 * k)},${Math.round(128 * k)})`, { rough: 0.9 });
       }
@@ -1586,8 +1660,10 @@ export function createWorld3D(canvas, wrap, assets) {
       return;
     }
     cam.position.set(p.x, h + bob, p.y);
-    const pitch = (p.plane ? -0.02 : -0.04) + kick * 0.05;
-    cam.lookAt(p.x + dx * 100, h + bob + pitch * 100, p.y + dz * 100);
+    // 위아래 시선(p.pitch, +위): 탄도 이 각도로 날아간다. 쏠 때 살짝 튀어 오르는 반동만 더한다
+    const pitch = (p.pitch ?? 0) + kick * 0.05;
+    const flat = Math.cos(pitch);
+    cam.lookAt(p.x + dx * 100 * flat, h + bob + Math.sin(pitch) * 100, p.y + dz * 100 * flat);
     if (p.plane && !reducedMotion) cam.rotateZ(-(p.x - p.previousX) * 0.01);
   }
 
@@ -1883,11 +1959,13 @@ export function createWorld3D(canvas, wrap, assets) {
           const p = lastMatch?.players.find((q) => q.id === e.playerId);
           label(e.kind === 'shock' ? '⚡ 감전!' : '⚡ 마비!', e.x, e.y, (p?.z ?? 0) + 230, '#7FF4FF', 1.1, 34);
         }
-        if (e.type === 'pad') addEffect('ring', { x: e.x, y: e.y, color: '#5FEFFF' });
+        if (e.type === 'pad') addEffect('ring', { x: e.x, y: e.y, color: '#5FEFFF', h: e.h ?? 0 });
         if (e.type === 'hit') { addEffect('spark', { x: e.x, y: e.y, h }); label(`-${e.damage}`, e.x, e.y, h + 80, '#FF5A4A'); }
-        if (e.type === 'block') addEffect('spark', { x: e.x, y: e.y, h, size: 34 });
-        if (e.type === 'bounce') addEffect('spark', { x: e.x, y: e.y, h: (currentStage === 'sky' ? PLANE_Y : GUN_Y), size: 46, color: '#5FEFFF' });
-        if (e.type === 'cover-break' || e.type === 'ceiling-break') addEffect('debris', { x: e.x, y: e.y, h: e.type === 'ceiling-break' ? 240 : 0 });
+        // 막힌 탄: 구조물·바닥·천장에 닿은 높이에서 불꽃(높이가 없으면 총 높이)
+        const road = currentStage === 'road' ? CAR_ROOF : 0;
+        if (e.type === 'block') addEffect('spark', { x: e.x, y: e.y, h: e.h !== undefined ? e.h + road : h, size: 34 });
+        if (e.type === 'bounce') addEffect('spark', { x: e.x, y: e.y, h: e.h !== undefined ? e.h + road : (currentStage === 'sky' ? PLANE_Y : GUN_Y), size: 46, color: '#5FEFFF' });
+        if (e.type === 'cover-break' || e.type === 'ceiling-break') addEffect('debris', { x: e.x, y: e.y, h: e.type === 'ceiling-break' ? (lastMatch?.ceiling ?? 280) - 40 : 0 });
         if (e.type === 'laser') addEffect('beam', { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, h1: 180, h2: 0 });
         if (e.type === 'megalaser') addEffect('beam', { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, width: 22, color: '#FF3B6B', life: 0.6 });
         if (e.type === 'dodge') label('MISS', e.x + 40, e.y, h + 90, '#C9CED6');
@@ -1971,6 +2049,7 @@ export function createWorld3D(canvas, wrap, assets) {
       placeAimLines(match);
       placeCovers(cut?.kind === 'drive' && !cut.switched ? { covers: [] } : match, time);
       placeHighs(cut?.kind === 'drive' && !cut.switched ? { highs: [] } : match);
+      placePads(cut?.kind === 'drive' && !cut.switched ? { pads: [] } : match, time, reducedMotion);
       hideUnused(seen);
       hideUnusedProps();
 
@@ -2020,6 +2099,7 @@ export function createWorld3D(canvas, wrap, assets) {
         for (const fx of ownFx) fx.obj.visible = false;
         renderer.setViewport(px, 0, pw, ph);
         renderer.setScissor(px, 0, pw, ph);
+        showAimLinesFor(v.target ? null : viewer?.id ?? null);
         renderer.render(scene, cam);
         for (const fx of ownFx) fx.obj.visible = true;
         // 손에 든 총(3D): 장착한 무기 모양 그대로, 쌍권총·석궁은 양손에 하나씩

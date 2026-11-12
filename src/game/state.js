@@ -1,7 +1,8 @@
 import {
   RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, JET, COVERS, COVER,
-  STEEL, STEEL_SPOTS, HIGHS, FIELD, ARENA_BOUNDS, WIDE_HIGHS, WIDE_COVERS, EVADE, FORTRESS_HIGHS, FORTRESS_COVERS, FORTRESS_PADS, PAD,
+  STEEL, STEEL_SPOTS, HIGHS, ARENA_BOUNDS, EVADE,
 } from './config.js';
+import { applyMap } from './maps.js';
 
 // 2인 전용. 자리(P1·P2)가 팀을 정한다. 캐릭터·주무기는 준비 화면에서 자유롭게 바꾸며, 아래는 기본값(그림 속 무기)이다.
 export const SLOTS = [
@@ -119,26 +120,14 @@ export function createMatch(loadout = defaultLoadout(), seed = Date.now(), { wid
 }
 
 /**
- * 넓은 맵으로: 이동 범위를 FIELD로 넓히고 둘레에 엄폐물·고지대를 더 놓는다(2인 대결·자유 대전).
- * map 'fortress'(고공 요새)는 계단식 탑·컨테이너 대신 매우 높은 고지대 2개·잇는 다리·오르막길·점프 패드 3개·긴 다리를 놓는다
- * (스토리 1스테이지 옥상, 2인 대결에서 고를 수 있음).
+ * 넓은 맵으로(2인 대결·자유 대전·스토리 1스테이지 옥상): 원래의 10배 넓이 거대한 옥상(maps.js). map 'wide'(넓은 옥상: 계단식 탑·컨테이너·전망대)
+ * 또는 'fortress'(고공 요새: 매우 높은 고지대 2개·잇는 다리·오르막길·점프 패드) 둘레에 거대한 빌딩·계단식 탑·높은 다리·오르막길·점프 패드가 더 있다.
  */
 export function widen(match, map = 'wide') {
-  match.wide = true;
-  match.map = map === 'fortress' ? 'fortress' : 'wide';
-  match.bounds = { ...FIELD };
-  if (match.map === 'fortress') {
-    match.covers.push(...FORTRESS_COVERS.map((c) => ({ ...c, hp: COVER.hp })));
-    match.highs.push(...FORTRESS_HIGHS.map((h) => ({ ...h, ...(h.ramp ? { ramp: { ...h.ramp } } : {}) })));
-    match.pads = FORTRESS_PADS.map((pad) => ({ ...pad, r: PAD.r, power: PAD.power }));
-  } else {
-    match.covers.push(...WIDE_COVERS.map((c) => ({ ...c, hp: COVER.hp })));
-    match.highs.push(...WIDE_HIGHS.map((h) => ({ ...h })));
-  }
-  return match;
+  return applyMap(match, map === 'fortress' ? 'fortress' : 'wide');
 }
 
-/** 원래 크기 경기장으로 되돌린다(스토리 모드에서 옥상 → 복도로 넘어갈 때). 고지대는 원래 4개, 점프 패드는 없앤다 */
+/** 원래 크기 경기장으로 되돌린다(테스트·예전 호출용). 스토리 스테이지는 applyMap으로 그 스테이지의 거대한 경기장을 쓴다 */
 export function unwiden(match) {
   match.wide = false;
   match.map = null;
@@ -146,6 +135,7 @@ export function unwiden(match) {
   match.highs = HIGHS.map((h) => ({ ...h }));
   match.pads = [];
   match.fields = [];
+  match.ceiling = null;
   return match;
 }
 
@@ -176,7 +166,7 @@ function steelCovers(players) {
  * 플레이어 한 명의 입력 프레임. moveAxis·moveY: 경기장 가로(X)·세로(Y) 이동축(-1~1, AI는 직접 넣고 사람은 input/view.js가 앞뒤·좌우 입력을
  * 바라보는 방향에 맞춰 바꿔 넣는다). fwd·side: 사람 입력의 앞뒤(+앞)·좌우(+오른쪽), touchFwd·touchSide: 그중 터치 스틱 몫, turn: 이번 틱에
  * 고개를 돌리는 속도(-1~1, 키·스틱), aim: 바라보는(쏘는) 방향(라디안, 경기장 기준).
- * evade: 회피(빠른 돌진),
+ * evade: 회피(빠른 돌진), pitch: 위아래 시선(+위, 라디안), jumpHeld: 점프키를 누르고 있는지(꾹 누르면 더 높이·멀리),
  * swap: 주무기↔보조무기 전환, select: 누른 무기 칸('primary'·'secondary')으로 바로 전환, item: 수류탄 던지기,
  * kata: 스토리 모드 건 카타에서 누른 버튼(1~4, 안 눌렀으면 0)
  */
@@ -184,6 +174,9 @@ export function createInput(player) {
   return {
     moveAxis: 0, moveY: 0, fwd: 0, side: 0, touchFwd: 0, touchSide: 0, turn: 0, touchTurn: 0,
     aim: initialAim(player.team), aiming: false, swap: false, select: null, item: false, kata: 0, jump: false, evade: false,
+    // pitch: 위아래 시선(라디안, +위). look·touchLook: 이번 틱에 고개를 드는 속도(-1~1, 키·스틱·터치), mousePitch: 마우스로 든 각도
+    // jumpHeld·touchJump: 점프키(터치 점프 버튼)를 누르고 있는지 — 꾹 누를수록 높이 뛴다
+    pitch: 0, look: 0, touchLook: 0, jumpHeld: false, touchJump: false,
   };
 }
 
@@ -196,5 +189,6 @@ export function cancelInputs(inputs) {
   for (const f of Object.values(inputs)) {
     f.moveAxis = 0; f.moveY = 0; f.fwd = 0; f.side = 0; f.touchFwd = 0; f.touchSide = 0; f.turn = 0; f.touchTurn = 0;
     f.aiming = false; f.swap = false; f.select = null; f.item = false; f.kata = 0; f.jump = false; f.evade = false;
+    f.look = 0; f.touchLook = 0; f.jumpHeld = false; f.touchJump = false;
   }
 }

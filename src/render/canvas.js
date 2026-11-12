@@ -295,7 +295,7 @@ export function createRenderer(canvas, wrap, assets) {
       ctx.restore();
     }
 
-    // 현재 조준 방향 눈금(항상) + 발사 준비 중에만 조준선
+    // 현재 조준 방향 눈금(항상). 조준선은 그리지 않는다(한 화면을 함께 보므로 다른 사람의 조준선이 보이지 않게)
     const cos = Math.cos(p.aim), sin = Math.sin(p.aim);
     // 떼면 쏘는 무기(RPG·저격총)의 쿨타임, 방전, 과열 동안은 눈금을 회색으로 표시
     const weapon = WEAPONS[p.weapon];
@@ -306,26 +306,6 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.beginPath();
     ctx.arc(p.x + cos * p.radius, p.y + sin * p.radius, 5, 0, Math.PI * 2);
     ctx.fill();
-    if (input.aiming) {
-      const reach = p.weapon === 'sniper' ? 420 : 190; // 저격총은 긴 조준선
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 4;
-      ctx.setLineDash([14, 10]);
-      ctx.beginPath();
-      ctx.moveTo(p.x + cos * 38, p.y + sin * 38);
-      ctx.lineTo(p.x + cos * reach, p.y + sin * reach);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.save();
-      ctx.translate(p.x + cos * (reach + 10), p.y + sin * (reach + 10));
-      ctx.rotate(p.aim);
-      ctx.beginPath();
-      ctx.moveTo(12, 0); ctx.lineTo(-10, -10); ctx.lineTo(-10, 10);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
-
     ctx.font = 'bold 18px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -3049,7 +3029,8 @@ export function createRenderer(canvas, wrap, assets) {
   function drawRadar(match, p, rect) {
     const r = Math.min(110, rect.w * 0.09);
     const cx = rect.x + r + 24, cy = rect.y + r + 24;
-    const range = match.wide ? 2000 : 1300, k = r / range;
+    // 거대한 경기장(가로 8000 넘음)은 더 멀리까지 보인다
+    const range = match.wide ? (match.bounds.maxX - match.bounds.minX > 8000 ? 3600 : 2400) : 1300, k = r / range;
     ctx.save();
     ctx.fillStyle = 'rgba(10,14,24,0.6)';
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
@@ -3095,7 +3076,10 @@ export function createRenderer(canvas, wrap, assets) {
     }
     for (const q of match.players) {
       if (q.id === p.id || (q.entering && q.entering.t < 0)) continue;
-      const [sx, sy] = toScreen(q.x, q.y);
+      let [sx, sy] = toScreen(q.x, q.y);
+      // 레이더 밖 멀리 있는 사람은 가장자리에 붙여 방향을 알려 준다
+      const off = Math.hypot(sx - cx, sy - cy);
+      if (off > r - 6) { sx = cx + ((sx - cx) / off) * (r - 6); sy = cy + ((sy - cy) / off) * (r - 6); }
       ctx.fillStyle = !q.alive ? '#6A6E76' : q.team === p.team ? '#5AAEFF' : q.boss ? '#FF3B30' : '#FF9D3F';
       ctx.beginPath(); ctx.arc(sx, sy, q.boss ? 7 : 5, 0, Math.PI * 2); ctx.fill();
     }

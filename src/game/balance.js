@@ -29,14 +29,14 @@ const hp = (id, name) => [
   ...(CHARACTERS.find((c) => c.id === id).bonusDamage !== undefined
     ? [param(name, '추가 피해(맞힐 때마다)', ['characters', id, 'bonusDamage'], { max: 200 })] : []),
   param(name, '히트 박스 반지름', ['characters', id, 'radius'], { min: 5, max: 150, step: 1 }),
-  param(name, '이동 속도(초당)', ['characters', id, 'speed'], { min: 20, max: 1500, step: 10 }),
+  param(name, '이동 속도(초당)', ['characters', id, 'speed'], { min: 20, max: 8000, step: 10 }),
 ];
 const gun = (id, extra = []) => [
   param(WEAPONS[id].name, WEAPONS[id].dash ? '돌진 피해' : WEAPONS[id].pellets ? '총알 1개 피해' : '한 발 피해',
     ['weapons', id, 'damage'], { max: 1000, step: 1 }),
   param(WEAPONS[id].name, WEAPONS[id].trigger === 'release' ? '쿨타임' : '발사 간격', ['weapons', id, 'interval'],
     { min: 0.02, max: 30, step: 0.01, unit: SEC }),
-  ...(WEAPONS[id].speed ? [param(WEAPONS[id].name, '탄속(초당)', ['weapons', id, 'speed'], { min: 50, max: 5000, step: 10 })] : []),
+  ...(WEAPONS[id].speed ? [param(WEAPONS[id].name, '탄속(초당)', ['weapons', id, 'speed'], { min: 50, max: 30000, step: 10 })] : []),
   // 장전: 탄창에 든 총알 수(0이면 무제한)와 탄창을 갈아 끼우는 시간
   ...(WEAPONS[id].mag !== undefined ? [
     param(WEAPONS[id].name, '장탄 수(0이면 무제한)', ['weapons', id, 'mag'], { max: 999, step: 1 }),

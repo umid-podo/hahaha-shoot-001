@@ -1,19 +1,19 @@
 // 1인칭 3D 키보드 조작. forward/back은 앞뒤, left/right는 옆걸음, turnLeft/turnRight는 고개 돌리기(마우스로도 돌린다),
-// fire는 발사(누르고 있으면 연사), swap은 주무기 ↔ 보조무기 전환, item은 수류탄 던지기, evade는 회피(빠른 돌진).
+// lookUp/lookDown은 위·아래 보기, jump는 점프(꾹 누를수록 높이), fire는 발사(누르고 있으면 연사), swap은 주무기 ↔ 보조무기 전환, item은 수류탄 던지기, evade는 회피(빠른 돌진).
 export const KEYMAP = {
   P1: {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', turnLeft: 'KeyZ', turnRight: 'KeyC',
-    fire: 'KeyF', swap: 'KeyE', item: 'KeyQ', jump: 'Space', evade: 'ShiftLeft',
+    fire: 'KeyF', swap: 'KeyE', item: 'KeyQ', jump: 'Space', evade: 'ShiftLeft', lookUp: 'KeyR', lookDown: 'KeyV',
   },
   P2: {
     forward: 'ArrowUp', back: 'ArrowDown', left: 'Comma', right: 'Period', turnLeft: 'ArrowLeft', turnRight: 'ArrowRight',
-    fire: 'Enter', swap: 'ShiftRight', item: 'Slash', jump: 'ControlRight', evade: 'KeyM',
+    fire: 'Enter', swap: 'ShiftRight', item: 'Slash', jump: 'ControlRight', evade: 'KeyM', lookUp: 'PageUp', lookDown: 'PageDown',
   },
 };
 const FIRE_HINT = '누르고 있으면 연사(RPG·저격총은 떼면 발사)';
 export const KEY_LABELS = {
-  P1: `W/S 앞뒤 · A/D 옆걸음 · 마우스(화면을 눌러 잠금) 또는 Z/C 고개 돌리기 · F·왼쪽 클릭 ${FIRE_HINT} · E·휠 무기 전환 · Q·오른쪽 클릭 수류탄 · Space 점프 · 왼쪽 Shift·휠 클릭 회피(2번 연속 돌진)`,
-  P2: `↑/↓ 앞뒤 · ←/→ 고개 돌리기 · ,/. 옆걸음 · Enter ${FIRE_HINT} · 오른쪽 Shift 무기 전환 · / 수류탄 · 오른쪽 Ctrl 점프 · M 회피(2번 연속 돌진)`,
+  P1: `W/S 앞뒤 · A/D 옆걸음 · 마우스(화면을 눌러 잠금) 또는 Z/C 고개 돌리기 · 마우스 위아래 또는 R/V 위·아래 보기 · F·왼쪽 클릭 ${FIRE_HINT} · E·휠 무기 전환 · Q·오른쪽 클릭 수류탄 · Space 점프(꾹 누를수록 높이·멀리) · 왼쪽 Shift·휠 클릭 회피(2번 연속 돌진)`,
+  P2: `↑/↓ 앞뒤 · ←/→ 고개 돌리기 · ,/. 옆걸음 · PageUp/PageDown 위·아래 보기 · Enter ${FIRE_HINT} · 오른쪽 Shift 무기 전환 · / 수류탄 · 오른쪽 Ctrl 점프(꾹 누를수록 높이·멀리) · M 회피(2번 연속 돌진)`,
 };
 /** 혼자 하면(사람 플레이어 1명) P1은 P2 키(방향키 등)로도 조작한다. */
 export const SOLO_LABEL = '혼자 할 때는 방향키·Enter 등 P2 키로도 조작할 수 있습니다.';
@@ -70,11 +70,13 @@ export function applyKeyboard(inputs, players) {
   for (const p of players) {
     const frame = inputs[p.id];
     const maps = solo ? [KEYMAP.P1, KEYMAP.P2] : [KEYMAP[p.id]].filter(Boolean);
-    frame.fwd = 0; frame.side = 0; frame.turn = 0;
+    frame.fwd = 0; frame.side = 0; frame.turn = 0; frame.look = 0; frame.jumpHeld = false;
     for (const map of maps) {
       frame.fwd += axis(map.forward, map.back);
       frame.side += axis(map.right, map.left);
       frame.turn += axis(map.turnRight, map.turnLeft);
+      frame.look += axis(map.lookUp, map.lookDown);
+      if (held.has(map.jump)) frame.jumpHeld = true;
     }
   }
 }

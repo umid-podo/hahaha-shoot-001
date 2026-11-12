@@ -16,13 +16,22 @@ export const MAX_Y = 950;
  * 탄은 쏜 사람 발 높이(z)에서 날아가, 높이 차이가 hitBelow~hitAbove 안인 사람만 맞힌다(점프로 낮은 탄을 피할 수 있음).
  * 쏜 자리가 coverClear보다 높으면(고지대·점프 중) 엄폐물 위로 넘어간다.
  */
-export const JUMP = { jump: 620, gravity: 1600, step: 18, hitBelow: 100, hitAbove: 110, coverClear: 40 };
+export const JUMP = {
+  jump: 620, gravity: 1600, step: 18, hitBelow: 100, hitAbove: 110, coverClear: 40,
+  // 점프키를 누르고 있는 동안(최대 holdTime초) 위로 holdAccel(초당²)만큼 더 밀어 올린다 → 살짝 누르면 원래 높이(≈120),
+  // 끝까지 꾹 누르면 ≈900까지 뛰어오른다. 공중에서는 모은 만큼(0~1) 걷는 속도가 최대 (1 + airBoost)배라 훨씬 멀리 날아간다.
+  holdTime: 0.45, holdAccel: 3000, airBoost: 0.6,
+};
+/** 위아래 시선(1인칭): 고개를 들고 숙일 수 있는 최대 각도(라디안, 약 80°). 쏜 탄도 그 각도로 날아간다 */
+export const PITCH = { max: 1.4 };
+/** 탄이 실제로 날아가는 높이: 발 높이(탄의 z) + SHOT_HEIGHT(총 높이). 구조물·바닥·천장 충돌에 쓴다 */
+export const SHOT_HEIGHT = 84;
 export const COVER_HEIGHT = 84;
 /**
  * 회피(빠른 돌진): 누른 순간 움직이던 쪽(안 움직이면 앞)으로 time초 동안 초당 speed만큼 돌진한다. 돌진하는 동안 받는 피해는 taken배(30% 덜 받음).
  * charges번 연달아 돌진할 수 있고, 마지막 돌진이 끝나고 cooldown초가 지나면 다시 charges번으로 채워진다.
  */
-export const EVADE = { speed: 1500, time: 0.18, charges: 2, cooldown: 0.5, taken: 0.7 };
+export const EVADE = { speed: 6000, time: 0.18, charges: 2, cooldown: 0.5, taken: 0.7 };
 /**
  * 넓은 맵(2인 대결·자유 대전): 원래 옥상 경기장(1600×1000)을 가운데에 두고 사방으로 크게 넓힌 건물 옥상(5000×4000, 원래의 12.5배).
  * 시작 자리는 원래대로 가운데 근처이고, 둘레로 엄폐물·고지대·컨테이너·계단식 탑이 흩어져 있다. 스토리 모드는 원래 크기.
@@ -123,7 +132,9 @@ export const MIN_X = 80;
 export const MAX_X = 1520;
 /** 원래 크기 경기장의 이동 범위(스토리 모드·건 카타 수련장) */
 export const ARENA_BOUNDS = { minX: MIN_X, maxX: MAX_X, minY: MIN_Y, maxY: MAX_Y };
-export const MAX_SPEED = 300;
+/** 이동 속도 배율: 플레이어·요원 모두 원래(초당 300)의 4배 */
+export const SPEED_SCALE = 4;
+export const MAX_SPEED = 300 * SPEED_SCALE;
 export const BODY_RADIUS = 30;
 export const SPRITE_SIZE = 128;
 export const BULLET_RADIUS = 5;
@@ -273,6 +284,15 @@ export const WEAPONS = {
     splash: { damage: 15, radius: 120 }, volley: { count: 3, spread: 28 },
   },
 };
+/**
+ * 탄속 배율: 모든 총기(던지는 무기 빼고)의 탄속을 원래 표의 3배로. 화염방사기는 사거리가 그대로 짧도록 불꽃 수명을 그만큼 줄인다.
+ */
+export const BULLET_SPEED_SCALE = 3;
+for (const w of Object.values(WEAPONS)) {
+  if (!w.speed || w.thrown) continue;
+  w.speed *= BULLET_SPEED_SCALE;
+  if (w.flame) w.flame.life /= BULLET_SPEED_SCALE;
+}
 
 /**
  * 스토리 모드 3스테이지 하늘(공중전) 공통 수치. planeSpeed는 라이트닝 이동 속도 배율(캐릭터 기본 속도 대비),
@@ -342,15 +362,15 @@ export const CHARACTERS = [
     id: 'arc-trooper', name: '아크 트루퍼', hidden: true, unlockFrom: 'earth-arrow', unlockTaps: 2, bonusDamage: 5,
     // 그림: 장갑 몸통에 온이름 머리. 머리·화살표 때문에 그림판이 넓어 1.25배로 그려 몸 크기를 맞춘다.
     jetpack: true, jetpackNozzle: [0.348, 0.68], scale: 1.25,
-    maxHp: MAX_HP, radius: BODY_RADIUS, speed: 420,
+    maxHp: MAX_HP, radius: BODY_RADIUS, speed: 420 * SPEED_SCALE,
   },
   // 스토리 모드 3스테이지(하늘)의 적: 선택 화면에는 나오지 않는다(hidden). aircraft는 위에서 본 비행체로 그린다.
   {
-    id: 'gunship', name: '건쉽', hidden: true, aircraft: true, weapon: 'gunship', maxHp: 300, radius: 46, speed: 240,
+    id: 'gunship', name: '건쉽', hidden: true, aircraft: true, weapon: 'gunship', maxHp: 300, radius: 46, speed: 240 * SPEED_SCALE,
     image: 'assets/characters/gunship.svg',
   },
   {
-    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 10000, radius: 130, speed: 70,
+    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 10000, radius: 130, speed: 70 * 2,
     image: 'assets/characters/deathstar.svg',
   },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 3번 누르면 나타난다. 모습은 온이름 + 몸에 빨간 '제작자'. 즉사기 전용.

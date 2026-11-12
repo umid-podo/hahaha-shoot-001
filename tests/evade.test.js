@@ -6,7 +6,7 @@ import { step, spawnProjectile } from '../src/game/update.js';
 import { TICK, EVADE, WEAPONS } from '../src/game/config.js';
 
 function playing() {
-  const match = createMatch(undefined, 1);
+  const match = createMatch(undefined, 1, { wide: true }); // 빨라진 돌진(약 1000)이 원래 경기장 끝에 막히지 않게 넓은 맵에서
   match.phase = 'playing';
   match.jetTimer = Infinity;
   match.covers = [];

@@ -10,20 +10,22 @@ import { KATA_PAD } from './kata.js';
  */
 // 표준 배치 버튼 번호: 0 A(×) · 1 B(○) · 2 X(□) · 3 Y(△) · 4 LB · 5 RB · 6 LT · 7 RT · 9 Start · 10·11 왼쪽·오른쪽 스틱 누르기 · 12~15 십자키
 export const PAD_BUTTONS = { fire: [7, 0], swap: [5, 2], item: [4, 1], jump: [3, 10], evade: [6, 11], pause: [9], up: [12], down: [13], left: [14], right: [15] };
-export const PAD_LABEL = '컨트롤러: 왼쪽 스틱 앞뒤·옆걸음 · 오른쪽 스틱 고개 돌리기 · 십자키 ↑/↓ 앞뒤·←/→ 고개 돌리기 · RT/A 발사 · RB/X 무기 전환 · LB/B 수류탄 · LT/오른쪽 스틱 누르기 회피 · Start 일시정지';
+export const PAD_LABEL = '컨트롤러: 왼쪽 스틱 앞뒤·옆걸음 · 오른쪽 스틱 고개 돌리기·위아래 보기 · Y/왼쪽 스틱 누르기 점프(꾹 누를수록 높이) · 십자키 ↑/↓ 앞뒤·←/→ 고개 돌리기 · RT/A 발사 · RB/X 무기 전환 · LB/B 수류탄 · LT/오른쪽 스틱 누르기 회피 · Start 일시정지';
 
 const pressed = (pad, list) => list.some((i) => pad.buttons[i]?.pressed);
 const clamp1 = (v) => Math.min(1, Math.max(-1, v));
 
 /** 컨트롤러 한 대의 지금 상태. 순수 함수(테스트용). fwd +앞, side +오른쪽, turn +오른쪽으로 돌기. */
 export function readPad(pad) {
-  const [lx = 0, ly = 0, rx = 0] = pad.axes;
+  const [lx = 0, ly = 0, rx = 0, ry = 0] = pad.axes;
   const dpadX = (pressed(pad, PAD_BUTTONS.right) ? 1 : 0) - (pressed(pad, PAD_BUTTONS.left) ? 1 : 0);
   const dpadY = (pressed(pad, PAD_BUTTONS.up) ? 1 : 0) - (pressed(pad, PAD_BUTTONS.down) ? 1 : 0);
   return {
     side: moveAxisFromDrag(lx, 1),
     fwd: clamp1(-moveAxisFromDrag(ly, 1) + dpadY),
     turn: clamp1(turnFromStick(rx) + dpadX),
+    // 오른쪽 스틱을 위로 밀면 고개를 든다
+    look: -turnFromStick(ry),
     fire: pressed(pad, PAD_BUTTONS.fire),
     swap: pressed(pad, PAD_BUTTONS.swap),
     item: pressed(pad, PAD_BUTTONS.item),
@@ -49,7 +51,7 @@ let previous = [];
 /** 일시정지·경기 시작 때 호출. 지금 눌린 버튼은 한 번 뗐다가 다시 눌러야 반응한다(키보드 clearKeys와 같다). */
 export function clearGamepads() {
   previous = states.map((s) => ({ ...s }));
-  for (const s of states) { s.fwd = 0; s.side = 0; s.turn = 0; }
+  for (const s of states) { s.fwd = 0; s.side = 0; s.turn = 0; s.look = 0; s.jump = false; }
 }
 
 /**
@@ -84,5 +86,7 @@ export function applyGamepads(inputs, players) {
     frame.fwd = clamp1(frame.fwd + s.fwd);
     frame.side = clamp1(frame.side + s.side);
     frame.turn = clamp1(frame.turn + s.turn);
+    frame.look = clamp1((frame.look ?? 0) + (s.look ?? 0));
+    if (s.jump) frame.jumpHeld = true;
   });
 }

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createMatch, createInputs } from '../src/game/state.js';
 import { step, spawnProjectile } from '../src/game/update.js';
 import { createAI, updateAI, aimAtTarget, AI_CHARACTERS, DIFFICULTY_IDS } from '../src/game/ai.js';
-import { TICK, WEAPONS, MIN_X, MAX_X } from '../src/game/config.js';
+import { TICK, WEAPONS, MIN_X, MAX_X, SPEED_SCALE } from '../src/game/config.js';
 
 function single(ai = {}, player = {}, seed = 1) {
   const match = createMatch({
@@ -177,12 +177,13 @@ test('AI 명중률: 좌우로 움직이는 상대도 이동을 예측해 많이 
   for (const level of DIFFICULTY_IDS) {
     const { match, inputs, P1, P2 } = single({ weapon: 'rifle' }, {}, 5);
     match.covers = [];
+    match.highs = []; // 고지대도 탄을 막으므로 이 시험에서는 치운다
     P1.hp = P1.maxHp = 1e9;
     P2.hp = P2.maxHp = 1e9;
     const brain = createAI('P2', level, 5);
     const events = [];
     for (let t = 0; t < 12; t += TICK) {
-      inputs.P1.moveAxis = Math.sin(t * 1.5) > 0 ? 1 : -1; // 계속 좌우로 달림
+      inputs.P1.moveAxis = Math.sin((t * 1.5) / SPEED_SCALE) > 0 ? 1 : -1; // 계속 좌우로 달림(빨라진 만큼 같은 거리를 오간다)
       updateAI(brain, match, inputs);
       events.push(...step(match, inputs));
     }

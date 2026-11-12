@@ -4,9 +4,10 @@ import assert from 'node:assert/strict';
 import { createMatch, createInputs } from '../src/game/state.js';
 import { step, groundAt, move, updateJump, padAt } from '../src/game/update.js';
 import {
-  TICK, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, FORTRESS_HIGHS, FORTRESS_PADS, FORTRESS_HEIGHT, FIELD, MAPS, PAD, JUMP,
+  TICK, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, FORTRESS_HIGHS, FORTRESS_PADS, FORTRESS_HEIGHT, FIELD, MAPS, PAD, JUMP, SHOT_HEIGHT, SPEED_SCALE,
 } from '../src/game/config.js';
 import { createStoryMatch } from '../src/game/story.js';
+import { BIG_FIELD, STAGE_FIELD } from '../src/game/maps.js';
 import { TIERS, MAX_LEVEL, PROMOTE_COINS, addWin, defaultRank, normalizeRank, rankLabel } from '../src/game/rank.js';
 import { createModStore, accountKey } from '../src/game/mods.js';
 
@@ -142,7 +143,11 @@ test('고공 요새: 넓은 맵 크기에 매우 높은 고지대 2개·잇는 �
   assert.deepEqual(Object.keys(MAPS), ['wide', 'fortress']);
   const { match } = playing('rifle', { map: 'fortress' });
   assert.equal(match.map, 'fortress');
-  assert.deepEqual(match.bounds, FIELD);
+  // 원래 넓은 맵(FIELD)을 가운데 두고 넓이 10배로 넓혔다
+  assert.deepEqual(match.bounds, BIG_FIELD);
+  assert.ok(BIG_FIELD.minX < FIELD.minX && BIG_FIELD.maxX > FIELD.maxX && BIG_FIELD.minY < FIELD.minY && BIG_FIELD.maxY > FIELD.maxY);
+  const area = (b) => (b.maxX - b.minX) * (b.maxY - b.minY);
+  assert.ok(Math.abs(area(BIG_FIELD) / area(FIELD) - 10) < 0.2, '넓이 10배');
   const forts = match.highs.filter((h) => h.kind === 'fortress');
   assert.equal(forts.length, 2);
   assert.ok(forts.every((h) => h.height === FORTRESS_HEIGHT && h.height >= 300), '매우 높음');
@@ -150,28 +155,29 @@ test('고공 요새: 넓은 맵 크기에 매우 높은 고지대 2개·잇는 �
   assert.ok(link.bridge && link.height === FORTRESS_HEIGHT);
   // 다리 양 끝이 두 고지대에 걸쳐 있다
   for (const f of forts) assert.ok(Math.abs(link.x - f.x) - link.w / 2 <= f.w / 2 + 1);
-  assert.equal(match.highs.filter((h) => h.ramp).length, 1, '오르막길 1개');
+  assert.equal(match.highs.filter((h) => h.ramp && h.id.startsWith('fort-')).length, 1, '원래 오르막길 1개');
   const long = match.highs.find((h) => h.id === 'fort-long');
   assert.ok(long.bridge && long.height < FORTRESS_HEIGHT && long.height > FORTRESS_HEIGHT - JUMP.jump ** 2 / (2 * JUMP.gravity) + JUMP.step, '고지대보다 약간 낮고, 끝에서 뛰면 고지대로 올라감');
   assert.ok(Math.max(long.w, long.h) >= 2000, '긴 다리');
-  assert.equal(match.pads.length, 3);
+  assert.equal(match.pads.filter((p) => p.id.startsWith('pad-')).length, 3, '원래 점프 패드 3개');
+  assert.ok(match.pads.length > 10, '둘레에 점프 패드가 더 많다');
   // 점프 패드는 고지대보다 높이 띄운다
   assert.ok(PAD.power ** 2 / (2 * JUMP.gravity) > FORTRESS_HEIGHT + 60);
   // 넓은 맵(원래)에는 고공 요새가 없다
   const wide = playing('rifle', { map: 'wide' }).match;
-  assert.ok(!wide.highs.some((h) => h.kind === 'fortress') && !wide.pads.length);
+  assert.ok(!wide.highs.some((h) => h.kind === 'fortress') && !wide.pads.some((p) => p.id.startsWith('pad-')));
 });
 
 test('고공 요새: 오르막길을 걸어 올라 고지대 위로, 옆에서 높은 곳으로는 못 들어간다', () => {
   const { match, P1 } = playing('rifle', { map: 'fortress' });
-  const ramp = match.highs.find((h) => h.ramp);
+  const ramp = match.highs.find((h) => h.id === 'fort-ramp');
   const fort = match.highs.find((h) => h.id === 'fort-west');
   P1.x = ramp.x; P1.y = ramp.y + ramp.h / 2 + 40; P1.z = 0; P1.vz = 0;
   for (let i = 0; i < 60 * 6 && P1.y > fort.y; i++) { move(match, P1, 0, -1, TICK); updateJump(match, P1, false, TICK, []); }
   assert.ok(P1.y < fort.y + fort.h / 2, '고지대 위로 올라섰다');
   assert.equal(P1.z, FORTRESS_HEIGHT);
   // 내려오기: 비탈을 따라 붙어서 걷는다(떨어지지 않음)
-  for (let i = 0; i < 60 * 1.5; i++) { move(match, P1, 0, 1, TICK); updateJump(match, P1, false, TICK, []); }
+  for (let i = 0; i < (60 * 1.5) / SPEED_SCALE; i++) { move(match, P1, 0, 1, TICK); updateJump(match, P1, false, TICK, []); }
   assert.ok(P1.z > 0 && P1.z < FORTRESS_HEIGHT && P1.vz === 0);
   // 옆에서: 오르막길 높은 쪽 옆으로는 막힌다
   P1.x = ramp.x - ramp.w / 2 - 40; P1.y = ramp.y - ramp.h / 4; P1.z = 0; P1.vz = 0;
@@ -211,25 +217,40 @@ test('고공 요새: 다리는 위에 설 수 있지만 그 아래로는 밑으�
   assert.equal(P1.z, long.height);
 });
 
-test('높이 차이가 큰 상대(고지대 위)를 겨누면 탄이 그 높이로 기울어 날아가 맞힌다', () => {
+test('위아래 시선: 고개를 들어 고지대 위 상대를 겨누면 탄이 그 각도로 날아가 맞힌다(정면으로 쏘면 고지대 벽에 막힘)', () => {
   const { match, inputs, P1, P2 } = playing('pistol', { map: 'fortress' });
   match.covers = [];
   const fort = match.highs.find((h) => h.id === 'fort-east');
-  P2.x = fort.x; P2.y = fort.y; P2.z = fort.height;
-  P1.x = fort.x; P1.y = fort.y + fort.h / 2 + 500; P1.z = 0;
+  // 긴 다리(fort-long) 밑을 피해 옆으로 비켜 선다
+  P2.x = fort.x + 250; P2.y = fort.y + fort.h / 2 - 40; P2.z = fort.height;
+  P1.x = fort.x + 250; P1.y = fort.y + fort.h / 2 + 500; P1.z = 0;
   inputs.P1.aim = -Math.PI / 2;
   inputs.P1.aiming = true;
+  // 정면(pitch 0): 고지대 옆면(벽)에 막힌다
+  const flat = run(match, inputs, 1);
+  assert.equal(P2.hp, P2.maxHp, '정면으로 쏘면 벽에 막힌다');
+  assert.ok(flat.some((e) => e.type === 'block'));
+  // 고개를 들어 상대 몸을 겨눈다
+  inputs.P1.pitch = Math.atan2(P2.z + 90 - SHOT_HEIGHT, P1.y - P2.y);
   run(match, inputs, 1.5);
   assert.ok(P2.hp < P2.maxHp, '고지대 위 상대도 맞는다');
+  // 아래를 보고 쏘면 바닥에 맞아 사라진다
+  P2.hp = P2.maxHp;
+  inputs.P1.pitch = -0.6;
+  const down = run(match, inputs, 1);
+  assert.ok(down.some((e) => e.type === 'block' && e.h <= 1), '바닥에 막힘');
 });
 
 test('스토리 1스테이지 옥상은 넓은 고공 요새, 복도로 넘어가면 원래 크기', () => {
   const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 1);
   assert.equal(match.map, 'fortress');
-  assert.ok(match.wide && match.pads.length === 3);
+  assert.ok(match.wide && match.pads.filter((p) => p.id.startsWith('pad-')).length === 3);
   assert.ok(match.highs.some((h) => h.id === 'fort-west'));
+  // 복도도 거대한 본부 홀(넓이 10배, 높은 천장)
   const corridor = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 1, { wave: 4, hp: 500, skip: true });
-  assert.ok(!corridor.wide && !corridor.map);
+  assert.ok(corridor.wide && corridor.map === 'corridor');
+  assert.deepEqual(corridor.bounds, STAGE_FIELD);
+  assert.ok(corridor.ceiling > 1000 && corridor.highs.length > 10 && corridor.pads.length > 0);
 });
 
 test('랭크: 7등급 × 30레벨, 이기면 1레벨, 30레벨이면 20코인과 함께 다음 등급으로 승급', () => {

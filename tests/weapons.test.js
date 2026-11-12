@@ -52,7 +52,7 @@ test('에너지 돌격소총: 탄속이 매우 빠르고, 엄폐물에 3번까�
   match.covers = [cover];
   const b = spawnProjectile(match, P1, -Math.PI / 2);
   assert.equal(b.bounces, 3);
-  const ev = run(match, inputs, 0.12);
+  const ev = run(match, inputs, 0.05);
   assert.ok(ev.some((e) => e.type === 'bounce'), '엄폐물에서 튕김');
   assert.ok(b.vy > 0, '반사돼 돌아온다');
   assert.equal(b.bounces, 2);
