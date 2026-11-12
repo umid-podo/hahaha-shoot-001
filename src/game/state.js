@@ -121,10 +121,10 @@ export function createMatch(loadout = defaultLoadout(), seed = Date.now(), { wid
 
 /**
  * 넓은 맵으로(2인 대결·자유 대전·스토리 1스테이지 옥상): 원래의 10배 넓이 거대한 옥상(maps.js). map 'wide'(넓은 옥상: 계단식 탑·컨테이너·전망대)
- * 또는 'fortress'(고공 요새: 매우 높은 고지대 2개·잇는 다리·오르막길·점프 패드) 둘레에 거대한 빌딩·계단식 탑·높은 다리·오르막길·점프 패드가 더 있다.
+ * 또는 'cloud'(구름 위 하얀 섬: 하얀 블록 탑·아치·공중 다리·기둥 숲) 또는 'fortress'(고공 요새: 매우 높은 고지대 2개·잇는 다리·오르막길·점프 패드) 둘레에 거대한 빌딩·계단식 탑·높은 다리·오르막길·점프 패드가 더 있다.
  */
 export function widen(match, map = 'wide') {
-  return applyMap(match, map === 'fortress' ? 'fortress' : 'wide');
+  return applyMap(match, ['fortress', 'cloud'].includes(map) ? map : 'wide');
 }
 
 /** 원래 크기 경기장으로 되돌린다(테스트·예전 호출용). 스토리 스테이지는 applyMap으로 그 스테이지의 거대한 경기장을 쓴다 */

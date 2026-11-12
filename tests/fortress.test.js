@@ -140,7 +140,7 @@ test('전기충격기 발사기: 전기가 퍼질 때 높이 뛰어 있으면 �
 });
 
 test('고공 요새: 넓은 맵 크기에 매우 높은 고지대 2개·잇는 다리·오르막길·점프 패드 3개·조금 낮은 긴 다리', () => {
-  assert.deepEqual(Object.keys(MAPS), ['wide', 'fortress']);
+  assert.deepEqual(Object.keys(MAPS), ['wide', 'fortress', 'cloud']);
   const { match } = playing('rifle', { map: 'fortress' });
   assert.equal(match.map, 'fortress');
   // 원래 넓은 맵(FIELD)을 가운데 두고 넓이 10배로 넓혔다

@@ -122,6 +122,7 @@ export const FORTRESS_COVERS = [
 export const MAPS = {
   wide: { id: 'wide', name: '넓은 옥상', info: '계단식 탑·컨테이너·전망대가 흩어진 거대한 옥상' },
   fortress: { id: 'fortress', name: '고공 요새', info: '매우 높은 고지대 2개와 잇는 다리·오르막길·점프 패드 3개·긴 다리' },
+  cloud: { id: 'cloud', name: '구름 위 하얀 섬', info: '구름 위에 뜬 하얀 블록 섬 — 탑·아치·공중 다리·계단·기둥 숲·점프 패드가 빽빽한 고저차' },
 };
 /**
  * 위아래 자동 조준: 높이가 다른 상대(고지대·다리 위, 또는 그 아래)를 조준 방향 cone도 안에서 겨누면,

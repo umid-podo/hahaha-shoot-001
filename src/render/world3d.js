@@ -153,7 +153,7 @@ export function createWorld3D(canvas, wrap, assets) {
     if (env.group) scene.remove(env.group);
     const group = new THREE.Group();
     scene.add(group);
-    const builders = { field: buildField, fortress: buildFortress, arena: buildRooftop, rooftop: buildRooftop, corridor: buildCorridor, sky: buildSky, road: buildRoad, bridge: buildBridge, drive: buildDrive };
+    const builders = { cloud: buildCloud, field: buildField, fortress: buildFortress, arena: buildRooftop, rooftop: buildRooftop, corridor: buildCorridor, sky: buildSky, road: buildRoad, bridge: buildBridge, drive: buildDrive };
     env = { key, group, update: () => {}, ...(builders[key] ?? buildRooftop)(group, match) };
   }
 
@@ -343,6 +343,107 @@ export function createWorld3D(canvas, wrap, assets) {
         const cut = m.cutscene;
         door.rotation.y = cut?.kind === 'stairs' && !cut.switched ? -cut.door * 1.4 : 0;
         door.position.x = cut?.kind === 'stairs' && !cut.switched ? -cut.door * 30 : 0;
+      },
+    };
+  }
+
+  /** a에서 b까지 이어지는 굵기 r의 줄(검은 케이블 등) */
+  function rope(group, a, b, r, material) {
+    const len = a.distanceTo(b);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 6, 1, true), material);
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    group.add(m);
+    return m;
+  }
+
+  /**
+   * 구름 위 하얀 섬(2인 대결·연속 플레이): 맑은 낮 하늘 아래 구름 바다 위에 떠 있는 하얀 타일 섬.
+   * 섬 바닥·아래로 좁아지는 섬 몸통, 가장자리 하늘색 빛 띠, 섬 아래·멀리 떠 있는 뭉게구름, 높은 탑 꼭대기끼리·땅으로 이어진 검은 케이블.
+   * 하얀 블록 탑·아치·공중 다리·계단은 고지대(placeHighs)로 그린다.
+   */
+  function buildCloud(group, match) {
+    const B = match.bounds;
+    const W = B.maxX - B.minX, D = B.maxY - B.minY, cx = (B.minX + B.maxX) / 2, cz = (B.minY + B.maxY) / 2;
+    const R = Math.max(W, D);
+    scene.background = skyTexture([[0, '#2A63C4'], [0.45, '#5E9BE6'], [0.75, '#A9CDF2'], [1, '#E8F1FA']]);
+    scene.fog = new THREE.Fog('#D6E4F3', R * 0.4, R * 1.9);
+    hemi.color.set('#FFFFFF'); hemi.groundColor.set('#AFC2DA'); hemi.intensity = 1.9;
+    sun.color.set('#FFF6E8'); sun.intensity = 2.0;
+    // 섬 바닥: 하얀 타일(무늬 한 칸 240)
+    const floorGeo = new THREE.PlaneGeometry(W + 400, D + 400);
+    const uv = floorGeo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * (W + 400)) / 240, (uv.getY(i) * (D + 400)) / 240);
+    const floor = new THREE.Mesh(floorGeo, M.whiteMat());
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(cx, -0.5, cz);
+    group.add(floor);
+    // 섬 몸통: 아래로 갈수록 좁아지는 하얀 층 세 겹
+    const rockMat = M.mat('#DDE3EC', { rough: 0.9 });
+    [[1, 500], [0.82, 700], [0.55, 900]].reduce((top, [k, h]) => {
+      const slab = new THREE.Mesh(new THREE.BoxGeometry((W + 400) * k, h, (D + 400) * k), rockMat);
+      slab.position.set(cx, top - h / 2, cz);
+      group.add(slab);
+      return top - h;
+    }, -1);
+    // 가장자리 하늘색 빛 띠(이동 범위 끝)
+    const glow = M.mat('#7FE7FF', { emissive: '#2AB8E0' });
+    for (const [x, z, w, d] of [[cx, B.minY - 60, W + 120, 10], [cx, B.maxY + 60, W + 120, 10], [B.minX - 60, cz, 10, D + 120], [B.maxX + 60, cz, 10, D + 120]]) {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(w, 6, d), glow);
+      l.position.set(x, 3, z);
+      group.add(l);
+    }
+    // 뭉게구름: 섬 아래 구름 바다와 멀리 솟은 구름 기둥
+    const cloudMat = new THREE.MeshStandardMaterial({ color: '#FFFFFF', roughness: 1, emissive: '#C9D8EA', emissiveIntensity: 0.35 });
+    const puff = new THREE.SphereGeometry(1, 14, 10);
+    const clouds = [];
+    const cloud = (x, y, z, size, tall = 1) => {
+      const c = new THREE.Group();
+      for (let k = 0; k < 6; k++) {
+        const s = new THREE.Mesh(puff, cloudMat);
+        const r = size * (0.45 + ((k * 37) % 50) / 100);
+        s.scale.set(r * 1.3, r * 0.8 * tall, r);
+        s.position.set((((k * 53) % 7) - 3) * size * 0.32, ((k * 29) % 5) * size * 0.12 * tall, (((k * 71) % 5) - 2) * size * 0.3);
+        c.add(s);
+      }
+      c.position.set(x, y, z);
+      group.add(c);
+      clouds.push(c);
+    };
+    for (let i = 0; i < 46; i++) {
+      const a = (i / 46) * Math.PI * 2 + (i % 3) * 0.3;
+      const r = R * (0.25 + (((i * 389) % 100) / 100) * 0.95);
+      cloud(cx + Math.cos(a) * r, -1300 - ((i * 211) % 900), cz + Math.sin(a) * r, 700 + ((i * 97) % 600));
+    }
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + 0.2;
+      const r = R * (1.05 + ((i * 131) % 60) / 100);
+      cloud(cx + Math.cos(a) * r, -600 + ((i * 173) % 1400), cz + Math.sin(a) * r, 1400 + ((i * 59) % 900), 1.6);
+    }
+    // 검은 케이블: 높은 탑 꼭대기끼리(가까운 것 하나씩), 그리고 탑에서 땅으로 비스듬히
+    const cable = M.mat('#15171C', { rough: 0.6 });
+    const tall = (match.highs ?? []).filter((g) => !g.bridge && !g.ramp && g.height >= 620);
+    let n = 0;
+    for (const g of tall) {
+      if (n > 70) break;
+      let best = null, bd = Infinity;
+      for (const q of tall) {
+        if (q === g) continue;
+        const d = Math.hypot(q.x - g.x, q.y - g.y);
+        if (d < bd && d < 3600 && (q.x > g.x || (q.x === g.x && q.y > g.y))) { bd = d; best = q; }
+      }
+      const top = new THREE.Vector3(g.x + g.w / 2 - 10, g.height, g.y - g.h / 2 + 10);
+      if (best) { rope(group, top, new THREE.Vector3(best.x - best.w / 2 + 10, best.height, best.y + best.h / 2 - 10), 4, cable); n++; }
+      if (n % 2 === 0) {
+        const a = Math.atan2(g.y - cz, g.x - cx);
+        rope(group, new THREE.Vector3(g.x - g.w / 2 + 10, g.height, g.y + g.h / 2 - 10), new THREE.Vector3(g.x + Math.cos(a) * (g.w + 700), 0, g.y + Math.sin(a) * (g.h + 700)), 4, cable);
+        n++;
+      }
+    }
+    return {
+      update(m, time, reducedMotion, dt) {
+        if (reducedMotion) return;
+        for (const [i, c] of clouds.entries()) c.position.x += Math.sin(i) * 12 * dt;
       },
     };
   }
@@ -1387,7 +1488,7 @@ export function createWorld3D(canvas, wrap, assets) {
     const road = match.story?.stage === 'road';
     const live = new Set();
     for (const c of match.covers ?? []) {
-      const key = `${c.id}|${road}`;
+      const key = `${c.id}|${road}|${match.map === 'cloud'}`;
       live.add(key);
       let g = covers.get(key);
       if (!g && c.kind === 'balloon') {
@@ -1399,7 +1500,7 @@ export function createWorld3D(canvas, wrap, assets) {
         covers.set(key, g);
       }
       if (!g) {
-        g = M.makeCover(c, c.team ? TEAM_COLOR[c.team] : '#FFD45E', COVER_H);
+        g = match.map === 'cloud' && !c.steel ? M.makeWhiteCover(c, COVER_H) : M.makeCover(c, c.team ? TEAM_COLOR[c.team] : '#FFD45E', COVER_H);
         if (road) {
           const truck = M.makeTruck(c.w + 40, Math.max(c.h + 40, 88));
           truck.position.y = -46;
@@ -1415,6 +1516,10 @@ export function createWorld3D(canvas, wrap, assets) {
       // 깎일수록 어둡게
       if (g.userData.balloon) {
         g.position.y = (time ? Math.sin(time * 1.2 + c.x * 0.01) * 8 : 0);
+      } else if (g.userData.white && Number.isFinite(c.hp)) {
+        // 하얀 엄폐물도 깎일수록 어둡게(재질은 블록마다 따로라 색만 바꾼다)
+        const k = 0.5 + 0.5 * (c.hp / 200);
+        g.userData.block.material.color.setRGB(k, k, k);
       } else if (!c.steel && Number.isFinite(c.hp)) {
         const k = 0.45 + 0.55 * (c.hp / 200);
         g.userData.block.material = M.mat(`rgb(${Math.round(143 * k)},${Math.round(138 * k)},${Math.round(128 * k)})`, { rough: 0.9 });
@@ -1996,11 +2101,13 @@ export function createWorld3D(canvas, wrap, assets) {
       lastMatch = match;
       const cut = match.cutscene;
       currentStage = match.story?.stage ?? null;
-      const key = !match.story ? (match.map === 'fortress' ? 'fortress' : match.wide ? 'field' : 'arena')
+      // 옥상 연출을 쓰는 맵(연속 플레이 옥상류)은 맵 모양대로: 고공 요새·넓은 옥상·구름 위 하얀 섬
+      const roofEnv = match.map === 'fortress' ? 'fortress' : match.map === 'cloud' ? 'cloud' : match.map === 'wide' ? 'field' : null;
+      const key = !match.story ? (roofEnv ?? (match.wide ? 'field' : 'arena'))
         : cut?.kind === 'drive' && !cut.switched ? 'drive'
         : cut?.kind === 'lightning' && !cut.switched ? (cut.scene === 'roof' ? 'rooftop' : 'corridor')
         // 스토리 1스테이지 옥상은 고공 요새(넓은 맵)
-        : match.story.stage === 'rooftop' && match.map === 'fortress' ? 'fortress'
+        : match.story.stage === 'rooftop' && roofEnv ? roofEnv
         : match.story.stage;
       setEnv(key, match);
       env.update(match, time, reducedMotion, dt);

@@ -109,6 +109,20 @@ export const ENDLESS = {
   // 이동 속도·탄속 ×(1 + speed·n, 최대 speedMax배). normalAt웨이브부터 적어도 보통, hardAt웨이브부터 어려움 난이도
   grow: { hp: 0.12, damage: 0.06, damageMax: 3, speed: 0.02, speedMax: 1.5, normalAt: 3, hardAt: 6 },
 };
+/**
+ * 연속 플레이에서 고를 수 있는 스테이지(맵). map: 경기장, stage: 그 스테이지의 연출(복도 포탑·도로 탄크·대교 배)을 쓰면 그 스테이지.
+ * 하늘(공중전)은 비행기끼리 싸우는 스테이지라 빠진다. 요원은 어느 스테이지든 헬리콥터로 온다.
+ */
+export const ENDLESS_MAPS = [
+  { id: 'fortress', name: '옥상 · 고공 요새', info: '스토리 1스테이지 옥상' },
+  { id: 'wide', name: '넓은 옥상', info: '계단식 탑·컨테이너·전망대' },
+  { id: 'cloud', name: '구름 위 하얀 섬', info: '하얀 블록 탑·아치·공중 다리' },
+  { id: 'corridor', name: '본부 대형 홀', info: '스토리 2스테이지 복도 · 벽 포탑', stage: 'corridor' },
+  { id: 'road', name: '도로', info: '스토리 4스테이지 · 탱크·거대 트레일러', stage: 'road' },
+  { id: 'bridge', name: '대교', info: '스토리 5스테이지 · 배·거대 주탑', stage: 'bridge' },
+];
+export const endlessMapOf = (id) => ENDLESS_MAPS.find((m) => m.id === id) ?? ENDLESS_MAPS[0];
+
 /** 연속 플레이에서 깬 웨이브 수 n일 때 요원 강화 배율 { hp, damage, speed, difficulty(최소 난이도 또는 null) } */
 export function endlessBoost(n) {
   const g = ENDLESS.grow;
@@ -292,7 +306,7 @@ export function normalizeAllyPicks(list) {
  * allies: 데려갈 AI 동료 — 수(0~MAX_ALLIES, 캐릭터는 자동) 또는 직접 고른 [{ characterId, weapon }] 목록.
  * 동료는 체력 가득으로 시작하고 주무기만 쓰며(보조무기·수류탄 없음) AI(match.story.allyBrains)가 조작한다.
  */
-export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null, allies = 0, { endless = false } = {}) {
+export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null, allies = 0, { endless = false, endlessMap = 'fortress' } = {}) {
   const picks = [playerPick, ...(partnerPick ? [partnerPick] : [])];
   const team = Array.isArray(allies)
     ? normalizeAllyPicks(allies).slice(0, allyCount(allies.length))
@@ -326,12 +340,19 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
     });
   }
   // 1스테이지 옥상은 2인 대결의 넓은 맵만큼 넓은 '고공 요새'(매우 높은 고지대 2개·다리·오르막길·점프 패드·긴 다리)
-  if (WAVES[start].stage === 'rooftop' || endless) widen(match, 'fortress');
+  if (WAVES[start].stage === 'rooftop' && !endless) widen(match, 'fortress');
   if (endless) {
+    // 연속 플레이 스테이지: 옥상류(고공 요새·넓은 옥상·구름 위 하얀 섬)는 옥상 연출 그대로 맵만, 복도·도로·대교는 그 스테이지 그대로
+    const pickMap = endlessMapOf(endlessMap);
+    if (pickMap.stage === 'corridor') setupCorridor(match);
+    else if (pickMap.stage === 'road') setupRoad(match, { heal: false });
+    else if (pickMap.stage === 'bridge') setupBridge(match, { heal: false });
+    else widen(match, pickMap.id);
+    match.story.endlessMap = pickMap.id;
     // 연속 플레이: 옥상에서 헬리콥터가 요원 ENDLESS.count명씩 끝없이 데려온다. cleared: 깬 웨이브 수, rewards: 받은 보상 수
     match.story.endless = { cleared: 0, rewards: 0 };
     Object.assign(match.story, { wave: ENDLESS.wave, phase: 'clear', timer: CLEAR_TIME / 2, started: false });
-    match.story.banner = banner('연속 플레이 모드', `요원이 ${ENDLESS.count}명씩 끝없이 온다 · 웨이브마다 랭크 +1레벨 · ${ENDLESS.reward}웨이브마다 1코인`);
+    match.story.banner = banner(`연속 플레이 모드 · ${pickMap.name}`, `요원이 ${ENDLESS.count}명씩 끝없이 온다 · 웨이브마다 랭크 +1레벨 · ${ENDLESS.reward}웨이브마다 1코인`);
     return match;
   }
   if (start === 0) {
