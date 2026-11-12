@@ -10,7 +10,7 @@ import {
   LAST_WORDS, DEATHSTAR_NAME, JOHNSON_NAME, DRIVE_Y, driveLength, LIGHTNING_TIME, DEATHSTAR_CUTSCENE_TIME, MAX_ALLIES, allyPicks, extraAgents, normalizeAllyPicks, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { glowingKey, GOAL, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
-import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER, SHIP, DRIVE, KATA } from '../src/game/config.js';
+import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER, SHIP, DRIVE, KATA, COVERS, MAX_SPEED } from '../src/game/config.js';
 const WARN_TIME = KATA.warn, DAMAGE = KATA.damage;
 
 function story(settings, seed = 7) {
@@ -317,7 +317,7 @@ test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이�
   const [agent] = enemies(match);
   assert.equal(agent.hp, 1234);
   assert.equal(agent.radius, 45);
-  assert.equal(agent.speed, 150);
+  assert.equal(agent.speed, MAX_SPEED * 0.5, '이동 속도 50%(기본 속도는 원래의 4배)');
   assert.equal(match.story.brains[0].diff.name, '어려움');
   const b = spawnProjectile(match, agent, Math.PI / 2);
   assert.equal(b.damage, WEAPONS.rifle.damage * 2, '피해 200%');
@@ -1201,7 +1201,8 @@ test('라이트닝 컷씬: R-10을 물리치면 옥상에서 본부에 라이트
   assert.ok(c.t >= LIGHTNING_TIME);
   const [P1] = match.players;
   assert.deepEqual([P1.plane, P1.primary, P1.secondary, P1.item], [true, 'lightning', 'overcool', 'missile']);
-  assert.equal(match.covers.length, 0, '하늘에는 엄폐물 없음');
+  assert.ok(match.covers.length > 0 && match.covers.every((c) => c.kind === 'balloon'), '하늘에는 떠 있는 방공 기구만(엄폐물)');
+  assert.ok(match.wide && match.map === 'sky' && match.highs.length === 0, '넓은 하늘, 고지대 없음');
   assert.equal(match.story.turrets, null);
 });
 
@@ -1311,7 +1312,8 @@ test('낙하산 컷씬: 라이트닝에서 뛰어내려 낙하산을 펴고, 어
   assert.ok(!P1.primaryOnly);
   assert.ok(A1.primaryOnly, '동료는 그대로 주무기만');
   assert.equal(P1.hp, P1.maxHp, '체력 100% 회복');
-  assert.equal(match.covers.length, 3, '도로 위 엄폐물(다른 차들)');
+  assert.ok(COVERS.every((c) => match.covers.some((m) => m.id === c.id)), '도로 위 엄폐물(다른 차들)');
+  assert.ok(match.map === 'road' && match.highs.some((h) => h.kind === 'trailer'), '넓은 도로에 거대한 트레일러(고지대)');
   const more = runOut(match, inputs, ['cutscene']);
   assert.equal(more.filter((e) => e.type === 'land').length, 2, '각자 차 위에 내려앉음');
   for (const h of c.heroes) assert.ok(Math.abs(h.y - RAIL_Y.earth) < 1e-6 && Math.abs(h.x - h.toX) < 1e-6);

@@ -1,5 +1,6 @@
-import { MIN_X, MAX_X, BULLET_RADIUS, TICK, WEAPONS, RULES, ZONE } from './config.js';
+import { MIN_X, MAX_X, BULLET_RADIUS, TICK, WEAPONS, RULES, ZONE, JUMP, SHOT_HEIGHT } from './config.js';
 import { segmentRectTime } from './collision.js';
+import { lineBlocked } from './terrain.js';
 import { createRng, between } from './state.js';
 
 /** 싱글플레이 AI 캐릭터는 요원들 중에서만 무작위로 고른다. */
@@ -93,11 +94,12 @@ export function aimAtTarget(me, target, speed, lead, bounds = null) {
   return Math.atan2(ty - me.y, tx - me.x);
 }
 
-/** (x, y)에서 상대를 향해 쏠 때 부서지지 않은 엄폐물이 가로막는지 */
+/** (x, y)에서 상대를 향해 쏠 때 부서지지 않은 엄폐물이나 건물·고지대(구조물)가 가로막는지 */
 function blockedAt(match, me, x, target, y = me.y) {
   const x0 = x, y0 = y, x1 = target.x, y1 = target.y;
   return match.covers.some((c) => c.hp > 0 && segmentRectTime(
-    x0 - c.x, y0 - c.y, x1 - c.x, y1 - c.y, c.w / 2 + BULLET_RADIUS, c.h / 2 + BULLET_RADIUS) !== null);
+    x0 - c.x, y0 - c.y, x1 - c.x, y1 - c.y, c.w / 2 + BULLET_RADIUS, c.h / 2 + BULLET_RADIUS) !== null)
+    || (match.highs?.length > 0 && lineBlocked(match, x0, y0, (me.z ?? 0) + SHOT_HEIGHT, x1, y1, (target.z ?? 0) + SHOT_HEIGHT));
 }
 
 /**
@@ -240,7 +242,10 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   const moved = Math.hypot(me.x - (ai.lastX ?? me.x), me.y - (ai.lastY ?? me.y));
   const wants = Math.hypot(dir[0], dir[1]) > 0.3;
   ai.stuck = wants && moved < speed * dt * 0.25 ? (ai.stuck ?? 0) + dt : 0;
-  if (ai.stuck > 0.25) { frame.jump = true; ai.stuck = 0; }
+  // 높은 구조물에 막혔으면 점프키를 꾹 눌러(최대로 모아) 높이 뛰어오른다
+  if (ai.stuck > 0.25) { frame.jump = true; ai.stuck = 0; ai.holdJump = JUMP.holdTime + 0.05; }
+  ai.holdJump = Math.max(0, (ai.holdJump ?? 0) - dt);
+  frame.jumpHeld = ai.holdJump > 0;
   ai.lastX = me.x; ai.lastY = me.y;
   // 점프: 곧 닿을 탄은 난이도별 확률로 뛰어올라 피하고(탄은 발 높이로 날아와 높이 뛰면 밑으로 지나감), 평소에도 가끔 뛴다
   const soon = list.filter((th) => th.t < 0.35 && !th.splash);

@@ -17,12 +17,15 @@ export function moveFromDrag(dx, dy, radius) {
 
 /**
  * 시선 스틱(1인칭): 옆으로 민 만큼 고개를 돌리고(turn -1~1, 조금씩 돌리기 쉽게 제곱 곡선), 데드존 밖으로 밀고 있는 동안
- * armed(발사). 위로 밀면 돌지 않고 정면으로 쏜다. 떼면 쏘는 무기(RPG·저격총)는 밀었다가 놓을 때 한 발.
+ * armed(발사). 위로 살짝 밀면 돌지 않고 정면으로 쏘고, 위아래로 크게 밀면 고개를 들고 숙인다(look). 떼면 쏘는 무기(RPG·저격총)는 밀었다가 놓을 때 한 발.
  */
 export function lookFromDrag(dx, dy, radius) {
   const armed = Math.hypot(dx, dy) / radius >= DEADZONE;
   const v = moveAxisFromDrag(dx, radius);
-  return { turn: Math.sign(v) * v * v, armed };
+  // 위아래: 절반 넘게 크게 밀어야 고개를 든다(살짝 위로 밀면 그대로 정면 사격)
+  const k = Math.min(1, Math.abs(dy) / radius);
+  const look = k < 0.5 ? 0 : -Math.sign(dy) * ((k - 0.5) / 0.5) ** 2;
+  return { turn: Math.sign(v) * v * v, armed, look };
 }
 
 function placeKnob(knob, x, y, radius) {
@@ -118,7 +121,9 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       // 전용 무기 캐릭터는 주무기 하나뿐이고 아이템도 없다
       secondary.disabled = p.primaryOnly;
       item.disabled = p.primaryOnly;
-      const jump = actionButton('jump-btn', () => { frame.jump = true; });
+      const jump = actionButton('jump-btn', () => { frame.jump = true; frame.touchJump = true; });
+      // 꾹 누르고 있는 동안 더 높이 뛴다(손을 떼면 그만 모은다)
+      for (const type of ['pointerup', 'pointercancel', 'pointerleave']) jump.addEventListener(type, () => { frame.touchJump = false; });
       jump.innerHTML = '<small>점프</small><span>▲</span>';
       jump.setAttribute('aria-label', `${p.id} 점프`);
       const evade = actionButton('evade-btn', () => { frame.evade = true; });
@@ -153,10 +158,11 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
         drag(dx, dy, radius, knob) {
           const r = lookFromDrag(dx, dy, radius);
           frame.touchTurn = r.turn;
+          frame.touchLook = r.look;
           frame.aiming = r.armed;
           placeKnob(knob, dx, dy, radius);
         },
-        end() { frame.touchTurn = 0; frame.aiming = false; },
+        end() { frame.touchTurn = 0; frame.touchLook = 0; frame.aiming = false; },
       }));
     }
   }

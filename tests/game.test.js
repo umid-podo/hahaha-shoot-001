@@ -8,16 +8,18 @@ import { lookFromDrag, moveFromDrag, moveAxisFromDrag } from '../src/input/point
 import { applyView, toWorld } from '../src/input/view.js';
 import {
   MIN_X, MAX_X, RAIL_Y, TICK, MAX_HP, WEAPONS, JET, COVERS, COVER, ARENA_WIDTH, BODY_RADIUS, CHARACTERS, RULES,
-  PRIMARY_IDS, MUZZLE_OFFSET, ZONE, MIN_Y, MAX_Y, JUMP,
+  PRIMARY_IDS, MUZZLE_OFFSET, ZONE, MIN_Y, MAX_Y, JUMP, MAX_SPEED, SPEED_SCALE, BULLET_SPEED_SCALE,
 } from '../src/game/config.js';
 import {
   PARAMS, getValue, setValue, resetAll, overrides, applyOverrides, isChanged, summaryText,
 } from '../src/game/balance.js';
 
-function playing(loadout) {
+function playing(loadout, { highs = false } = {}) {
   const match = createMatch(loadout, 1);
   match.phase = 'playing';
   match.jetTimer = Infinity; // 전투기 테스트가 아니면 끈다
+  // 고지대(높이 92)도 탄을 막으므로, 고지대를 보는 테스트가 아니면 치워 탄이 지나는 줄을 트어 둔다
+  if (!highs) match.highs = [];
   const inputs = createInputs(match.players);
   const byId = Object.fromEntries(match.players.map((p) => [p.id, p]));
   return { match, inputs, ...byId };
@@ -265,8 +267,9 @@ test('전투기는 하늘 높이 날아 양 팀 총알·레이저를 막지 않�
   assert.equal(P1.hp, P1.maxHp - WEAPONS.pistol.damage);
 
   const d = playing({ P1: { characterId: 'r10' } });
-  d.match.jet = { x: 300, previousX: 300, y: JET.y, dir: 1, fireTimer: Infinity };
-  d.P1.x = d.P1.previousX = 300; d.P2.x = d.P2.previousX = 300;
+  // x 300 줄은 높이 92 고지대(high-west)가 탄을 막으므로 트인 줄에서
+  d.match.jet = { x: 650, previousX: 650, y: JET.y, dir: 1, fireTimer: Infinity };
+  d.P1.x = d.P1.previousX = 650; d.P2.x = d.P2.previousX = 650;
   d.inputs.P1.aiming = true;
   step(d.match, d.inputs);
   d.inputs.P1.aiming = false;
@@ -309,8 +312,8 @@ test('카운트다운 중에는 조준해도 발사 없이 3초 뒤 시작', () 
   assert.equal(match.phase, 'playing');
 });
 
-test('RPG 탄속 900, 쿨타임 1초', () => {
-  assert.equal(WEAPONS.rpg.speed, 900);
+test('RPG 탄속 2700(원래 900의 3배), 쿨타임 1초', () => {
+  assert.equal(WEAPONS.rpg.speed, 900 * BULLET_SPEED_SCALE);
   assert.equal(WEAPONS.rpg.interval, 1);
 });
 
@@ -690,13 +693,15 @@ test('R-10 드론: 레이저 캐논 고정, 무기 전환 불가, 체력 400, �
   assert.equal(WEAPONS.laser.damage, 20);
   assert.equal(WEAPONS.laser.burst, 3);
   inputs.P1.aiming = true;
-  const events = run(match, inputs, 0.2);
-  assert.equal(shots(events, 'P1'), 3, '한 번에 3점사');
-  assert.equal(match.projectiles.filter((b) => b.weapon === 'laser').length, 3, '즉시 닿는 빛줄기가 아니라 날아가는 탄환');
+  // 점사 간격 0.08초: 세 번째 발이 나간 직후(첫 발이 아직 닿기 전) — 탄속이 3배라 금방 닿는다
+  const firstTick = step(match, inputs);
+  assert.equal(match.projectiles.filter((b) => b.weapon === 'laser').length, 1, '즉시 닿는 빛줄기가 아니라 날아가는 탄환');
   assert.equal(P2.hp, MAX_HP, '아직 날아가는 중');
-  const later = run(match, inputs, 0.9);
+  const events = [...firstTick, ...run(match, inputs, 0.17 - TICK)];
+  assert.equal(shots(events, 'P1'), 3, '한 번에 3점사');
+  const later = run(match, inputs, 0.93);
   assert.equal(shots(later, 'P1'), 3, '0.7초 뒤 다음 3점사');
-  assert.equal(P2.hp, MAX_HP - 3 * 20, '첫 3점사 모두 명중');
+  assert.equal(P2.hp, MAX_HP - 6 * 20, '두 번의 3점사 모두 명중(탄속이 3배라 금방 닿는다)');
 });
 
 test('R-10 배터리: 15발(3점사 5번) 쏘면 방전돼 못 쏘고, 마지막 발사 2초 뒤 가득 참', () => {
@@ -925,7 +930,7 @@ test('샷건: 조준 후 떼면 부채꼴로 5발, 1발 40, 10초 쿨타임, 명
   assert.equal(c.match.stats.P1.weapons.shotgun.hits, 1);
 });
 
-test('아킴보 석궁(모든 캐릭터 주무기): 0.7초마다 화살 2개가 나란히, 탄속 1500, 한 발 12', () => {
+test('아킴보 석궁(모든 캐릭터 주무기): 0.7초마다 화살 2개가 나란히, 탄속 4500(원래 1500의 3배), 한 발 12', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { weapon: 'crossbow' } });
   assert.equal(P1.weapon, 'crossbow');
   P1.x = P1.previousX = 300; P2.x = P2.previousX = 300; P2.radius = 60;
@@ -936,7 +941,7 @@ test('아킴보 석궁(모든 캐릭터 주무기): 0.7초마다 화살 2개가 
   const arrows = match.projectiles.filter((b) => b.weapon === 'crossbow');
   assert.equal(arrows.length, 2);
   assert.ok(Math.abs(Math.abs(arrows[0].x - arrows[1].x) - WEAPONS.crossbow.arrowGap) < 1e-6, '나란히');
-  assert.ok(arrows.every((b) => Math.abs(b.vy + 1500) < 1e-6), '같은 방향·탄속');
+  assert.ok(arrows.every((b) => Math.abs(b.vy + 1500 * BULLET_SPEED_SCALE) < 1e-6), '같은 방향·탄속');
   assert.equal(shots(run(match, inputs, 1.4 - TICK / 2), 'P1'), 2, '0.7초 간격');
   inputs.P1.aiming = false;
   run(match, inputs, 1);
@@ -1072,15 +1077,16 @@ test('즉사기 사용 가능 시각은 밸런스로 조절', () => {
   }
 });
 
-test('아크 트루퍼는 제트팩으로 다른 캐릭터보다 빠르게 움직임(초당 420)', () => {
+test('아크 트루퍼는 제트팩으로 다른 캐릭터보다 빠르게 움직임(초당 420의 4배), 모두 원래의 4배 빠르기', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { characterId: 'arc-trooper' } });
   assert.ok(P1.jetpack, '제트팩');
   assert.equal(P2.jetpack, null);
-  P1.x = P1.previousX = 400; P2.x = P2.previousX = 400;
+  P1.x = P1.previousX = 100; P2.x = P2.previousX = 100;
   inputs.P1.moveAxis = 1; inputs.P2.moveAxis = 1;
-  run(match, inputs, 1);
-  assert.ok(Math.abs(P1.x - 400 - 420) < 8, `아크 트루퍼 ${P1.x - 400}`);
-  assert.ok(Math.abs(P2.x - 400 - 300) < 8, `다른 캐릭터 ${P2.x - 400}`);
+  run(match, inputs, 0.25);
+  assert.ok(Math.abs(P1.x - 100 - 420 * SPEED_SCALE * 0.25) < 8, `아크 트루퍼 ${P1.x - 100}`);
+  assert.ok(Math.abs(P2.x - 100 - 300 * SPEED_SCALE * 0.25) < 8, `다른 캐릭터 ${P2.x - 100}`);
+  assert.equal(MAX_SPEED, 1200, '원래 300의 4배');
 });
 
 test('즉사기 피해·유도 각도 조절: 피해를 줄이면 그만큼만, 유도가 작으면 빗나감', () => {
@@ -1197,9 +1203,9 @@ test('1인칭 자유 이동: 앞뒤(Y)·좌우(X)로 상대 진영까지 넘어�
   s.P1.x = s.P1.previousX = 300;
   const x0 = s.P1.x, y0 = s.P1.y;
   s.inputs.P1.moveAxis = 1; s.inputs.P1.moveY = -1;
-  run(s.match, s.inputs, 0.5);
+  run(s.match, s.inputs, 0.1); // 빨라져서 길게 가면 엄폐물·경기장 끝에 닿으므로 짧게
   const moved = Math.hypot(s.P1.x - x0, s.P1.y - y0);
-  assert.ok(Math.abs(moved - s.P1.speed * 0.5) < s.P1.speed * TICK + 1e-6, '대각선도 같은 속도');
+  assert.ok(Math.abs(moved - s.P1.speed * 0.1) < s.P1.speed * TICK + 1e-6, '대각선도 같은 속도');
 });
 
 test('점프: 뛰어올라 약 120 높이까지 갔다가 내려오고, 공중에선 다시 못 뜀, 엄폐물을 뛰어넘음', () => {
@@ -1231,7 +1237,8 @@ test('점프: 뛰어올라 약 120 높이까지 갔다가 내려오고, 공중�
 });
 
 test('고지대: 걸어서는 못 올라가고 뛰어오르면 올라서며(그 위 바닥이 높아짐), 걸어 나가면 떨어짐', () => {
-  const { match, inputs, P1 } = playing();
+  const { match, inputs, P1 } = playing(undefined, { highs: true });
+  P1.speed = MAX_SPEED / SPEED_SCALE; // 한 칸에 올라서는 거리를 보려고 원래 걷는 속도로
   const g = match.highs.find((h) => h.id === 'high-west');
   assert.ok(g.height > JUMP.step && g.height < JUMP.jump ** 2 / (2 * JUMP.gravity), '뛰면 닿는 높이');
   P1.x = P1.previousX = g.x; P1.y = P1.previousY = g.y + g.h / 2 + 40;
@@ -1346,12 +1353,17 @@ test('넓은 맵(2인 대결·자유 대전): 이동 범위가 크게 넓어지�
   const inputs = createInputs(match.players);
   const [P1] = match.players;
   assert.ok((FIELD.maxX - FIELD.minX) * (FIELD.maxY - FIELD.minY) >= 10 * 1600 * 1000, '원래의 10배 넘는 넓이');
-  assert.equal(match.covers.length, COVERS.length + WIDE_COVERS.length);
-  assert.equal(match.highs.length, 4 + WIDE_HIGHS.length);
+  const B = match.bounds;
+  assert.ok((B.maxX - B.minX) * (B.maxY - B.minY) >= 9.8 * (FIELD.maxX - FIELD.minX) * (FIELD.maxY - FIELD.minY), '그 넓은 맵의 10배');
+  assert.ok(match.covers.length > COVERS.length + WIDE_COVERS.length, '원래 엄폐물 + 둘레에 더');
+  assert.ok(WIDE_HIGHS.every((w) => match.highs.some((h) => h.id === w.id)), '원래 고지대는 그대로');
+  assert.ok(match.highs.length > 4 + WIDE_HIGHS.length + 60, '둘레에 거대한 건물·탑·다리가 더');
+  assert.ok(match.highs.some((h) => h.height >= 700), '거대한 고지대');
   P1.x = P1.previousX = -1000; P1.y = P1.previousY = 400;
   inputs.P1.moveAxis = -1;
   run(match, inputs, 3);
-  assert.equal(P1.x, FIELD.minX, '원래 경기장 밖 멀리까지');
+  assert.ok(P1.x < FIELD.minX, '원래 넓은 맵 밖 멀리까지');
+  P1.speed = MAX_SPEED / SPEED_SCALE; // 탑은 원래 걷는 속도로 한 칸씩
   // 북쪽 탑: 64 → 128 → 190
   const t1 = match.highs.find((h) => h.id === 'tower-n-1');
   P1.x = P1.previousX = t1.x; P1.y = P1.previousY = t1.y + t1.h / 2 + 30; inputs.P1.moveAxis = 0;

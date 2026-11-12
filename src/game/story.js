@@ -2,7 +2,8 @@ import {
   ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS, CHARACTERS,
   MAX_SPEED as MAX_SPEED_BASE, SKY, TANK, SHIP, DRIVE, RULES, WEAPONS,
 } from './config.js';
-import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers, between, widen, unwiden } from './state.js';
+import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers, between, widen } from './state.js';
+import { applyMap } from './maps.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
 
 /**
@@ -489,13 +490,13 @@ const killerOf = (match, victim) => match.stats?.[victim.id]?.killedBy?.ownerId 
 function setupCorridor(match) {
   const story = match.story;
   story.stage = 'corridor';
-  // 옥상(고공 요새)의 넓은 맵에서 원래 크기 복도로
-  if (match.wide) unwiden(match);
   story.elevator = { open: 0, target: 0 };
   story.turrets = TURRETS.map((t) => ({ ...t, aim: t.dir > 0 ? 0 : Math.PI, fireTimer: 0 }));
   story.turretTimer = TURRET.firstDelay;
   story.turretFiring = false;
   match.covers = createCovers(heroes(match));
+  // 복도는 본부의 거대한 홀(원래 복도 둘레에 거대한 구조물·통로·점프 패드, 높은 천장)
+  applyMap(match, 'corridor');
   match.jet = null;
   match.jetTimer = Infinity;
 }
@@ -510,6 +511,8 @@ function setupSky(match, { heal = true } = {}) {
   match.highs = [];
   Object.assign(story, { elevator: null, turrets: null, ceiling: null, carrier: null, jet: null, missile: null });
   match.covers = [];
+  // 넓은 하늘(떠 있는 방공 기구가 탄을 막는다)
+  applyMap(match, 'sky');
   match.jet = null;
   match.jetTimer = Infinity;
   const list = heroes(match);
@@ -560,6 +563,8 @@ function setupRoad(match, { heal = true } = {}) {
     });
   });
   match.covers = createCovers(list);
+  // 넓은 도로(함께 달리는 거대한 트레일러·화물차 위로 뛰어오를 수 있다)
+  applyMap(match, 'road');
 }
 
 /**
@@ -593,6 +598,8 @@ function setupBridge(match, { heal = true } = {}) {
     });
   });
   match.covers = createCovers(list).filter((c) => c.id !== 'center');
+  // 거대한 대교(주탑·멈춘 버스·고가 통로·오르막길)
+  applyMap(match, 'bridge');
 }
 
 /** 대교 가운데: 배가 지나가는 동안(곧 올 때부터) 벌어지고, 지나가면 닫힌다. open은 0(닫힘)~1(활짝). */

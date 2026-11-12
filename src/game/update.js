@@ -1,8 +1,11 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MIN_Y, MAX_Y, BULLET_RADIUS, ZONE, JUMP, COVER_HEIGHT,
-  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, SHIP, COVER, EVADE, PAD, VERTICAL_AIM,
+  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, SHIP, COVER, EVADE, PAD, VERTICAL_AIM, PITCH, SHOT_HEIGHT,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
+import { highAt, groundAt, structureHit } from './terrain.js';
+
+export { highAt, groundAt };
 import { between } from './state.js';
 import {
   updateStory, holdsResult, startsCutscene, startCutscene, updateCutscene, updateKillcam, startKillcam,
@@ -64,16 +67,20 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
   const damage = Number.isFinite(boost?.damage) ? boost.damage : base;
   // bulletSpeedScale: 싱글플레이 AI 탄속 배율(기본 1)
   const speed = weapon.speed * (player.bulletSpeedScale ?? 1);
-  const x = player.x + Math.cos(aim) * MUZZLE_OFFSET - Math.sin(aim) * offset;
-  const y = player.y + Math.sin(aim) * MUZZLE_OFFSET + Math.cos(aim) * offset;
+  // 위아래 시선(pitch): 사람 플레이어는 바라보는 높낮이 그대로 쏜다(가로 속도 cos, 위아래 속도 sin). 던지는 무기는 포물선이라 빼고
+  const pitch = weapon.thrown ? 0 : clampPitch(player.pitch ?? 0);
+  const flat = Math.cos(pitch);
+  const x = player.x + Math.cos(aim) * MUZZLE_OFFSET * flat - Math.sin(aim) * offset;
+  const y = player.y + Math.sin(aim) * MUZZLE_OFFSET * flat + Math.cos(aim) * offset;
   // 화염방사기 불꽃은 짧게 살고, 에너지 돌격소총 볼트는 튕길 횟수를 갖는다. 유탄처럼 수명이 정해진 탄도 있다
   const life = weapon.flame ? weapon.flame.life : weapon.life ?? RULES.bulletLife;
   // 위아래 자동 조준: 높이가 크게 다른 상대를 겨누면 탄이 그 높이로 기울어 날아간다(던진 무기는 포물선이라 빼고)
-  const vz = weapon.thrown ? 0 : verticalAim(match, player, aim, speed);
+  // AI(위아래 시선이 없음)는 예전처럼 높이가 크게 다른 상대 쪽으로 기울여 쏜다
+  const vz = weapon.thrown ? 0 : pitch ? Math.sin(pitch) * speed : player.ai ? verticalAim(match, player, aim, speed) : 0;
   const projectile = {
     id: match.nextProjectileId++, ownerId: player.id, team: player.team, weapon: weapon.id,
     x, y, previousX: x, previousY: y,
-    vx: Math.cos(aim) * speed, vy: Math.sin(aim) * speed,
+    vx: Math.cos(aim) * speed * flat, vy: Math.sin(aim) * speed * flat,
     life, damage,
     // AI 조준 보정(player.aimAssist): 폭발·화염·던지는 무기가 아닌 총알은 상대 쪽으로 살짝 휘어 날아간다
     splash, homing: weapon.homing ?? (player.aimAssist > 0 && !splash && !weapon.flame && !weapon.thrown ? { turnRate: player.aimAssist } : undefined),
@@ -85,8 +92,9 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
     ...(weapon.flame ? { flame: true, maxLife: life } : {}),
     // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용). group이 있으면 그쪽에 기록한다.
     connected: false, group,
-    // z: 쏜 사람 발 높이(높이가 다른 사람은 hitBelow~hitAbove 안일 때만 맞고, coverClear보다 높으면 엄폐물 위로 지나감)
-    z: player.z ?? 0,
+    // z: 쏜 사람 발 높이(높이가 다른 사람은 hitBelow~hitAbove 안일 때만 맞고, coverClear보다 높으면 엄폐물 위로 지나감).
+    // 실제로 날아가는 높이는 z + SHOT_HEIGHT(총 높이)이고, 위아래로 쏘면 z가 vz만큼 바뀐다
+    z: (player.z ?? 0) + Math.sin(pitch) * MUZZLE_OFFSET,
     // 던진 무기는 아무것에도 닿지 않고 조준 방향으로 RULES.throwRange만큼 날아가 터진다. startX·startY는 날아간 거리(포물선 높이)용.
     thrown: !!weapon.thrown, overCovers: !!weapon.thrown, startX: x, startY: y,
     ...(weapon.thrown ? { range: weapon.range ?? RULES.throwRange } : {}),
@@ -95,8 +103,11 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
   return projectile;
 }
 
+/** 위아래 시선 각도를 PITCH.max 안으로 */
+export const clampPitch = (a) => Math.max(-PITCH.max, Math.min(PITCH.max, Number.isFinite(a) ? a : 0));
+
 /**
- * 위아래 자동 조준: 조준 방향 VERTICAL_AIM.cone도 안에서 가장 가까운 상대가 서 있는 바닥과 내 바닥의 높이 차이가 VERTICAL_AIM.minDz보다 크면,
+ * 위아래 자동 조준(AI): 조준 방향 VERTICAL_AIM.cone도 안에서 가장 가까운 상대가 서 있는 바닥과 내 바닥의 높이 차이가 VERTICAL_AIM.minDz보다 크면,
  * 탄이 그 상대 자리에 닿을 때 그 높이가 되도록 위아래 속도(초당)를 돌려준다. 점프 높이가 아니라 서 있는 바닥 높이로 정하므로
  * 뛰어올라 탄을 피하는 것은 그대로 된다. 없으면 0.
  */
@@ -230,15 +241,28 @@ export function rocketEnd(b, match = null) {
   return null;
 }
 
-/** 탄환이 이번 틱에 부서지지 않은 엄폐물에 닿는 가장 이른 접촉 { t, cover }. 없으면 null. */
+/** 엄폐물이 놓인 바닥 높이(고지대 위에 놓였으면 그 높이). 처음 한 번만 잰다 */
+function coverBase(match, c) {
+  c.base ??= groundAt(match, c.x, c.y, 0); // 다리 밑에 놓인 엄폐물은 바닥(0)에
+  return c.base;
+}
+
+/**
+ * 탄환이 이번 틱에 부서지지 않은 엄폐물에 닿는 가장 이른 접촉 { t, cover }. 없으면 null.
+ * 높이도 본다: 닿는 순간 탄의 발 높이가 엄폐물 바닥 + coverClear보다 높으면 위로 넘어가고, 엄폐물보다 한참 아래(고지대 밑)면 맞지 않는다.
+ */
 function coverContact(match, b) {
   let earliest = null;
+  const z0 = b.previousZ ?? b.z ?? 0, z1 = b.z ?? 0;
   for (const c of match.covers) {
     if (c.hp <= 0) continue;
     const t = segmentRectTime(
       b.previousX - c.x, b.previousY - c.y, b.x - c.x, b.y - c.y,
       c.w / 2 + BULLET_RADIUS, c.h / 2 + BULLET_RADIUS);
-    if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, cover: c };
+    if (t === null || (earliest !== null && t >= earliest.t)) continue;
+    const z = z0 + (z1 - z0) * t, base = coverBase(match, c);
+    if (z - base > JUMP.coverClear || z + SHOT_HEIGHT < base) continue;
+    earliest = { t, cover: c };
   }
   return earliest;
 }
@@ -260,6 +284,19 @@ function bounceOffCover(b, c, x, y) {
     b.y = c.y + Math.sign(dy || -b.vy || 1) * (hh + 1);
   }
   b.previousX = b.x; b.previousY = b.y;
+  b.bounces--;
+  b.bounced = (b.bounced ?? 0) + 1;
+}
+
+/** 튕기는 탄을 구조물·바닥·천장 면(axis 'x'·'y'·'h')에서 반사한다. 닿은 자리에서 살짝 물러나 다시 날아간다 */
+function bounceOffWall(b, axis, x, y, z) {
+  const speed = Math.hypot(b.vx, b.vy, b.vz ?? 0) || 1;
+  b.x = x - (b.vx / speed) * 2; b.y = y - (b.vy / speed) * 2;
+  if (b.z !== undefined) b.z = z - ((b.vz ?? 0) / speed) * 2;
+  if (axis === 'x') b.vx = -b.vx;
+  else if (axis === 'y') b.vy = -b.vy;
+  else b.vz = -(b.vz ?? 0);
+  b.previousX = b.x; b.previousY = b.y; b.previousZ = b.z ?? 0;
   b.bounces--;
   b.bounced = (b.bounced ?? 0) + 1;
 }
@@ -350,6 +387,8 @@ function explode(match, b, x, y, directVictim, directCover, events) {
   events.push({ type: 'explode', x, y, z: b.z ?? 0, radius: splash.radius, ...(b.shock ? { energy: true } : {}) });
   for (const p of match.players) {
     if (!p.alive || p.team === b.team || p === directVictim || invulnerable(p)) continue;
+    // 높이가 폭발 범위보다 한참 다르면(고지대 위·아래) 닿지 않는다
+    if (b.z !== undefined && Math.abs((p.z ?? 0) - b.z) > splash.radius + 120) continue;
     if (Math.hypot(p.x - x, p.y - y) <= splash.radius + p.radius) {
       damage(match, p, splash.damage, b, events);
       if (b.shock) stun(p, 'shock', b.shock, events);
@@ -661,28 +700,6 @@ function updateResources(p, firing, dt) {
 /** 경기장 앞뒤 범위(MIN_Y~MAX_Y) 안으로 Y를 자른다. 예전에는 자기 진영 안이었지만 지금은 상대 진영까지 갈 수 있다. */
 export const clampY = (team, y) => Math.min(MAX_Y, Math.max(MIN_Y, y));
 
-/** 고지대 g의 (x, y) 자리 높이. 오르막길(ramp)은 축을 따라 0에서 height까지 오른다 */
-export function highAt(g, x, y) {
-  if (!g.ramp) return g.height;
-  const along = g.ramp.axis === 'x' ? (x - g.x) / g.w : (y - g.y) / g.h; // -0.5 ~ 0.5
-  return g.height * Math.max(0, Math.min(1, 0.5 + along * g.ramp.dir));
-}
-
-/**
- * (x, y)의 바닥 높이: 그 자리를 덮는 고지대 중 가장 높은 것(없으면 0). z(발 높이)를 주면 다리(bridge)는
- * 그 위에 있을 때만 바닥으로 친다(아래에 있으면 밑으로 지나간다).
- */
-export function groundAt(match, x, y, z = Infinity) {
-  let h = 0;
-  for (const g of match.highs ?? []) {
-    if (!(Math.abs(x - g.x) < g.w / 2 - 0.01 && Math.abs(y - g.y) < g.h / 2 - 0.01)) continue;
-    const top = highAt(g, x, y);
-    if (g.bridge && z < top - JUMP.step - 1) continue;
-    if (top > h) h = top;
-  }
-  return h;
-}
-
 /** 오르막길만 따진 (x, y)의 높이(걸어서 오를 수 있는지 볼 때) */
 function rampAt(match, x, y) {
   let h = 0;
@@ -702,13 +719,15 @@ export function move(match, p, ax, ay, dt, speed = p.speed) {
   const len = Math.hypot(ax, ay);
   if (len > 1) { ax /= len; ay /= len; }
   if (!ax && !ay) return;
+  // 꾹 눌러 높이 뛴 점프: 공중에서는 모은 만큼 더 빠르게(훨씬 멀리 날아간다)
+  if (p.jumpCharge > 0 && (p.z ?? 0) > 0.5) speed *= 1 + JUMP.airBoost * Math.min(1, p.jumpCharge);
   const B = boundsOf(match);
   const cy = (v) => Math.min(B.maxY, Math.max(B.minY, v));
   let x = Math.min(B.maxX, Math.max(B.minX, p.x + ax * speed * dt));
   let y = cy(p.y + ay * speed * dt);
   const z = p.z ?? 0;
   const walls = [
-    ...(match.covers ?? []).filter((c) => c.hp > 0 && z < groundAt(match, c.x, c.y) + COVER_HEIGHT - 2).map((c) => ({ c, pad: p.radius * 0.6 })),
+    ...(match.covers ?? []).filter((c) => c.hp > 0 && z < coverBase(match, c) + COVER_HEIGHT - 2 && z + 150 > coverBase(match, c)).map((c) => ({ c, pad: p.radius * 0.6 })),
     // 고지대 옆면: 가장자리 안쪽으로 발 중심이 들어가면 막음(그 위에 서면 바닥이 높아짐). 다리는 밑으로 지나가고, 오르막길은 아래에서 따로 본다
     ...(match.highs ?? []).filter((g) => !g.bridge && !g.ramp && z < g.height - JUMP.step).map((g) => ({ c: g, pad: 0 })),
   ];
@@ -732,8 +751,8 @@ export function move(match, p, ax, ay, dt, speed = p.speed) {
 }
 
 /** (x, y)를 밟는 점프 패드(없으면 null) */
-export function padAt(match, x, y) {
-  return (match.pads ?? []).find((pad) => Math.hypot(x - pad.x, y - pad.y) <= (pad.r ?? PAD.r)) ?? null;
+export function padAt(match, x, y, ground = 0) {
+  return (match.pads ?? []).find((pad) => Math.abs(ground - (pad.h ?? 0)) <= 0.5 && Math.hypot(x - pad.x, y - pad.y) <= (pad.r ?? PAD.r)) ?? null;
 }
 
 /** 남은 회피 횟수(없으면 가득) */
@@ -773,8 +792,12 @@ function updateEvadeCharges(p, dt) {
   if (p.evadeCooldown <= EPS) p.evadeCharges = EVADE.charges;
 }
 
-/** 점프·떨어지기 한 틱: 땅(고지대 위 포함)에 있을 때 jump면 뛰어오르고, 공중이면 중력으로 떨어져 바닥 높이에 내려선다. */
-export function updateJump(match, p, jump, dt, events) {
+/**
+ * 점프·떨어지기 한 틱: 땅(고지대 위 포함)에 있을 때 jump면 뛰어오르고, 공중이면 중력으로 떨어져 바닥 높이에 내려선다.
+ * held: 점프키를 누르고 있는지. 뛰어오른 뒤 누르고 있는 동안(최대 JUMP.holdTime초) 위로 더 밀어 올려, 살짝 누르면 원래 높이,
+ * 꾹 누를수록 훨씬 높이(그리고 공중에서 빨라져 멀리) 뛴다. 천장(match.ceiling)이 있으면 머리가 닿는 곳에서 멈춘다.
+ */
+export function updateJump(match, p, jump, dt, events, held = false) {
   p.z ??= 0; p.vz ??= 0;
   let ground = groundAt(match, p.x, p.y, p.z);
   // 막혀야 할 높은 단 위에 밀려 들어간 경우(가장자리 계산 오차)에는 순간 이동하지 않는다
@@ -782,24 +805,41 @@ export function updateJump(match, p, jump, dt, events) {
   // 오르막길을 걸어 내려갈 때처럼 바닥이 조금 낮아졌으면 떨어지지 않고 그대로 붙어 걷는다
   if (p.vz === 0 && p.z > ground && p.z - ground <= JUMP.step) p.z = ground;
   const onGround = p.z <= ground + 0.5 && p.vz <= 0;
-  // 점프 패드: 바닥에서 밟으면 매우 높이 튀어 오른다(마비·감전 중에도 튕겨 오른다)
-  const pad = onGround && p.alive && !p.dash && !p.plane && ground <= 0.5 ? padAt(match, p.x, p.y) : null;
+  // 점프 패드: 바닥(패드가 놓인 높이)에서 밟으면 매우 높이 튀어 오른다(마비·감전 중에도 튕겨 오른다)
+  const pad = onGround && p.alive && !p.dash && !p.plane ? padAt(match, p.x, p.y, ground) : null;
   if (pad) {
     p.vz = pad.power ?? PAD.power;
-    events.push({ type: 'pad', playerId: p.id, x: pad.x, y: pad.y });
+    p.jumpHold = 0;
+    events.push({ type: 'pad', playerId: p.id, x: pad.x, y: pad.y, h: pad.h ?? 0 });
   } else if (jump && onGround && p.alive && !p.dash && !p.plane) {
     p.vz = JUMP.jump;
+    p.jumpHold = JUMP.holdTime; // 이만큼 더 누르고 있을 수 있다
+    p.jumpCharge = 0;
     events.push({ type: 'jump', playerId: p.id });
+  }
+  // 누르고 있는 동안(올라가는 중) 더 밀어 올린다. 한 번 떼면 그 점프에서는 다시 모으지 못한다
+  if ((p.jumpHold ?? 0) > 0) {
+    if (held && p.vz > 0 && p.alive) {
+      const t = Math.min(dt, p.jumpHold);
+      p.vz += JUMP.holdAccel * t;
+      p.jumpHold -= t;
+      p.jumpCharge = Math.min(1, (p.jumpCharge ?? 0) + t / JUMP.holdTime);
+    } else {
+      p.jumpHold = 0;
+    }
   }
   if (p.z > ground || p.vz > 0) {
     p.vz -= JUMP.gravity * dt;
     p.z += p.vz * dt;
+    // 천장: 머리(눈높이 조금 위)가 닿으면 더 오르지 못한다
+    const roof = Number.isFinite(match.ceiling) ? match.ceiling - 190 : Infinity;
+    if (p.z > roof) { p.z = roof; p.vz = Math.min(0, p.vz); p.jumpHold = 0; }
     if (p.z <= ground) {
       if (p.vz < -200) events.push({ type: 'jump-land', playerId: p.id, x: p.x, y: p.y });
-      p.z = ground; p.vz = 0;
+      p.z = ground; p.vz = 0; p.jumpCharge = 0; p.jumpHold = 0;
     }
   } else {
-    p.z = ground; p.vz = 0;
+    p.z = ground; p.vz = 0; p.jumpCharge = 0;
   }
 }
 
@@ -864,6 +904,8 @@ export function step(match, inputs, dt = TICK) {
     updateResources(p, weapon.heat && input.aiming, dt);
     updateReload(p, weapon, dt, events);
     p.aim = input.aim;
+    // 위아래 시선(사람 플레이어). 쏘는 탄도 이 각도로 날아간다
+    p.pitch = clampPitch(input.pitch ?? 0);
     // 감전(에너지 RPG): 움직이지도 쏘지도 못한다(고개만 돌림). 마비(전기 장판): 움직이지 못한다(쏠 수는 있음)
     p.shock = Math.max(0, (p.shock ?? 0) - dt);
     p.freeze = Math.max(0, (p.freeze ?? 0) - dt);
@@ -886,7 +928,7 @@ export function step(match, inputs, dt = TICK) {
     if (stuck) p.evade = null;
     if (p.evade) updateEvade(match, p, dt);
     else if (!p.rooted && !stuck) move(match, p, input.moveAxis, input.moveY ?? 0, dt);
-    updateJump(match, p, input.jump && !p.rooted && !stuck, dt, events);
+    updateJump(match, p, input.jump && !p.rooted && !stuck, dt, events, !!(input.jumpHeld || input.touchJump) && !stuck);
     input.jump = false;
     if (shocked(p)) {
       // 감전: 아이템·사격·점사 모두 멈춘다. 손을 떼면 쏘는 무기가 풀리자마자 나가지 않게 조준도 풀린 것으로 둔다
@@ -927,35 +969,52 @@ export function step(match, inputs, dt = TICK) {
 
   const removed = new Set();
   const contacts = [];
+  const sky = match.story?.stage === 'sky';
   for (const b of match.projectiles) {
-    b.previousX = b.x; b.previousY = b.y;
+    b.previousX = b.x; b.previousY = b.y; b.previousZ = b.z ?? 0;
     if (b.homing) steer(match, b, b.homing.turnRate, dt);
     b.x += b.vx * dt; b.y += b.vy * dt;
-    if (b.vz) b.z = Math.max(0, (b.z ?? 0) + b.vz * dt);
+    if (b.vz) b.z = (b.z ?? 0) + b.vz * dt;
     b.life -= dt;
     let earliest = null;
     if (b.thrown) continue; // 던진 무기는 날아가는 동안 아무것에도 닿지 않는다
-    const coverHit = b.overCovers || (b.z ?? 0) > JUMP.coverClear ? null : coverContact(match, b);
-    if (coverHit) earliest = { t: coverHit.t, projectile: b, victim: null, cover: coverHit.cover };
+    // 구조물(건물·고지대·다리·오르막길)·바닥·천장: 어떤 구조물도 뚫지 못한다(전투기 미사일처럼 하늘에서 내리꽂는 것은 빼고)
+    if (!b.overCovers) {
+      const z0 = b.previousZ, z1 = b.z ?? 0;
+      const wall = structureHit(match, b.previousX, b.previousY, z0 + SHOT_HEIGHT, b.x, b.y, z1 + SHOT_HEIGHT, { floor: !sky });
+      if (wall) earliest = { t: wall.t, projectile: b, victim: null, cover: null, wall };
+    }
+    const coverHit = b.overCovers ? null : coverContact(match, b);
+    if (coverHit && (!earliest || coverHit.t < earliest.t)) earliest = { t: coverHit.t, projectile: b, victim: null, cover: coverHit.cover };
     // 전투기는 하늘 높이 날기 때문에 탄환은 그 밑으로 지나간다(막지 않음).
     for (const p of match.players) {
       // 단검 돌진 중(무적)인 플레이어는 탄이 그냥 지나간다
       if (!p.alive || p.team === b.team || invulnerable(p)) continue;
-      // 높이 차이: 탄보다 너무 높이 뛰었거나(점프로 피함) 너무 아래면 지나간다
-      const dz = (p.z ?? 0) - (b.z ?? 0);
-      if (b.z !== undefined && (dz > JUMP.hitAbove || dz < -JUMP.hitBelow)) continue;
       const t = segmentCircleTime(
         b.previousX - p.previousX, b.previousY - (p.previousY ?? p.y), b.x - p.x, b.y - p.y, p.radius + BULLET_RADIUS);
-      if (t !== null && (earliest === null || t < earliest.t)) earliest = { t, projectile: b, victim: p };
+      if (t === null || (earliest !== null && t >= earliest.t)) continue;
+      // 높이 차이(닿는 순간 탄 높이 기준): 탄보다 너무 높이 뛰었거나(점프로 피함) 너무 아래면 지나간다
+      if (b.z !== undefined) {
+        const dz = (p.z ?? 0) - (b.previousZ + ((b.z ?? 0) - b.previousZ) * t);
+        if (dz > JUMP.hitAbove || dz < -JUMP.hitBelow) continue;
+      }
+      earliest = { t, projectile: b, victim: p };
     }
     if (earliest) contacts.push(earliest);
   }
   contacts.sort((a, b) => a.t - b.t || a.projectile.id - b.projectile.id);
 
   // 같은 틱에 먼저 맞은 탄으로 엄폐물이 부서져도, 이미 그 엄폐물에 닿은 나머지 탄은 막힌 것으로 처리한다.
-  for (const { t, projectile: b, victim, cover } of contacts) {
+  for (const { t, projectile: b, victim, cover, wall } of contacts) {
     const x = b.previousX + (b.x - b.previousX) * t;
     const y = b.previousY + (b.y - b.previousY) * t;
+    const z = b.previousZ + ((b.z ?? 0) - b.previousZ) * t;
+    // 튕기는 탄(에너지 돌격소총)이 구조물·바닥에 닿으면 그 면에서 반사돼 계속 날아간다
+    if (wall && b.bounces > 0) {
+      bounceOffWall(b, wall.axis, x, y, z);
+      events.push({ type: 'bounce', x, y, h: z + SHOT_HEIGHT, weapon: b.weapon });
+      continue;
+    }
     // 튕기는 탄(에너지 돌격소총)이 엄폐물에 닿으면: 엄폐물을 깎고 닿은 면에서 반사돼 계속 날아간다
     if (!victim && cover && b.bounces > 0) {
       damageCover(match, cover, coverDamage(b), b, events);
@@ -964,8 +1023,9 @@ export function step(match, inputs, dt = TICK) {
       continue;
     }
     removed.add(b);
+    if (b.z !== undefined) b.z = z;
     if (victim) damage(match, victim, b.damage, b, events);
-    else events.push({ type: 'block', x, y });
+    else events.push({ type: 'block', x, y, ...(b.z !== undefined ? { h: z + SHOT_HEIGHT } : {}) });
     if (cover) damageCover(match, cover, coverDamage(b), b, events);
     if (b.splash) explode(match, b, x, y, victim, cover, events);
   }

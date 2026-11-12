@@ -301,6 +301,8 @@ export function makeChute(height = 180) {
  */
 export function makeHigh(g) {
   if (g.kind === 'container') return makeContainer(g);
+  if (g.kind === 'tower' || g.kind === 'block' || g.kind === 'pylon') return makeBuilding(g);
+  if (g.kind === 'trailer' || g.kind === 'bus') return makeVehicleBlock(g);
   if (g.bridge) return makeBridgeDeck(g);
   if (g.ramp) return makeRamp(g);
   if (g.kind === 'fortress') return makeFortress(g);
@@ -516,5 +518,152 @@ export function makeJumpPad(r = 70) {
     arrows.push(a);
   }
   out.userData = { glow, arrows, r };
+  return out;
+}
+
+/* ───────── 거대한 경기장의 건축물(maps.js) ─────────
+ * 창문·패널은 메시 대신 반복 텍스처로 그려(건물마다 메시 10여 개) 수십 채를 늘어놓아도 가볍다.
+ */
+const facades = new Map();
+/** 겉면 무늬 텍스처(한 칸): 'tower' 밤 빌딩 창문, 'block' 본부 홀 철판 패널, 'pylon' 대교 주탑 콘크리트, 'trailer'·'bus' 차체 */
+function facadeTexture(style) {
+  if (facades.has(style)) return facades.get(style);
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  const rnd = (() => { let a = style.length * 977; return () => ((a = (a * 16807) % 2147483647) / 2147483647); })();
+  if (style === 'tower') {
+    g.fillStyle = '#1E2433'; g.fillRect(0, 0, 128, 128);
+    for (let y = 8; y < 128; y += 32) for (let x = 6; x < 128; x += 30) {
+      const lit = rnd() < 0.42;
+      g.fillStyle = lit ? (rnd() < 0.5 ? '#FFD98A' : '#FFF1C8') : '#2E3A52';
+      g.fillRect(x, y, 20, 18);
+    }
+    g.fillStyle = '#3A4252'; g.fillRect(0, 0, 128, 3);
+  } else if (style === 'block') {
+    g.fillStyle = '#6A707C'; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#5A606B'; g.fillRect(0, 0, 62, 128); g.fillRect(66, 64, 62, 64);
+    g.strokeStyle = '#3A3F48'; g.lineWidth = 3; g.strokeRect(2, 2, 124, 124);
+    for (let i = 0; i < 8; i++) { g.fillStyle = '#2A2E35'; g.fillRect(10 + (i % 4) * 28, 12 + Math.floor(i / 4) * 64, 4, 4); }
+    g.fillStyle = '#7FE7FF'; g.fillRect(90, 20, 22, 6);
+  } else if (style === 'pylon') {
+    g.fillStyle = '#7A3A2A'; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#6A3022'; g.fillRect(0, 56, 128, 16);
+    for (let i = 0; i < 40; i++) { g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(rnd() * 128, rnd() * 128, 4, 4); }
+    g.fillStyle = 'rgba(244,247,251,0.7)'; g.fillRect(0, 54, 128, 3);
+  } else if (style === 'trailer') {
+    g.fillStyle = '#C9CED6'; g.fillRect(0, 0, 128, 128);
+    for (let x = 0; x < 128; x += 16) { g.fillStyle = '#AEB4BE'; g.fillRect(x, 0, 4, 128); }
+    g.fillStyle = '#D9443A'; g.fillRect(0, 100, 128, 10);
+  } else {
+    g.fillStyle = '#E0A22A'; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#26303E'; for (let x = 6; x < 128; x += 32) g.fillRect(x, 20, 26, 40);
+    g.fillStyle = '#1A1C20'; g.fillRect(0, 96, 128, 6);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  facades.set(style, t);
+  return t;
+}
+/** 겉면 재질: 텍스처를 u×v번 반복(밤 빌딩 창문은 스스로 빛난다) */
+function facadeMat(style, u, v, tint = '#FFFFFF') {
+  const t = facadeTexture(style).clone();
+  t.needsUpdate = true;
+  t.repeat.set(Math.max(1, Math.round(u)), Math.max(1, Math.round(v)));
+  const glow = style === 'tower';
+  return new THREE.MeshStandardMaterial({
+    map: t, color: tint, roughness: style === 'tower' ? 0.5 : 0.85, metalness: style === 'tower' ? 0.3 : 0.15,
+    ...(glow ? { emissive: '#FFFFFF', emissiveMap: t, emissiveIntensity: 0.55 } : {}),
+  });
+}
+/** 윗면 가장자리 노랑 띠(네 변, 얇은 상자 넷) */
+function rimStripes(out, w, d, H, color = '#FFC53D') {
+  const m = mat(color, { rough: 0.6, emissive: '#3A2A00' });
+  out.add(at(box(w + 6, 5, 6, m), 0, H + 1, d / 2));
+  out.add(at(box(w + 6, 5, 6, m), 0, H + 1, -d / 2));
+  out.add(at(box(6, 5, d + 6, m), w / 2, H + 1, 0));
+  out.add(at(box(6, 5, d + 6, m), -w / 2, H + 1, 0));
+}
+
+/**
+ * 건물·구조물(고지대): 'tower' 밤 빌딩(창문 불빛·옥상 환풍기·경고등·안테나), 'block' 본부 홀의 철판 구조물(위 띠·푸른 표시등),
+ * 'pylon' 대교 주탑(붉은 콘크리트·눈 덮인 꼭대기·항공 경고등). g.core: 천장까지 닿는 벽 기둥(장식 없이).
+ */
+export function makeBuilding(g) {
+  const out = new THREE.Group();
+  const H = g.height, style = g.kind;
+  const per = style === 'tower' ? 120 : style === 'pylon' ? 200 : 160;
+  const front = facadeMat(style, g.w / per, H / per), side = facadeMat(style, g.h / per, H / per);
+  const top = mat(style === 'pylon' ? '#F4F7FB' : style === 'block' ? '#7C858F' : '#5A5F68', { metal: 0.4, rough: 0.7 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(g.w, H, g.h), [side, side, top, top, front, front]);
+  body.position.y = H / 2;
+  out.add(body);
+  if (g.core) return out;
+  rimStripes(out, g.w, g.h, H, style === 'pylon' ? '#F4F7FB' : '#FFC53D');
+  const lamp = mat('#FF3B30', { emissive: '#FF2A1A' });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) out.add(at(sphere(9, lamp, 8, 6), sx * (g.w / 2 - 10), H + 14, sz * (g.h / 2 - 10)));
+  if (style === 'tower') {
+    // 옥상 환풍기·물탱크·안테나
+    out.add(at(box(Math.min(120, g.w * 0.25), 50, Math.min(90, g.h * 0.25), mat('#7A828E', { metal: 0.6, rough: 0.4 })), -g.w * 0.22, H + 25, g.h * 0.2));
+    out.add(at(cyl(40, 40, 90, mat('#A9B0BC', { metal: 0.5 }), 14), g.w * 0.24, H + 45, -g.h * 0.2));
+    out.add(at(cyl(3, 5, 220, mat('#C9CED6', { metal: 0.8 }), 6), g.w * 0.3, H + 110, g.h * 0.3));
+    out.add(at(sphere(7, lamp, 8, 6), g.w * 0.3, H + 222, g.h * 0.3));
+  } else if (style === 'block') {
+    // 위 노랑·검정 띠와 푸른 표시등 줄
+    const glow = mat('#7FE7FF', { emissive: '#2AB8E0' });
+    out.add(at(box(g.w + 2, 6, 4, glow), 0, H - 30, g.h / 2 + 1));
+    out.add(at(box(g.w + 2, 6, 4, glow), 0, H - 30, -g.h / 2 - 1));
+  } else if (style === 'pylon') {
+    // 눈 덮인 꼭대기 테두리와 항공 경고등 기둥
+    out.add(at(box(g.w + 20, 20, g.h + 20, mat('#6A3022', { rough: 0.8 })), 0, H - 60, 0));
+    out.add(at(cyl(6, 8, 160, mat('#3A3F4D'), 8), 0, H + 80, 0));
+    out.add(at(sphere(16, lamp, 10, 8), 0, H + 168, 0));
+  }
+  return out;
+}
+
+/** 도로의 대형 트레일러('trailer')·대교에 멈춘 버스('bus'): 바닥 차대·바퀴 위 상자 차체(위에 설 수 있음) */
+export function makeVehicleBlock(g) {
+  const out = new THREE.Group();
+  const H = g.height, chassis = Math.min(40, H * 0.25);
+  const long = g.w >= g.h, L = long ? g.w : g.h, W = long ? g.h : g.w;
+  const inner = new THREE.Group();
+  const style = g.kind;
+  const sideMat = facadeMat(style, L / 128, 1, style === 'trailer' ? g.color ?? '#FFFFFF' : g.color ?? '#FFFFFF');
+  const end = mat(style === 'bus' ? '#26303E' : '#AEB4BE', { metal: 0.4, rough: 0.6 });
+  const roof = mat(style === 'bus' ? '#C9CED6' : '#9AA3B1', { metal: 0.4, rough: 0.6 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(L, H - chassis, W), [end, end, roof, roof, sideMat, sideMat]);
+  body.position.y = chassis + (H - chassis) / 2;
+  inner.add(body);
+  inner.add(at(box(L * 0.96, chassis, W * 0.7, mat('#1A1C20', { metal: 0.5, rough: 0.6 })), 0, chassis / 2, 0));
+  const tire = mat('#141518', { rough: 0.9 });
+  for (let i = 0; i < 3; i++) {
+    const x = -L / 2 + L * (0.15 + i * 0.35);
+    for (const s of [-1, 1]) {
+      const w = cyl(chassis * 0.8, chassis * 0.8, 14, tire, 12);
+      w.rotation.x = Math.PI / 2;
+      inner.add(at(w, x, chassis * 0.8, s * (W / 2 - 8)));
+    }
+  }
+  rimStripes(inner, L, W, H, style === 'bus' ? '#FFFFFF' : '#FFC53D');
+  if (!long) inner.rotation.y = Math.PI / 2;
+  out.add(inner);
+  return out;
+}
+
+/** 하늘의 방공 기구(엄폐물): 은빛 기구와 지느러미, 아래로 늘어진 줄. c는 엄폐물({ w, h }) */
+export function makeBalloon(c) {
+  const out = new THREE.Group();
+  const r = Math.max(c.w, c.h) / 2;
+  const skin = mat('#B8C0CC', { metal: 0.5, rough: 0.35 });
+  const body = sphere(r, skin, 18, 12);
+  body.scale.set(1.5, 0.8, 0.8);
+  body.position.y = 70;
+  out.add(body);
+  for (const [y, z] of [[r * 0.6, 0], [0, r * 0.6], [0, -r * 0.6]]) out.add(at(box(r * 0.6, y ? r * 0.5 : 6, z ? r * 0.5 : 6, skin), -r * 1.3, 70 + y, z));
+  out.add(at(cyl(1.5, 1.5, 900, mat('#46505F'), 4), 0, 70 - 450, 0));
+  out.add(at(sphere(8, mat('#FF3B30', { emissive: '#FF2A1A' }), 8, 6), r * 1.4, 70, 0));
+  out.userData.block = body;
   return out;
 }

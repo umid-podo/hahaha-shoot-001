@@ -1,3 +1,5 @@
+import { PITCH } from '../game/config.js';
+
 /**
  * 1인칭 시점 조작을 경기 입력으로 바꾼다. 사람 플레이어의 입력 프레임에는 키보드·컨트롤러·터치가 넣은
  * 앞뒤(fwd, +앞)·옆걸음(side, +오른쪽)·고개 돌리기(turn, +오른쪽) 값과 마우스로 돌린 각도(mouseTurn, 라디안)가 있다.
@@ -6,8 +8,10 @@
  */
 export const TURN_SPEED = (150 * Math.PI) / 180; // 키·스틱을 끝까지 밀었을 때 초당 도는 각도
 export const MOUSE_SENSITIVITY = 0.0026;         // 마우스 1px당 도는 각도(라디안)
+export const LOOK_SPEED = (110 * Math.PI) / 180; // 키·스틱으로 고개를 드는(숙이는) 초당 각도
 
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+const clampPitch = (a) => Math.max(-PITCH.max, Math.min(PITCH.max, a));
 
 /** 각도를 (-π, π]로 */
 export const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -28,6 +32,10 @@ export function applyView(inputs, players, dt, { drive = false } = {}) {
     const turn = clamp1(frame.turn + (frame.touchTurn ?? 0));
     frame.aim = wrapAngle(frame.aim + turn * TURN_SPEED * dt + (frame.mouseTurn ?? 0));
     frame.mouseTurn = 0;
+    // 위아래 시선: 키(look)·스틱(touchLook)·마우스(mousePitch). 위·아래 끝(PITCH.max)까지
+    const look = clamp1((frame.look ?? 0) + (frame.touchLook ?? 0));
+    frame.pitch = clampPitch((frame.pitch ?? 0) + look * LOOK_SPEED * dt + (frame.mousePitch ?? 0));
+    frame.mousePitch = 0;
     const fwd = clamp1(frame.fwd + (frame.touchFwd ?? 0));
     const side = clamp1(frame.side + (frame.touchSide ?? 0));
     if (drive) {
@@ -41,7 +49,7 @@ export function applyView(inputs, players, dt, { drive = false } = {}) {
 
 /**
  * 마우스로 P1(사람 플레이어 첫째)의 고개를 돌리고 쏜다. 게임 화면을 누르면 마우스 포인터를 잠그고(Esc로 풀림),
- * 잠긴 동안 좌우로 움직이면 고개를 돌리고 왼쪽 버튼 발사, 오른쪽 버튼 수류탄, 휠 무기 전환, 휠 클릭 회피.
+ * 잠긴 동안 좌우로 움직이면 고개를 돌리고(위아래로 움직이면 고개를 들고 숙이고) 왼쪽 버튼 발사, 오른쪽 버튼 수류탄, 휠 무기 전환, 휠 클릭 회피.
  * getFrame()은 경기 중이면 P1 입력 프레임, 아니면 null. 터치로 누른 것은 포인터를 잠그지 않는다.
  */
 export function attachMouse(element, getFrame) {
@@ -65,7 +73,10 @@ export function attachMouse(element, getFrame) {
   element.addEventListener('contextmenu', (e) => e.preventDefault());
   window.addEventListener('mousemove', (e) => {
     const frame = locked() && getFrame();
-    if (frame) frame.mouseTurn = (frame.mouseTurn ?? 0) + e.movementX * MOUSE_SENSITIVITY;
+    if (!frame) return;
+    frame.mouseTurn = (frame.mouseTurn ?? 0) + e.movementX * MOUSE_SENSITIVITY;
+    // 마우스를 위로 올리면 고개를 든다
+    frame.mousePitch = (frame.mousePitch ?? 0) - e.movementY * MOUSE_SENSITIVITY;
   });
   element.addEventListener('wheel', (e) => {
     const frame = locked() && getFrame();
