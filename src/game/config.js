@@ -11,16 +11,21 @@ export const ZONE = { isb: { minY: 50, maxY: 430 }, earth: { minY: 570, maxY: 95
 export const MIN_Y = 50;
 export const MAX_Y = 950;
 /**
- * 점프·고지대. jump: 뛰어오르는 첫 속도(초당), gravity: 중력(초당²) → 최고 높이 jump²/(2·gravity) ≈ 120.
+ * 점프·고지대. jump: 뛰어오르는 첫 속도(초당), gravity: 중력(초당²) → 최고 높이 jump²/(2·gravity) ≈ 80.
  * 높이(z)는 발바닥 높이. 엄폐물(높이 COVER_HEIGHT)은 그보다 높이 떠 있으면 넘어가고, 고지대는 그 높이 가까이 뛰어올라야 올라선다(step 이하 턱은 그냥 걸어 오름).
  * 탄은 쏜 사람 발 높이(z)에서 날아가, 높이 차이가 hitBelow~hitAbove 안인 사람만 맞힌다(점프로 낮은 탄을 피할 수 있음).
  * 쏜 자리가 coverClear보다 높으면(고지대·점프 중) 엄폐물 위로 넘어간다.
  */
+/**
+ * 점프 높이 줄임: 예전(살짝 ≈120, 꾹 ≈900)의 1/1.5. 속도·중력·밀어 올리는 힘을 모두 같은 비율로 줄여
+ * 뛰는 시간(체공 시간)은 그대로이고 높이만 1/1.5(살짝 ≈80, 꾹 ≈600)가 된다.
+ */
+export const JUMP_SCALE = 1 / 1.5;
 export const JUMP = {
-  jump: 620, gravity: 1600, step: 18, hitBelow: 100, hitAbove: 110, coverClear: 40,
-  // 점프키를 누르고 있는 동안(최대 holdTime초) 위로 holdAccel(초당²)만큼 더 밀어 올린다 → 살짝 누르면 원래 높이(≈120),
-  // 끝까지 꾹 누르면 ≈900까지 뛰어오른다. 공중에서는 모은 만큼(0~1) 걷는 속도가 최대 (1 + airBoost)배라 훨씬 멀리 날아간다.
-  holdTime: 0.45, holdAccel: 3000, airBoost: 0.6,
+  jump: 620 * JUMP_SCALE, gravity: 1600 * JUMP_SCALE, step: 18, hitBelow: 100, hitAbove: 110, coverClear: 40,
+  // 점프키를 누르고 있는 동안(최대 holdTime초) 위로 holdAccel(초당²)만큼 더 밀어 올린다 → 살짝 누르면 ≈80,
+  // 끝까지 꾹 누르면 ≈600까지 뛰어오른다. 공중에서는 모은 만큼(0~1) 걷는 속도가 최대 (1 + airBoost)배라 훨씬 멀리 날아간다.
+  holdTime: 0.45, holdAccel: 3000 * JUMP_SCALE, airBoost: 0.6,
 };
 /** 위아래 시선(1인칭): 고개를 들고 숙일 수 있는 최대 각도(라디안, 약 80°). 쏜 탄도 그 각도로 날아간다 */
 export const PITCH = { max: 1.4 };
@@ -31,7 +36,7 @@ export const COVER_HEIGHT = 84;
  * 회피(빠른 돌진): 누른 순간 움직이던 쪽(안 움직이면 앞)으로 time초 동안 초당 speed만큼 돌진한다. 돌진하는 동안 받는 피해는 taken배(30% 덜 받음).
  * charges번 연달아 돌진할 수 있고, 마지막 돌진이 끝나고 cooldown초가 지나면 다시 charges번으로 채워진다.
  */
-export const EVADE = { speed: 6000, time: 0.18, charges: 2, cooldown: 0.5, taken: 0.7 };
+export const EVADE = { speed: 4000, time: 0.18, charges: 2, cooldown: 0.5, taken: 0.7 };
 /**
  * 넓은 맵(2인 대결·자유 대전): 원래 옥상 경기장(1600×1000)을 가운데에 두고 사방으로 크게 넓힌 건물 옥상(5000×4000, 원래의 12.5배).
  * 시작 자리는 원래대로 가운데 근처이고, 둘레로 엄폐물·고지대·컨테이너·계단식 탑이 흩어져 있다. 스토리 모드는 원래 크기.
@@ -133,8 +138,8 @@ export const MIN_X = 80;
 export const MAX_X = 1520;
 /** 원래 크기 경기장의 이동 범위(스토리 모드·건 카타 수련장) */
 export const ARENA_BOUNDS = { minX: MIN_X, maxX: MAX_X, minY: MIN_Y, maxY: MAX_Y };
-/** 이동 속도 배율: 플레이어·요원 모두 원래(초당 300)의 4배 */
-export const SPEED_SCALE = 4;
+/** 이동 속도 배율: 플레이어·요원 모두 원래(초당 300)의 4배였던 것을 1.5배 줄여 4/1.5배(초당 800) */
+export const SPEED_SCALE = 4 / 1.5;
 export const MAX_SPEED = 300 * SPEED_SCALE;
 export const BODY_RADIUS = 30;
 export const SPRITE_SIZE = 128;

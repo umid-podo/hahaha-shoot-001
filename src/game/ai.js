@@ -41,6 +41,8 @@ export const DIFFICULTY_IDS = Object.keys(DIFFICULTY);
 const DODGE_HORIZON = 1.6;
 const DODGE_MARGIN = 14;
 const BLOCKED_PATIENCE = 1.5;
+// 탄을 뛰어넘어 피할 때 점프키를 누르고 있는 시간(이만큼이면 탄 높이 차 hitAbove를 넘게 뛴다)
+const AI_DODGE_HOLD = 0.2;
 
 export function createAI(playerId, difficulty = 'normal', seed = Date.now()) {
   const rng = createRng(seed);
@@ -251,9 +253,11 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   const soon = list.filter((th) => th.t < 0.35 && !th.splash);
   for (const th of soon) {
     if (!ai.jumpDecisions.has(th.key)) ai.jumpDecisions.set(th.key, ai.rng() < (ai.diff.jump ?? 0));
-    if (ai.jumpDecisions.get(th.key)) frame.jump = true;
+    // 점프로 피할 때는 탄 위로 넘어갈 만큼(살짝 뛰면 낮으니) 잠깐 꾹 눌러 높이 뛴다
+    if (ai.jumpDecisions.get(th.key)) { frame.jump = true; ai.holdJump = Math.max(ai.holdJump ?? 0, AI_DODGE_HOLD); }
   }
   if (ai.jumpDecisions.size > 200) ai.jumpDecisions.clear();
+  frame.jumpHeld = ai.holdJump > 0;
   ai.hopTimer = (ai.hopTimer ?? 3) - dt;
   if (ai.hopTimer <= 0) {
     frame.jump = true;
