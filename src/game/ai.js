@@ -1,4 +1,4 @@
-import { MIN_X, MAX_X, BULLET_RADIUS, TICK, WEAPONS, RULES, ZONE, JUMP, SHOT_HEIGHT } from './config.js';
+import { MIN_X, MAX_X, BULLET_RADIUS, TICK, WEAPONS, RULES, ZONE, JUMP, SHOT_HEIGHT, secondarySlot } from './config.js';
 import { segmentRectTime } from './collision.js';
 import { lineBlocked } from './terrain.js';
 import { createRng, between } from './state.js';
@@ -264,19 +264,42 @@ export function updateAI(ai, match, inputs, dt = TICK) {
     ai.hopTimer = between(ai.rng, ai.diff.hop ?? [3, 6]);
   }
 
-  // 무기 전환: 가끔 주무기 ↔ 보조무기. 기관단총이 과열되거나 단검·샷건이 쿨타임이면 바로 주무기로,
-  // 쿨타임 중인 보조무기로는 바꾸지 않는다.
+  // 무기 전환: 가끔 주무기 ↔ 보조무기(가진 것 중 쓸 수 있는 하나). 기관단총이 과열되거나 든 보조무기가 쿨타임이면 바로 주무기로,
+  // 쿨타임 중인 보조무기로는 바꾸지 않는다. 카타나는 상대가 가까울 때만, 방패는 날아오는 탄이 있을 때 든다.
   ai.swapTimer -= dt;
   if (!me.primaryOnly) {
+    const cooling = (id) => WEAPONS[id]?.ownCooldown && (me.cooldowns[id] ?? 0) > 0;
+    const dist = Math.hypot(target.x - me.x, target.y - me.y);
+    const usable = (id) => !cooling(id) && !WEAPONS[id]?.boost
+      && (id !== 'katana' || dist < WEAPONS.katana.slash.range + 60)
+      && (id !== 'riotshield' || (list.length > 0 && !me.shield));
     const smgHot = me.weapon === 'smg' && (me.overheat > 0 || me.heat > WEAPONS.smg.heat.max * 0.85);
-    const secondaryCooling = WEAPONS[me.secondary].ownCooldown && (me.cooldowns[me.secondary] ?? 0) > 0;
-    if ((smgHot || (me.slot === 'secondary' && secondaryCooling)) && ai.charge === null) {
+    const held = me.slot !== 'primary' ? me.weapon : null;
+    const choices = (me.secondaries ?? [me.secondary]).map((id, i) => ({ id, slot: secondarySlot(i) })).filter((c) => usable(c.id));
+    // 상대가 가까우면 카타나, 탄이 날아오면 방패를 바로 꺼낸다
+    const urgent = choices.find((c) => c.id === 'katana') ?? choices.find((c) => c.id === 'riotshield');
+    if ((smgHot || (held && (cooling(held) || (held === 'katana' && !usable('katana'))))) && ai.charge === null) {
       frame.select = 'primary';
       ai.swapTimer = between(ai.rng, ai.diff.swap);
-    } else if (ai.swapTimer <= 0 && ai.charge === null && !(me.slot === 'primary' && secondaryCooling)) {
-      frame.select = me.slot === 'primary' ? 'secondary' : 'primary';
+    } else if (urgent && held !== urgent.id && ai.charge === null) {
+      frame.select = urgent.slot;
+    } else if (ai.swapTimer <= 0 && ai.charge === null) {
+      const next = me.slot === 'primary' && choices.length ? choices[Math.floor(ai.rng() * choices.length)].slot : 'primary';
+      frame.select = next;
       ai.swapTimer = between(ai.rng, ai.diff.swap);
     }
+  }
+  // 섬광에 눈이 멀었으면 겨누지도 쏘지도 못하고 허둥댄다
+  if ((me.blind ?? 0) > 0) {
+    frame.aim += (ai.rng() - 0.5) * 1.2;
+    frame.aiming = false;
+    ai.charge = null;
+    return;
+  }
+  // 방패: 들었으면 바로 세운다(누르는 무기)
+  if (weapon.shield) {
+    frame.aiming = !me.shield && !((me.cooldowns[weapon.id] ?? 0) > 0);
+    return;
   }
 
   // 수류탄: 쿨타임이 끝나고 난이도별 대기가 지나면 상대 쪽으로 던진다.

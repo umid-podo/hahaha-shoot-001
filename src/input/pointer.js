@@ -114,12 +114,14 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
         return btn;
       };
       const primary = slotBtn('primary', p.primary);
-      const secondary = slotBtn('secondary', p.secondary);
+      // 보조무기 칸마다 버튼(최대 3개)
+      const seconds = (p.secondaries ?? [p.secondary]).map((id, i) => slotBtn(i === 0 ? 'secondary' : `secondary${i + 1}`, id));
+      const secondary = seconds[0];
       const item = actionButton('item-btn', () => { frame.item = true; });
       item.innerHTML = '<small>아이템</small><span></span>';
       item.setAttribute('aria-label', `${p.id} 수류탄 던지기`);
       // 전용 무기 캐릭터는 주무기 하나뿐이고 아이템도 없다
-      secondary.disabled = p.primaryOnly;
+      for (const b of seconds) b.disabled = p.primaryOnly;
       item.disabled = p.primaryOnly;
       const jump = actionButton('jump-btn', () => { frame.jump = true; frame.touchJump = true; });
       // 꾹 누르고 있는 동안 더 높이 뛴다(손을 떼면 그만 모은다)
@@ -130,8 +132,8 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       evade.innerHTML = '<small>회피</small><span></span>';
       evade.setAttribute('aria-label', `${p.id} 회피(빠른 돌진, 2번 연속)`);
       evade.disabled = !!p.plane;
-      actions.append(primary, secondary, item, jump, evade);
-      buttons[p.id] = { primary, secondary, item, jump, evade, slot: null, itemText: null, evadeText: null };
+      actions.append(primary, ...seconds, item, jump, evade);
+      buttons[p.id] = { primary, secondary, seconds, item, jump, evade, slot: null, itemText: null, evadeText: null, secondTexts: [] };
 
       const middle = document.createElement('div');
       middle.className = 'panel-mid';
@@ -176,7 +178,7 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
         if (b.slot !== p.slot) {
           b.slot = p.slot;
           b.primary.setAttribute('aria-pressed', String(p.slot === 'primary'));
-          b.secondary.setAttribute('aria-pressed', String(p.slot === 'secondary'));
+          b.seconds.forEach((btn, i) => btn.setAttribute('aria-pressed', String(p.slot === (i === 0 ? 'secondary' : `secondary${i + 1}`))));
         }
         // 즉사기: 다시 쓸 수 있을 때까지(전투 시작 대기·쏜 뒤 쿨타임) 주무기 버튼에 남은 초
         const primaryWeapon = WEAPONS[p.primary];
@@ -188,16 +190,20 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
           b.primaryText = primaryText;
           b.primary.lastChild.textContent = primaryText;
         }
-        // 단검·샷건: 쿨타임 동안 보조무기 버튼에 남은 초
-        const left = WEAPONS[p.secondary]?.ownCooldown ? p.cooldowns[p.secondary] ?? 0 : 0;
-        // 과냉각(공중전): 켜져 있는 동안은 '과냉각 ON'
-        const secondaryText = p.primaryOnly ? '없음' : p.boost > 0 ? `${WEAPONS[p.secondary].name} ON`
-          : left > 0 ? `${Math.ceil(left)}초` : WEAPONS[p.secondary].name;
-        if (b.secondaryText !== secondaryText) {
-          b.secondaryText = secondaryText;
-          b.secondary.lastChild.textContent = secondaryText;
-          b.secondary.classList.toggle('cooling', left > 0);
-        }
+        // 보조무기 칸마다: 쿨타임 동안 남은 초, 과냉각(공중전)이 켜져 있으면 'ON', 방패를 세웠으면 남은 막을 피해
+        (p.secondaries ?? [p.secondary]).forEach((id, i) => {
+          const btn = b.seconds[i];
+          if (!btn) return;
+          const w = WEAPONS[id];
+          const left = w?.ownCooldown ? p.cooldowns[id] ?? 0 : 0;
+          const text = p.primaryOnly ? '없음' : w?.boost && p.boost > 0 ? `${w.name} ON`
+            : w?.shield && p.shield ? `방패 ${Math.ceil(p.shield.hp)}` : left > 0 ? `${Math.ceil(left)}초` : w?.name ?? '';
+          if (b.secondTexts[i] !== text) {
+            b.secondTexts[i] = text;
+            btn.lastChild.textContent = text;
+            btn.classList.toggle('cooling', left > 0);
+          }
+        });
         // 회피: 남은 횟수를 점으로(●●), 다 쓰면 다시 채워질 때까지 회색
         const charges = p.evadeCharges ?? EVADE.charges;
         const evadeText = '●'.repeat(charges) + '○'.repeat(Math.max(0, EVADE.charges - charges));

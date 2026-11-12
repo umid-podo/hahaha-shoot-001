@@ -3217,12 +3217,20 @@ export function createRenderer(canvas, wrap, assets) {
     ctx.font = '15px system-ui, sans-serif';
     ctx.fillStyle = '#C9CED6';
     const item = WEAPONS[p.item ?? 'grenade'];
-    const second = p.primaryOnly ? '전용 무기' : `다른 칸 ${WEAPONS[p.slot === 'primary' ? p.secondary : p.primary].name}`
+    // 다른 칸: 주무기·보조무기(최대 3개) 중 지금 들지 않은 것(쿨타임이면 남은 초)
+    const others = [p.primary, ...(p.secondaries ?? [p.secondary])].filter((id) => id !== p.weapon).map((id) => {
+      const cool = WEAPONS[id]?.ownCooldown ? p.cooldowns[id] ?? 0 : 0;
+      return cool > 0 ? `${WEAPONS[id].name} ${Math.ceil(cool)}초` : WEAPONS[id]?.name;
+    });
+    const second = p.primaryOnly ? '전용 무기' : `다른 칸 ${others.join(' · ')}`
       + ` · ${p.grenadeCooldown > 0 ? `${item.name} ${Math.ceil(p.grenadeCooldown)}초` : `${item.name} 준비`}`;
-    ctx.fillText(second, wx + 14, wy + 46);
+    ctx.save();
+    ctx.font = others.length > 2 ? '13px system-ui, sans-serif' : ctx.font;
+    ctx.fillText(second, wx + 14, wy + 46, 272);
+    ctx.restore();
     if (!drawGauge(p, wx + 14, wy + 64, 272)) {
-      const cool = WEAPONS[p.secondary]?.ownCooldown ? p.cooldowns[p.secondary] ?? 0 : 0;
-      if (cool > 0) bar(wx + 14, wy + 64, 272, 1 - cool / WEAPONS[p.secondary].interval, '#8E6BD6');
+      const cool = WEAPONS[p.weapon]?.ownCooldown ? p.cooldowns[p.weapon] ?? 0 : 0;
+      if (cool > 0) bar(wx + 14, wy + 64, 272, 1 - cool / WEAPONS[p.weapon].interval, '#8E6BD6');
     }  }
 
   /** 감전(에너지 RPG)·마비(전기 장판) 중이면 화면 테두리를 푸르게 하고 가운데 아래에 남은 초를 띄운다 */
@@ -3302,6 +3310,49 @@ export function createRenderer(canvas, wrap, assets) {
     drawRadar(match, p, rect);
     scaled(rect.x, rect.y + rect.h, Math.max(1, Math.min(uiScale, 1.3, rect.w / 560)), () => drawStatus(p, rect));
     drawStunned(p, rect);
+    drawShieldHud(p, rect);
+    drawBlind(p, rect);
+    ctx.restore();
+  }
+
+  /** 폭동 진압 방패를 세웠으면: 화면 아래쪽에 투명한 방패 테두리와 남은 막을 피해·시간 */
+  function drawShieldHud(p, rect) {
+    if (!p.alive || !p.shield) return;
+    const sh = p.shield;
+    const w = rect.w * 0.5, h = rect.h * 0.3, x = rect.x + rect.w / 2 - w / 2, y = rect.y + rect.h - h - 8;
+    ctx.save();
+    // 방패를 손에 들고 있지 않으면(다른 무기로 바꿈) 3D 방패 대신 화면 아래에 방패 테두리를 그린다
+    if (p.weapon !== 'riotshield') {
+      ctx.fillStyle = 'rgba(184,210,234,0.14)';
+      ctx.strokeStyle = 'rgba(20,24,30,0.85)';
+      ctx.lineWidth = 10;
+      ctx.beginPath(); ctx.roundRect(x, y, w, h + 40, 18); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(232,236,242,0.5)';
+      ctx.fillRect(x + 20, y + 26, w - 40, 10);
+    }
+    const k = Math.max(0, sh.hp / (sh.max ?? WEAPONS.riotshield.shield.hp));
+    ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 4;
+    const text = `🛡 방패 ${Math.ceil(sh.hp)} · ${Math.ceil(sh.t)}초`;
+    ctx.strokeText(text, rect.x + rect.w / 2, y - 18);
+    ctx.fillText(text, rect.x + rect.w / 2, y - 18);
+    bar(rect.x + rect.w / 2 - 120, y - 4, 240, k, '#9FD8FF');
+    ctx.restore();
+  }
+
+  /** 섬광에 눈이 멀었으면: 화면이 하얗게 바랬다가 서서히 돌아온다 */
+  function drawBlind(p, rect) {
+    const t = p.blind ?? 0;
+    if (t <= 0 || !p.alive) return;
+    ctx.save();
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(0.97, t / 1.2)})`;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.font = 'bold 26px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = `rgba(60,60,70,${Math.min(1, t)})`;
+    ctx.fillText(`💥 섬광! 눈이 부심 ${t.toFixed(1)}초`, rect.x + rect.w / 2, rect.y + rect.h * 0.62);
     ctx.restore();
   }
 

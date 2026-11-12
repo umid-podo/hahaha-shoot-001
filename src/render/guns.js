@@ -840,6 +840,71 @@ function flamethrowerModel() {
 }
 
 /** 무기 id → 손에 든 모습. hands: 오른손(주) + 왼손(받침) 구성 */
+
+/** 카타나: 길고 살짝 휜 칼날(+X), 둥근 날밑(츠바), 검은 끈을 감은 긴 손잡이 */
+function katanaModel() {
+  const g = new THREE.Group();
+  const blade = mat('#DDE2E8', { metal: 1, rough: 0.12 });
+  // 칼날: 위로 살짝 휜 옆모습(등 쪽이 위)
+  const pts = [];
+  for (let i = 0; i <= 12; i++) { const x = 1.2 + (i / 12) * 46; pts.push([x, 0.04 * ((x - 1.2) / 46) ** 2 * 46 - 0.6]); }
+  const top = pts.map(([x, y]) => [x, y + 1.9 - (x > 42 ? (x - 42) * 0.3 : 0)]);
+  g.add(slab([...pts, [48.5, 1.2], ...top.reverse()], 0.45, blade, { bevel: 0.08 }));
+  g.add(box(44, 0.25, 0.5, mat('#9AA1AA', { metal: 1, rough: 0.2 }), 24, 0.2)); // 칼날 무늬(하몬) 줄
+  const guard = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 0.8, 18), mat('#2A2420', { metal: 0.7, rough: 0.4 }));
+  guard.rotation.z = Math.PI / 2;
+  guard.position.set(0.6, 0.6, 0);
+  g.add(guard);
+  g.add(tube(1.1, 1.1, -12, 0, mat('#151417', { rough: 0.9 }), { y: 0.6 }));
+  for (let x = -11; x < -0.5; x += 1.6) g.add(box(0.6, 2.4, 2.4, mat('#3A2A55', { rough: 0.8 }), x, 0.6).rotateX(0.7));
+  g.userData = { muzzle: [48, 1, 0], grip: { x: -5.5, y: 0.6, tilt: Math.PI / 2, w: 2.2, d: 2.6 } };
+  return g;
+}
+
+/** 폭동 진압 방패: 검은 테두리의 커다란 투명 방패(가운데 보는 창), 안쪽 손잡이 */
+function riotShieldModel() {
+  const g = new THREE.Group();
+  const clear = new THREE.MeshPhysicalMaterial({ color: '#B8C8DA', roughness: 0.15, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(1.2, 46, 28), clear);
+  g.add(panel);
+  const rim = mat('#15171C', { metal: 0.3, rough: 0.6 });
+  g.add(box(1.6, 1.6, 28, rim, 0, 23), box(1.6, 1.6, 28, rim, 0, -23), box(1.6, 46, 1.6, rim, 0, 0, 14), box(1.6, 46, 1.6, rim, 0, 0, -14));
+  g.add(box(1.4, 3, 20, mat('#E8ECF2', { rough: 0.6 }), 0.1, 8)); // 흰 띠
+  g.add(box(4, 2.4, 2.4, rim, -2.5, -2));
+  g.userData = { muzzle: [2, 0, 0], grip: { x: -4, y: -2, tilt: 0, w: 2.4, d: 2.8 }, noHands: true };
+  return g;
+}
+
+/** 화염폭탄: 기름이 든 초록 유리병에 불붙은 천 심지 */
+function firebombModel() {
+  const g = new THREE.Group();
+  const glass = new THREE.MeshPhysicalMaterial({ color: '#4E8A3A', roughness: 0.15, transparent: true, opacity: 0.75 });
+  g.add(lathe([[-7, 0.1], [-7, 3.2], [1, 3.4], [3, 1.4], [6, 1.1], [7, 1.2]], glass));
+  g.add(lathe([[-6.5, 0.1], [-6.5, 2.8], [-1, 2.9], [-0.5, 0.1]], mat('#C98A2A', { rough: 0.3 })));
+  const rag = mat('#D9CDB0', { rough: 1 });
+  g.add(box(3, 2.2, 2.2, rag, 8, 0.4).rotateZ(0.3));
+  g.add(box(2.6, 1.8, 1.6, rag, 9.6, 1.4).rotateZ(0.8));
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(1.6, 5, 10), mat('#FFB23F', { emissive: '#FF7A1A', intensity: 2 }));
+  flame.position.set(10.5, 4, 0);
+  g.add(flame);
+  g.userData = { muzzle: [11, 3, 0], grip: { x: -3, y: 0, tilt: Math.PI / 2, w: 3.2, d: 3.4 } };
+  return g;
+}
+
+/** 섬광탄 권총: 주황 몸통에 굵은 총열(안에 섬광탄), 검은 손잡이 */
+function flareGunModel() {
+  const g = new THREE.Group();
+  const orange = role(mat('#F07A1A', { metal: 0.15, rough: 0.45 }), 'furniture');
+  g.add(slab([[-5, -1], [5, -1], [6, 3], [-5, 3.2]], 3.4, orange, { bevel: 0.4 }));
+  g.add(tube(2.4, 2.4, 2, 16, orange, { y: 1.6 }));
+  g.add(tube(1.6, 1.6, 15.8, 16.4, mat('#FFF2C0', { emissive: '#FFE070', intensity: 1.6 }), { y: 1.6 }));
+  g.add(slab([[-5, -1], [-1, -1], [-3, -10], [-7, -9.6]], 3.0, POLY(), { bevel: 0.4 }));
+  g.add(box(0.4, 1.8, 0.5, BLACK(), 0.4, -2.2));
+  g.add(box(1.4, 1.6, 1, BLACK(), -3.6, 3.8));
+  g.userData = { muzzle: [16.6, 1.6, 0], grip: { x: -3.8, y: -5.4, tilt: 0.2, w: 2.8, d: 3.6 } };
+  return g;
+}
+
 function build(weapon, equipped = {}) {
   const root = new THREE.Group();
   const mod = (model) => applyMods(model, equipped); // 개조 파츠 장착(작업실에서 고른 것)
@@ -937,6 +1002,20 @@ function build(weapon, equipped = {}) {
       break;
     case 'stunlauncher':
       items.push(set(gun(stunLauncherModel()), { x: 11.5, y: -9, z: -30, yaw: 0.18, pitch: 0.03, roll: -0.06, k: 1.5 }));
+      break;
+    case 'katana':
+      // 오른손에 비스듬히 든 칼(벨 때 가로로 휘두른다)
+      items.push(set(gun(katanaModel(), 'one'), { x: 13, y: -12, z: -26, yaw: 0.55, pitch: 0.55, roll: -0.6 }));
+      break;
+    case 'riotshield':
+      // 왼쪽 앞에 세운 방패(아래쪽만 보인다)
+      items.push(set(gun(riotShieldModel(), 'one'), { x: -9, y: -20, z: -26, yaw: 0.05, pitch: 0, roll: 0 }));
+      break;
+    case 'firebomb':
+      items.push(set(gun(firebombModel(), 'one'), { x: 11, y: -10, z: -24, yaw: 0.3, pitch: 0.4, roll: -0.3 }));
+      break;
+    case 'flaregun':
+      items.push(set(gun(flareGunModel(), 'cup'), { x: 6.5, y: -6.6, z: -31, yaw: 0.16, pitch: 0.03, k: 1.25 }));
       break;
     default:
       items.push(set(gun(mod(rifleModel())), { x: 12.5, y: -11, z: -30, yaw: 0.19, pitch: 0.03, roll: -0.06, k: 1.55 }));
@@ -1088,6 +1167,7 @@ const HELD = {
   crossbow: () => crossbowModel(), dagger: () => daggerModel(), instakill: () => instakillModel(),
   energyrifle: () => energyRifleModel(), energydual: () => energyPistolModel(), flamethrower: () => flamethrowerModel(),
   energyrpg: () => energyRpgModel(), grenadelauncher: () => grenadeLauncherModel(), stunlauncher: () => stunLauncherModel(),
+  katana: () => katanaModel(), riotshield: () => riotShieldModel(), firebomb: () => firebombModel(), flaregun: () => flareGunModel(),
 };
 const PAIRED = new Set(['dual', 'dualrpg', 'crossbow', 'energydual']);
 export const hasHeldGun = (weapon) => !!HELD[weapon];
@@ -1259,6 +1339,9 @@ export function createViewmodel() {
     fire(playerId, weapon) {
       const s = state[playerId] ??= { weapon, swap: 0, kick: [0, 0], flash: [0, 0], shot: 0, roll: [0, 0], smoke: [] };
       if (weapon === 'grenade' || weapon === 'missile' || weapon === 'overcool') return;
+      // 카타나: 가로로 휘두르기, 방패·화염폭탄: 반동·불꽃 없이 살짝 내밀기
+      if (weapon === 'katana') { s.slash = 1; return; }
+      if (weapon === 'riotshield' || weapon === 'firebomb') { s.kick = [0.8, 0]; return; }
       // 석궁은 양손이 한꺼번에, 쌍권총·레이저 캐논은 번갈아 쏜다
       if (weapon === 'crossbow') { s.kick = [0.8, 0.8]; return; } // 칼·석궁은 불꽃이 없다
       const two = ['dual', 'dualrpg', 'laser', 'energydual'].includes(weapon);
@@ -1282,6 +1365,7 @@ export function createViewmodel() {
       if (s.weapon !== weapon) { if (s.weapon) s.swap = 1; s.weapon = weapon; s.kick = [0, 0]; s.flash = [0, 0]; s.smoke = []; }
       if (!paused) {
         s.swap = Math.max(0, s.swap - dt * 3.2);
+        s.slash = Math.max(0, (s.slash ?? 0) - dt * 3.2);
         for (let i = 0; i < 2; i++) { s.kick[i] = Math.max(0, s.kick[i] - dt * (weapon === 'smg' || weapon === 'energydual' ? 9 : 6)); s.flash[i] = Math.max(0, s.flash[i] - dt); }
       }
       if (lights) {
@@ -1325,6 +1409,14 @@ export function createViewmodel() {
         applyReload(item, weapon, rl, p);
         // 단검 돌진: 앞으로 찌른다
         if (weapon === 'dagger' && p.dash) item.position.z -= 8;
+        // 카타나: 오른쪽에서 왼쪽으로 가로 베기(s.slash 1 → 0)
+        if (weapon === 'katana' && (s.slash ?? 0) > 0) {
+          const k2 = 1 - s.slash;
+          item.position.x += (14 - k2 * 40) * far;
+          item.position.y += 6 * Math.sin(Math.PI * k2) * far;
+          item.rotateX(-1.1 * Math.sin(Math.PI * k2));
+          item.rotateZ(-0.9 + k2 * 0.4);
+        }
         // 총구 불꽃
         const list = item.userData.muzzles ?? (item.userData.muzzle ? [item.userData.muzzle] : []);
         list.forEach((mz, j) => {

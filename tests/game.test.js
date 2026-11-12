@@ -897,7 +897,7 @@ test('단검 돌진은 엄폐물에 막혀 돌아오고, 빗나가면 경기장 
   assert.equal(o.P2.hp, MAX_HP);
 });
 
-test('샷건: 조준 후 떼면 부채꼴로 5발, 1발 40, 10초 쿨타임, 명중은 방아쇠 한 번당 1', () => {
+test('샷건: 조준 후 떼면 부채꼴로 5발(적 쪽으로 유도), 1발 40, 10초 쿨타임, 명중은 방아쇠 한 번당 1', () => {
   const { match, inputs, P1, P2 } = playing({ P1: { secondary: 'shotgun' } });
   P1.x = P1.previousX = 300; P2.x = P2.previousX = 300;
   P1.slot = 'secondary'; P1.weapon = 'shotgun';
@@ -907,11 +907,14 @@ test('샷건: 조준 후 떼면 부채꼴로 5발, 1발 40, 10초 쿨타임, 명
   const pellets = match.projectiles.filter((b) => b.weapon === 'shotgun');
   assert.equal(pellets.length, 5);
   const angles = pellets.map((b) => Math.atan2(b.vy, b.vx)).sort((a, b) => a - b);
-  assert.ok(Math.abs(angles[4] - angles[0] - (40 * Math.PI) / 180) < 1e-6, '부채꼴 40도');
-  assert.ok(Math.abs(angles[2] - UP) < 1e-6, '가운데는 조준 방향');
+  // 쏜 틱에 이미 한 번 적 쪽으로 휜다(초당 turnRate)
+  const turn = (WEAPONS.shotgun.homing.turnRate * 2) / 60;
+  assert.ok(Math.abs(angles[4] - angles[0] - (40 * Math.PI) / 180) < turn + 1e-6, '부채꼴 40도');
+  assert.ok(Math.abs(angles[2] - UP) < 1e-6, '가운데는 조준 방향(적이 정면)');
   run(match, inputs, 1.5);
-  assert.equal(P2.hp, MAX_HP - 40, '가운데 한 발만 맞는 거리');
-  assert.deepEqual(match.stats.P1.weapons.shotgun, { shots: 1, hits: 1, damage: 40, coverDamage: 0 });
+  // 유도: 바깥 탄도 적 쪽으로 휘어 들어와 여러 발이 맞는다(명중은 방아쇠 한 번당 1)
+  assert.ok(P2.hp <= MAX_HP - 80, `유도로 여러 발 명중 ${MAX_HP - P2.hp}`);
+  assert.equal(match.stats.P1.weapons.shotgun.hits, 1);
 
   inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
   assert.equal(shots(step(match, inputs), 'P1'), 0, '10초 쿨타임');

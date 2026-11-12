@@ -1,9 +1,9 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MIN_Y, MAX_Y, BULLET_RADIUS, ZONE, JUMP, COVER_HEIGHT,
-  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, JET, TANK, SHIP, COVER, EVADE, PAD, VERTICAL_AIM, PITCH, SHOT_HEIGHT,
+  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, secondaryIndex, secondarySlot, JET, TANK, SHIP, COVER, EVADE, PAD, VERTICAL_AIM, PITCH, SHOT_HEIGHT,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
-import { highAt, groundAt, structureHit } from './terrain.js';
+import { highAt, groundAt, structureHit, lineBlocked } from './terrain.js';
 
 export { highAt, groundAt };
 import { between } from './state.js';
@@ -63,7 +63,7 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
   const weapon = WEAPONS[weaponId];
   const { damage: base, splash } = weaponDamage(player, weaponId);
   // 과냉각 중 주무기는 연사가 빨라지는 대신 한 발 피해가 boost.damage(기본 1)
-  const boost = player.boost > 0 && weaponId === player.primary ? WEAPONS[player.secondary]?.boost : null;
+  const boost = player.boost > 0 && weaponId === player.primary ? WEAPONS[(player.secondaries ?? [player.secondary]).find((id) => WEAPONS[id]?.boost)]?.boost : null;
   const damage = Number.isFinite(boost?.damage) ? boost.damage : base;
   // bulletSpeedScale: 싱글플레이 AI 탄속 배율(기본 1)
   const speed = weapon.speed * (player.bulletSpeedScale ?? 1);
@@ -88,6 +88,9 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
     // 감전(에너지 RPG 폭발): 맞은 적이 shock초 동안 움직이지도 쏘지도 못함. 전기 장판(전기충격기 발사기): 떨어진 자리에 퍼짐
     ...(weapon.shock ? { shock: weapon.shock } : {}),
     ...(weapon.field ? { field: weapon.field } : {}),
+    // 화염폭탄: 떨어진 자리에 불길, 섬광탄: 떨어진 자리에서 섬광
+    ...(weapon.fire ? { fire: weapon.fire } : {}),
+    ...(weapon.flash ? { flash: weapon.flash } : {}),
     ...(weapon.bounces > 0 ? { bounces: weapon.bounces } : {}),
     ...(weapon.flame ? { flame: true, maxLife: life } : {}),
     // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용). group이 있으면 그쪽에 기록한다.
@@ -97,7 +100,8 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
     z: (player.z ?? 0) + Math.sin(pitch) * MUZZLE_OFFSET,
     // 던진 무기는 아무것에도 닿지 않고 조준 방향으로 RULES.throwRange만큼 날아가 터진다. startX·startY는 날아간 거리(포물선 높이)용.
     thrown: !!weapon.thrown, overCovers: !!weapon.thrown, startX: x, startY: y,
-    ...(weapon.thrown ? { range: weapon.range ?? RULES.throwRange } : {}),
+    // 던지는 무기는 고개를 들수록 멀리, 숙일수록 가까이 떨어진다
+    ...(weapon.thrown ? { range: (weapon.range ?? RULES.throwRange) * Math.max(0.3, Math.min(1.8, 1 + (player.pitch ?? 0))) } : {}),
   };
   match.projectiles.push(projectile);
   return projectile;
@@ -355,10 +359,19 @@ function coverDamage(b) {
  * 플레이어 피해. shot은 피해를 준 탄(또는 레이저 한 발) { team, ownerId, weapon, connected }이며,
  * 쏜 사람의 무기별 피해·명중과 맞은 사람의 받은 피해를 통계에 더한다. 통계의 피해는 실제로 깎인 체력이다.
  */
-function damage(match, victim, amount, shot, events) {
+function damage(match, victim, amount, shot, events, from = null) {
   // bonusDamage: 추가 피해가 있는 캐릭터(아크 트루퍼)가 상대 플레이어에게 준 피해마다 더한다
   const attacker = match.players.find((p) => p.id === shot.ownerId);
   amount += attacker?.bonusDamage ?? 0;
+  // 폭동 진압 방패: 앞쪽(방패 각도 안)에서 온 공격이면 남은 방패만큼 막는다
+  if (victim.shield && from && amount > 0 && fromFront(victim, from)) {
+    const absorbed = Math.min(amount, victim.shield.hp);
+    victim.shield.hp -= absorbed;
+    amount -= absorbed;
+    events.push({ type: 'shield-hit', playerId: victim.id, x: victim.x, y: victim.y, absorbed, left: victim.shield.hp });
+    if (victim.shield.hp <= 0) { victim.shield = null; events.push({ type: 'shield-break', playerId: victim.id, x: victim.x, y: victim.y }); }
+    if (amount <= 0) return;
+  }
   // 회피(돌진) 중에는 피해를 30% 덜 받는다
   if (victim.evade && amount > 0) amount = Math.max(1, Math.round(amount * EVADE.taken));
   const dealt = Math.min(victim.hp, amount);
@@ -381,6 +394,43 @@ function damage(match, victim, amount, shot, events) {
   }
 }
 
+/** 공격이 온 자리(from)가 방패 앞쪽(바라보는 방향 ± arc/2)인지 */
+function fromFront(victim, from) {
+  const arc = ((WEAPONS.riotshield.shield.arc ?? 140) * Math.PI) / 360;
+  const a = Math.atan2(from.y - victim.y, from.x - victim.x);
+  return Math.abs(Math.atan2(Math.sin(a - victim.aim), Math.cos(a - victim.aim))) <= arc;
+}
+
+/** 폭동 진압 방패를 세운다: shield.time초 동안 앞쪽 공격 shield.hp만큼 막음(다시 세우면 새로 가득) */
+function raiseShield(p, weapon, events) {
+  p.shield = { hp: weapon.shield.hp, t: weapon.shield.time, max: weapon.shield.hp };
+  events.push({ type: 'fire', playerId: p.id, weapon: weapon.id });
+  events.push({ type: 'shield-up', playerId: p.id, x: p.x, y: p.y });
+}
+
+/**
+ * 카타나: 앞을 가로로 벤다. 바라보는 방향 ± slash.arc/2 부채꼴, slash.range(+몸 반지름) 안의 적 모두(높이 차 150 안,
+ * 구조물에 가리지 않은)에게 피해. 무적(돌진 중·내려오는 중)은 맞지 않는다.
+ */
+function slashKatana(match, p, weapon, events) {
+  const { range, arc } = weapon.slash;
+  const half = (arc * Math.PI) / 360;
+  const dmg = weaponDamage(p, weapon.id).damage;
+  const shot = { team: p.team, ownerId: p.id, weapon: weapon.id, connected: false };
+  const z = p.z ?? 0;
+  for (const q of match.players) {
+    if (!q.alive || q.team === p.team || invulnerable(q)) continue;
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    if (d > range + q.radius || Math.abs((q.z ?? 0) - z) > 150) continue;
+    const a = Math.atan2(q.y - p.y, q.x - p.x);
+    if (d > q.radius && Math.abs(Math.atan2(Math.sin(a - p.aim), Math.cos(a - p.aim))) > half) continue;
+    if (lineBlocked(match, p.x, p.y, z + SHOT_HEIGHT, q.x, q.y, (q.z ?? 0) + SHOT_HEIGHT)) continue;
+    damage(match, q, dmg, shot, events, { x: p.x, y: p.y });
+  }
+  events.push({ type: 'fire', playerId: p.id, weapon: weapon.id });
+  events.push({ type: 'slash', playerId: p.id, x: p.x, y: p.y, h: z, aim: p.aim, range, arc });
+}
+
 /** RPG 폭발: 직접 맞은 대상을 뺀 주변 살아있는 적과, 범위에 걸친 엄폐물에 범위 피해. */
 function explode(match, b, x, y, directVictim, directCover, events) {
   const { splash } = b;
@@ -390,7 +440,7 @@ function explode(match, b, x, y, directVictim, directCover, events) {
     // 높이가 폭발 범위보다 한참 다르면(고지대 위·아래) 닿지 않는다
     if (b.z !== undefined && Math.abs((p.z ?? 0) - b.z) > splash.radius + 120) continue;
     if (Math.hypot(p.x - x, p.y - y) <= splash.radius + p.radius) {
-      damage(match, p, splash.damage, b, events);
+      damage(match, p, splash.damage, b, events, { x, y });
       if (b.shock) stun(p, 'shock', b.shock, events);
     }
   }
@@ -423,15 +473,46 @@ export const frozen = (p) => shocked(p) || (p.freeze ?? 0) > 0;
 
 /** 전기 장판 하나를 (x, y)에 깐다(전기충격기가 떨어진 자리) */
 function spawnField(match, b, x, y, events) {
-  const f = b.field;
   match.fields ??= [];
   // 떨어진 자리의 바닥 높이(고지대 위에 떨어지면 그 위에 퍼진다)
-  const h = groundAt(match, x, y, b.z ?? 0);
+  const h = groundAt(match, x, y, (b.z ?? 0) + 200);
+  if (b.fire) {
+    // 화염폭탄의 불길: 바로 퍼져 life초 동안 타며, 안의 적에게 초당 dps(FIRE_TICK마다 나눠서)
+    const f = b.fire;
+    match.fields.push({
+      id: b.id, kind: 'fire', x, y, h, team: b.team, ownerId: b.ownerId, weapon: b.weapon, t: 0, tick: 0,
+      radius: f.radius, spread: 0.2, life: f.life, dps: f.dps, hit: [],
+    });
+    events.push({ type: 'field', kind: 'fire', x, y, h, radius: f.radius, spread: 0.2, life: f.life });
+    return;
+  }
+  const f = b.field;
   match.fields.push({
     id: b.id, x, y, h, team: b.team, ownerId: b.ownerId, t: 0,
     radius: f.radius, spread: f.spread, life: f.life, freeze: f.freeze, hit: [],
   });
   events.push({ type: 'field', x, y, h, radius: f.radius, spread: f.spread, life: f.life });
+}
+
+/** 불길이 피해를 주는 간격(초) */
+const FIRE_TICK = 0.25;
+
+/**
+ * 섬광탄: (x, y)에서 번쩍 터진다. 반경 안에서 섬광이 보이는(구조물에 가리지 않은) 적은 가까울수록 오래 눈이 먼다(blind초).
+ * 눈이 먼 사람은 화면이 하얗게 바래고(사람), AI는 그동안 겨누지도 쏘지도 못한다.
+ */
+function flashBurst(match, b, x, y, events) {
+  const { radius, blind } = b.flash;
+  const h = groundAt(match, x, y, (b.z ?? 0) + 200) + 40;
+  events.push({ type: 'flash', x, y, h, radius });
+  for (const p of match.players) {
+    if (!p.alive || p.team === b.team || p.entering) continue;
+    const d = Math.hypot(p.x - x, p.y - y, (p.z ?? 0) + 128 - h);
+    if (d > radius || lineBlocked(match, x, y, h, p.x, p.y, (p.z ?? 0) + 128)) continue;
+    const time = blind * (1 - 0.6 * (d / radius));
+    if (time > (p.blind ?? 0)) p.blind = time;
+    events.push({ type: 'blind', playerId: p.id, time });
+  }
 }
 
 /** 지금 전기 장판의 반지름(떨어진 뒤 spread초 동안 퍼진다) */
@@ -443,6 +524,19 @@ function updateFields(match, dt, events) {
   for (const f of match.fields) {
     f.t += dt;
     const r = fieldRadius(f);
+    if (f.kind === 'fire') {
+      f.tick += dt;
+      if (f.tick + 1e-9 < FIRE_TICK) continue;
+      f.tick -= FIRE_TICK;
+      const shot = { team: f.team, ownerId: f.ownerId, weapon: f.weapon ?? 'firebomb', connected: false };
+      for (const p of match.players) {
+        if (!p.alive || p.team === f.team || invulnerable(p)) continue;
+        if (Math.abs((p.z ?? 0) - f.h) > 60 || Math.hypot(p.x - f.x, p.y - f.y) > r + p.radius) continue;
+        damage(match, p, Math.max(1, Math.round(f.dps * FIRE_TICK)), shot, events);
+        events.push({ type: 'burn', playerId: p.id, x: p.x, y: p.y });
+      }
+      continue;
+    }
     for (const p of match.players) {
       if (!p.alive || p.team === f.team || invulnerable(p) || f.hit.includes(p.id)) continue;
       // 높이 뛰어 있으면 전기에 닿지 않는다
@@ -455,26 +549,42 @@ function updateFields(match, dt, events) {
   match.fields = match.fields.filter((f) => f.t < f.life);
 }
 
-/** 무기 칸(주무기·보조무기)으로 전환. 이미 든 칸이면 아무 일 없다. 점사는 끊기고 RULES.swapTime 동안은 쏘지 못한다. */
+/** 이 플레이어가 가진 무기 칸: 주무기 + 고른 보조무기 수만큼(최대 3) */
+export function slotsOf(p) {
+  const list = p.secondaries ?? [p.secondary];
+  return ['primary', ...list.map((_, i) => secondarySlot(i))];
+}
+/** 칸에 든 무기 id(없는 칸이면 null) */
+export function weaponOfSlot(p, slot) {
+  if (slot === 'primary') return p.primary;
+  const i = secondaryIndex(slot);
+  return i < 0 ? null : (p.secondaries ?? [p.secondary])[i] ?? null;
+}
+
+/** 무기 칸(주무기·보조무기 1~3)으로 전환. 이미 든 칸이면 아무 일 없다. 점사는 끊기고 RULES.swapTime 동안은 쏘지 못한다. */
 function selectSlot(p, slot, events) {
+  const id = weaponOfSlot(p, slot);
+  if (!id || !SLOT_ORDER.includes(slot)) return;
   // 과냉각처럼 쓰는 순간 효과가 나는 보조무기는 들지 않고 바로 켠다
-  if (slot === 'secondary' && WEAPONS[p.secondary]?.boost) { activateBoost(p, events); return; }
-  if (p.slot === slot || !SLOT_ORDER.includes(slot)) return;
+  if (WEAPONS[id]?.boost) { activateBoost(p, id, events); return; }
+  if (p.slot === slot) return;
   p.slot = slot;
-  p.weapon = slot === 'primary' ? p.primary : p.secondary;
+  p.weapon = id;
   p.burstLeft = 0;
   p.cooldown = Math.max(p.cooldown, RULES.swapTime);
   events.push({ type: 'swap', playerId: p.id, weapon: p.weapon, slot: p.slot });
 }
 
-/** 주무기 ↔ 보조무기 순환 전환 */
+/** 주무기 → 보조무기 1 → 2 → 3 → 주무기 순환 전환(쓰는 순간 효과가 나는 칸은 건너뛴다) */
 function swapWeapon(p, events) {
-  selectSlot(p, SLOT_ORDER[(SLOT_ORDER.indexOf(p.slot) + 1) % SLOT_ORDER.length], events);
+  const slots = slotsOf(p).filter((sl) => sl === p.slot || !WEAPONS[weaponOfSlot(p, sl)]?.boost);
+  if (slots.length < 2) { if (slotsOf(p).length > 1) selectSlot(p, slotsOf(p)[1], events); return; }
+  selectSlot(p, slots[(slots.indexOf(p.slot) + 1) % slots.length], events);
 }
 
 /** 과냉각: active초 동안 주무기 연사 간격이 rate배. 쓴 뒤에는 그 무기 쿨타임(interval)이 돈다. */
-function activateBoost(p, events) {
-  const w = WEAPONS[p.secondary];
+function activateBoost(p, id, events) {
+  const w = WEAPONS[id];
   if ((p.cooldowns[w.id] ?? 0) > 0 || p.boost > 0) return;
   p.boost = w.boost.active;
   p.cooldowns[w.id] = w.interval;
@@ -482,7 +592,7 @@ function activateBoost(p, events) {
 }
 
 /** 지금 연사 간격 배율(과냉각 중이면 작아진다) */
-const fireRate = (p) => (p.boost > 0 ? WEAPONS[p.secondary]?.boost?.rate ?? 1 : 1);
+const fireRate = (p) => (p.boost > 0 ? WEAPONS[(p.secondaries ?? [p.secondary]).find((id) => WEAPONS[id]?.boost)]?.boost?.rate ?? 1 : 1);
 
 /**
  * 아이템: 든 무기와 상관없이 지금 조준 방향으로 바로 쓴다. 평소에는 수류탄을 던지고,
@@ -514,6 +624,8 @@ function fire(match, p, events) {
   }
   if (weapon.instakill) { fireInstakill(match, p, weapon, events); return; }
   if (weapon.dash) { startDash(p, weapon, events); return; }
+  if (weapon.slash) { slashKatana(match, p, weapon, events); return; }
+  if (weapon.shield) { raiseShield(p, weapon, events); return; }
   const group = { connected: false };
   if (weapon.pellets) {
     // 샷건: spread도 부채꼴 안에 pellets발을 고르게
@@ -628,7 +740,7 @@ function updateDash(match, p, dt, events) {
   p.x = Math.min(boundsOf(match).maxX, Math.max(boundsOf(match).minX, x0 + (x1 - x0) * t));
   p.y = y0 + (y1 - y0) * t;
   if (best?.victim) {
-    damage(match, best.victim, d.damage, d.shot, events);
+    damage(match, best.victim, d.damage, d.shot, events, { x: x0, y: y0 });
     d.returning = true;
   } else if (best?.cover) {
     events.push({ type: 'block', x: p.x, y: p.y });
@@ -866,6 +978,8 @@ export function step(match, inputs, dt = TICK) {
   }
   // 스토리 모드 건 카타(스미스 요원): 1·2·3·4 버튼 대응만 받는다
   if (match.phase === 'gunkata') {
+    // 건 카타의 1~4 버튼이 무기 칸 고르기로 남지 않게
+    for (const f of Object.values(inputs ?? {})) if (f) f.select = null;
     updateGunKata(match, inputs, dt, events);
     return events;
   }
@@ -909,6 +1023,12 @@ export function step(match, inputs, dt = TICK) {
     // 감전(에너지 RPG): 움직이지도 쏘지도 못한다(고개만 돌림). 마비(전기 장판): 움직이지 못한다(쏠 수는 있음)
     p.shock = Math.max(0, (p.shock ?? 0) - dt);
     p.freeze = Math.max(0, (p.freeze ?? 0) - dt);
+    p.blind = Math.max(0, (p.blind ?? 0) - dt);
+    // 방패는 shield.t초가 지나면 내린다
+    if (p.shield) {
+      p.shield.t -= dt;
+      if (p.shield.t <= 0) { p.shield = null; events.push({ type: 'shield-down', playerId: p.id }); }
+    }
     // 단검 돌진 중에는 이동·사격·아이템 입력을 받지 않는다(조준 각도만 따라감).
     updateEvadeCharges(p, dt);
     if (p.dash) {
@@ -1024,7 +1144,7 @@ export function step(match, inputs, dt = TICK) {
     }
     removed.add(b);
     if (b.z !== undefined) b.z = z;
-    if (victim) damage(match, victim, b.damage, b, events);
+    if (victim) damage(match, victim, b.damage, b, events, { x: b.previousX, y: b.previousY });
     else events.push({ type: 'block', x, y, ...(b.z !== undefined ? { h: z + SHOT_HEIGHT } : {}) });
     if (cover) damageCover(match, cover, coverDamage(b), b, events);
     if (b.splash) explode(match, b, x, y, victim, cover, events);
@@ -1038,11 +1158,12 @@ export function step(match, inputs, dt = TICK) {
 
   // 빗나간 RPG·전투기 미사일은 경로 끝에서 터져 주변에 폭발 피해를 준다.
   for (const b of match.projectiles) {
-    if (removed.has(b) || !(b.splash || b.field)) continue;
+    if (removed.has(b) || !(b.splash || b.field || b.fire || b.flash)) continue;
     const end = rocketEnd(b, match);
     if (!end) continue;
     removed.add(b);
-    if (b.field) spawnField(match, b, end.x, end.y, events);
+    if (b.field || b.fire) spawnField(match, b, end.x, end.y, events);
+    if (b.flash) flashBurst(match, b, end.x, end.y, events);
     if (b.splash) explode(match, b, end.x, end.y, null, null, events);
   }
 
@@ -1055,7 +1176,7 @@ export function step(match, inputs, dt = TICK) {
       // 돌진 중에 쓰러지면 출발한 자리에 쓰러진다
       if (p.dash) { p.x = p.dash.homeX; p.y = p.dash.homeY; p.dash = null; }
       p.evade = null;
-      p.shock = 0; p.freeze = 0;
+      p.shock = 0; p.freeze = 0; p.shield = null; p.blind = 0;
       if (match.stats?.[p.id]) match.stats[p.id].downAt = match.tick * TICK;
       events.push({ type: 'down', playerId: p.id, x: p.x, y: p.y });
     }

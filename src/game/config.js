@@ -250,7 +250,31 @@ export const WEAPONS = {
   // 샷건: 조준한 뒤 떼면 부채꼴로 여러 발
   shotgun: {
     id: 'shotgun', name: '샷건', interval: 10, damage: 40, speed: 900, burst: 1, trigger: 'release', ownCooldown: true, mag: 0, reload: 1.5,
-    pellets: 5, spread: 40,
+    pellets: 5, spread: 40, homing: { turnRate: 2.4 }, // 유도: 가장 가까운 적 쪽으로 초당 2.4라디안까지 휘어 날아간다
+  },
+  // 화염폭탄(보조무기): 조준한 뒤 떼면 포물선으로 던진다. 떨어진 자리에서 터지고(폭발 splash), 바닥에 fire.life초 동안 반경 fire.radius의
+  // 불길이 남아 그 안의 적에게 초당 fire.dps 피해를 계속 준다(높이 뛰어 있으면 닿지 않음). 쿨타임 10초
+  firebomb: {
+    id: 'firebomb', name: '화염폭탄', interval: 10, damage: 0, speed: 760, burst: 1, trigger: 'release', ownCooldown: true,
+    thrown: true, range: 650, splash: { damage: 15, radius: 150 }, fire: { radius: 220, life: 5, dps: 30 },
+  },
+  // 카타나(보조무기): 조준한 뒤 떼면 앞을 가로로 크게 벤다. 단검(몸에 닿아야 함)보다 훨씬 넓게:
+  // 앞쪽 slash.arc도 부채꼴, slash.range 거리 안의 적 모두에게 피해. 쿨타임 15초
+  katana: {
+    id: 'katana', name: '카타나', interval: 15, damage: 120, burst: 1, trigger: 'release', ownCooldown: true,
+    slash: { range: 280, arc: 150 },
+  },
+  // 폭동 진압 방패(보조무기): 누르면 몸 앞에 방패를 세운다. shield.time초 동안(또는 shield.hp만큼 막을 때까지)
+  // 앞쪽 shield.arc도 안에서 오는 공격(탄·폭발·칼)의 피해를 막는다(합쳐 500). 쿨타임 10초(세운 때부터)
+  riotshield: {
+    id: 'riotshield', name: '폭동 진압 방패', interval: 10, damage: 0, burst: 1, ownCooldown: true,
+    shield: { hp: 500, time: 6, arc: 140 },
+  },
+  // 섬광탄 권총(보조무기): 조준한 뒤 떼면 섬광탄이 곡선(포물선)으로 날아가 떨어진 자리에서 번쩍 터진다.
+  // 반경 flash.radius 안에서 섬광이 보이는(구조물에 가리지 않은) 적은 가까울수록 오래(최대 flash.blind초) 눈이 먼다. 쿨타임 8초
+  flaregun: {
+    id: 'flaregun', name: '섬광탄 권총', interval: 8, damage: 0, speed: 900, burst: 1, trigger: 'release', ownCooldown: true,
+    thrown: true, range: 900, flash: { radius: 420, blind: 3 },
   },
   // 유탄 발사기(보조무기, 스코프 달림): 조준한 뒤 떼면 유탄 3발을 연달아 쏜다(burst). 유탄은 맞거나 엄폐물에 닿거나 life초 뒤 터진다.
   // 직격 25, 주변 폭발 25(직격 맞은 사람은 폭발 피해를 또 받지 않음). 다 쏜 뒤 쿨타임 15초(이 무기만 따로)
@@ -319,10 +343,22 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
 export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'energyrifle', 'energydual', 'energyrpg'];
 /** 상점에서 사야 쓸 수 있는 전설 무기 */
 export const LEGENDARY_IDS = PRIMARY_IDS.filter((id) => WEAPONS[id].legendary);
-export const SECONDARY_IDS = ['smg', 'dagger', 'shotgun', 'grenadelauncher', 'stunlauncher'];
+export const SECONDARY_IDS = ['smg', 'dagger', 'shotgun', 'grenadelauncher', 'stunlauncher', 'firebomb', 'katana', 'riotshield', 'flaregun'];
 export const DEFAULT_SECONDARY = 'smg';
-export const SLOT_ORDER = ['primary', 'secondary'];
-export const SLOT_NAME = { primary: '주무기', secondary: '보조무기' };
+/** 보조무기는 최대 MAX_SECONDARIES개까지 골라 들고 간다(칸 이름 secondary·secondary2·secondary3) */
+export const MAX_SECONDARIES = 3;
+export const SLOT_ORDER = ['primary', 'secondary', 'secondary2', 'secondary3'];
+export const SLOT_NAME = { primary: '주무기', secondary: '보조무기', secondary2: '보조무기 2', secondary3: '보조무기 3' };
+/** 칸 이름 → 보조무기 순번(0부터). 주무기면 -1 */
+export const secondaryIndex = (slot) => (slot === 'secondary' ? 0 : slot === 'secondary2' ? 1 : slot === 'secondary3' ? 2 : -1);
+/** 보조무기 순번 → 칸 이름 */
+export const secondarySlot = (i) => (i === 0 ? 'secondary' : `secondary${i + 1}`);
+/** 고른 보조무기 목록 정리: 목록에 있는 것만, 겹치지 않게, 최대 MAX_SECONDARIES개(없으면 기본 하나) */
+export function normalizeSecondaries(list) {
+  const out = [];
+  for (const id of Array.isArray(list) ? list : [list]) if (SECONDARY_IDS.includes(id) && !out.includes(id)) out.push(id);
+  return out.length ? out.slice(0, MAX_SECONDARIES) : [DEFAULT_SECONDARY];
+}
 
 /**
  * weapon이 있는 캐릭터는 주무기가 그 무기로 고정되고 보조무기·수류탄을 쓸 수 없다(R-10, 제작자).
