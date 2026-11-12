@@ -1,4 +1,4 @@
-// 스토리 연속 플레이 모드: 옥상에서 요원이 3명씩 끝없이, 3웨이브마다 보상(1코인 + 1승리)
+// 스토리 연속 플레이 모드: 옥상에서 요원이 3명씩 끝없이, 웨이브마다 랭크 1레벨(wave-clear), 3웨이브마다 1코인(endless-reward)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInputs, createInput } from '../src/game/state.js';
@@ -17,6 +17,7 @@ test('연속 플레이: 옥상(고공 요새)에서 요원이 3명씩 끝없이 
   const sizes = [];
   const hps = [];
   const rewards = [];
+  const levels = [];
   let fightingWave = null;
   for (let i = 0; i < 60 * 400 && rewards.length < 3; i++) {
     hero.hp = hero.maxHp; // 주인공은 쓰러지지 않게
@@ -30,10 +31,14 @@ test('연속 플레이: 옥상(고공 요새)에서 요원이 3명씩 끝없이 
       }
       for (const p of agents) p.hp = 0;
     }
-    for (const e of step(match, inputs)) if (e.type === 'endless-reward') rewards.push(e.cleared);
+    for (const e of step(match, inputs)) {
+      if (e.type === 'endless-reward') rewards.push(e.cleared);
+      if (e.type === 'wave-clear' && e.endless) levels.push(e.endless);
+    }
     assert.notEqual(match.phase, 'result', '주인공이 서 있으면 끝나지 않는다');
   }
-  assert.deepEqual(rewards, [3, 6, 9]);
+  assert.deepEqual(rewards, [3, 6, 9], '3웨이브마다 코인');
+  assert.deepEqual(levels, [1, 2, 3, 4, 5, 6, 7, 8, 9], '웨이브마다 레벨(웨이브 클리어 이벤트)');
   assert.ok(sizes.length >= 9 && sizes.every((n) => n === ENDLESS.count), `요원 3명씩: ${sizes}`);
   assert.equal(match.story.stage, 'rooftop', '옥상에서 벗어나지 않음');
   assert.ok(!WAVES[match.story.wave].boss);

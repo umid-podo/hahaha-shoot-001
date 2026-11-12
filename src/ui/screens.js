@@ -318,7 +318,7 @@ export function createScreens(handlers) {
       $('#result-time').textContent = `경기 시간 ${formatTime(time)}` + (story?.endless ? ' · 스토리 연속 플레이 모드' : story ? ` · 스토리 모드 ${waveLabel(story.wave)}` : '');
       const winnerPlayer = players.find((p) => p.team === winner);
       $('#result-title').textContent = winner === 'draw' ? '무승부'
-        : story?.endless ? `연속 플레이 끝! ${story.endless.cleared}웨이브 돌파 · 보상 ${story.endless.rewards}번(코인 +${story.endless.rewards} · 승리 +${story.endless.rewards})`
+        : story?.endless ? `연속 플레이 끝! ${story.endless.cleared}웨이브 돌파 · 레벨 +${story.endless.cleared} · 코인 +${story.endless.rewards}`
         : story ? (winner === 'earth' ? `스토리 클리어! ${DEATHSTAR_NAME}을 격추했다!` : `${waveLabel(story.wave)}에서 패배…`)
         : winnerPlayer.ai ? `${winnerPlayer.name} 승리…`
         : `${winnerPlayer.id} ${winnerPlayer.name} (${TEAM_NAME[winner]}) 승리!`;

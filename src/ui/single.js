@@ -230,11 +230,11 @@ export function createSingleSetup(onChange) {
         onChange(single);
       });
     }), (() => {
-      // 연속 플레이 모드: 옥상에서 요원이 3명씩 끝없이(웨이브 무한), 3웨이브마다 1코인 + 1승리
+      // 연속 플레이 모드: 옥상에서 요원이 3명씩 끝없이(웨이브 무한), 웨이브마다 랭크 1레벨, 3웨이브마다 1코인
       const label = document.createElement('span');
       label.textContent = '♾️ 연속 플레이 모드';
       const info = document.createElement('small');
-      info.textContent = `1스테이지 옥상만 · 요원 ${ENDLESS.count}명씩 무한 웨이브 · ${ENDLESS.reward}웨이브마다 1코인 + 1승리(중간에 그만둬도 보상 유지)`;
+      info.textContent = `1스테이지 옥상만 · 요원 ${ENDLESS.count}명씩 무한 웨이브 · 웨이브마다 랭크 1레벨 · ${ENDLESS.reward}웨이브마다 1코인(중간에 그만둬도 보상 유지)`;
       const btn = choiceButton([label, info], single.storyStart === 'endless', () => {
         single.storyStart = 'endless';
         onChange(single);

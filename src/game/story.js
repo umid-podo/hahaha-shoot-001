@@ -100,7 +100,7 @@ export const waveLabel = (i) => `${STAGES[WAVES[i].stage].name} ${WAVES[i].title
 /**
  * 연속 플레이 모드(스토리 모드 시작 칸에서 고름): 1스테이지 옥상만, 요원이 헬리콥터로 ENDLESS.count명씩 끝없이 온다(웨이브 무한).
  * 웨이브는 옥상 2웨이브(wave) 설정(체력·무기 등, 스토리 설정)을 쓰고 요원 수만 count명. 보스·다음 스테이지는 없다.
- * reward웨이브를 깰 때마다 보상(1코인 + 1승리, main.js가 바로 저장하므로 중간에 그만둬도 남음).
+ * 웨이브를 깰 때마다 랭크 1레벨(1승리), reward웨이브마다 1코인(main.js가 바로 저장하므로 중간에 그만둬도 남음).
  */
 export const ENDLESS = {
   wave: 1, count: 3, reward: 3,
@@ -330,7 +330,7 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
     // 연속 플레이: 옥상에서 헬리콥터가 요원 ENDLESS.count명씩 끝없이 데려온다. cleared: 깬 웨이브 수, rewards: 받은 보상 수
     match.story.endless = { cleared: 0, rewards: 0 };
     Object.assign(match.story, { wave: ENDLESS.wave, phase: 'clear', timer: CLEAR_TIME / 2, started: false });
-    match.story.banner = banner('연속 플레이 모드', `요원이 ${ENDLESS.count}명씩 끝없이 온다 · ${ENDLESS.reward}웨이브마다 1코인 + 1승리`);
+    match.story.banner = banner('연속 플레이 모드', `요원이 ${ENDLESS.count}명씩 끝없이 온다 · 웨이브마다 랭크 +1레벨 · ${ENDLESS.reward}웨이브마다 1코인`);
     return match;
   }
   if (start === 0) {
@@ -941,13 +941,13 @@ export function updateStory(match, inputs, dt, events) {
         story.phase = 'clear';
         story.timer = 0;
         events.push({ type: 'wave-clear', wave: story.wave, endless: e.cleared });
-        // reward웨이브마다 보상(1코인 + 1승리)
+        // 웨이브마다 랭크 +1레벨(main.js가 wave-clear로), reward웨이브마다 1코인
         if (e.cleared % ENDLESS.reward === 0) {
           e.rewards++;
           events.push({ type: 'endless-reward', cleared: e.cleared, rewards: e.rewards });
-          story.banner = banner(`${e.cleared}웨이브 클리어! 보상 +1코인 · +1승리`, '다음 요원들이 온다');
+          story.banner = banner(`${e.cleared}웨이브 클리어! 레벨 +1 · 코인 +1`, '다음 요원들이 온다');
         } else {
-          story.banner = banner(`연속 플레이 ${e.cleared}웨이브 클리어!`, `보상까지 ${ENDLESS.reward - (e.cleared % ENDLESS.reward)}웨이브`);
+          story.banner = banner(`연속 플레이 ${e.cleared}웨이브 클리어! 레벨 +1`, `코인까지 ${ENDLESS.reward - (e.cleared % ENDLESS.reward)}웨이브`);
         }
       } else if (!story.endless && next < WAVES.length && enemies(match).every((p) => !p.alive)) {
         story.phase = 'clear';
