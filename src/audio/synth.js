@@ -224,6 +224,8 @@ function metalSlide(start, duration, volume = 1) {
 const REAL = {
   pistol: { body: 5200, decay: 0.16, boom: 150, crack: 0.8, wet: 0.5, volume: 1, mech: 0.045 },
   dual: { body: 5000, decay: 0.15, boom: 145, crack: 0.8, wet: 0.45, volume: 0.95, mech: 0.04 },
+  // 에너지 쌍권총: 진짜 권총 총성(아주 빠른 연사라 짧고 조금 작게)
+  energydual: { body: 5400, decay: 0.09, boom: 150, crack: 0.9, wet: 0.3, volume: 0.7 },
   rifle: { body: 6500, decay: 0.12, boom: 120, crack: 1.2, wet: 0.45, volume: 0.9 },
   smg: { body: 5800, decay: 0.08, boom: 140, crack: 0.7, wet: 0.3, volume: 0.65 },
   sniper: { body: 7000, decay: 0.38, boom: 85, crack: 1.6, wet: 0.9, volume: 1.4, mech: 0.32 },
@@ -564,7 +566,7 @@ export function playEvents(events) {
     if (e.type === 'megalaser') { gunshot({ filter: 300, q: 0.4, decay: 1.2, thump: 50, volume: 1.8 }); [880, 660, 440, 220].forEach((f, i) => tone(f, 0.25, 'sawtooth', i * 0.06)); }
     if (e.type === 'fire' && e.weapon === 'instakill') { /* 소리는 megalaser에서 */ }
     else if (e.type === 'fire' && e.weapon === 'laser') laserZap();
-    else if (e.type === 'fire' && (e.weapon === 'energyrifle' || e.weapon === 'energydual')) energyZap(e.weapon === 'energyrifle');
+    else if (e.type === 'fire' && e.weapon === 'energyrifle') energyZap(true);
     else if (e.type === 'fire' && e.weapon === 'energyrpg') { energyZap(true); gunshot({ filter: 600, q: 0.5, decay: 0.45, thump: 80, volume: 1.2 }); slide(240, 1400, 0.4, 'sawtooth', 0.4); } // 에너지 로켓: 위이잉 + 쾅
     else if (e.type === 'fire' && e.weapon === 'grenadelauncher') { gunshot({ filter: 500, q: 0.6, decay: 0.22, thump: 140, volume: 1.1 }); tone(140, 0.08, 'square'); } // 유탄: 퉁!
     else if (e.type === 'fire' && e.weapon === 'stunlauncher') { gunshot({ filter: 1400, q: 0.8, decay: 0.18, thump: 60, volume: 0.9 }); slide(1800, 600, 0.25, 'square', 0.35); } // 전기충격기: 퓽

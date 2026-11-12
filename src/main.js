@@ -2,7 +2,7 @@ import { TICK, COUNTDOWN, TEAM_NAME, KATA } from './game/config.js';
 import { SLOTS, createMatch, createInputs, cancelInputs, defaultLoadout } from './game/state.js';
 import { step } from './game/update.js';
 import { createAI, updateAI, AI_CHARACTERS, DIFFICULTY } from './game/ai.js';
-import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT, STAGES, stageStart, nextStageOf, WAVES } from './game/story.js';
+import { createStoryMatch, checkpoint, waveLabel, COOP_SLOT, STAGES, stageStart, nextStageOf, WAVES, ENDLESS } from './game/story.js';
 import { createControls } from './input/pointer.js';
 import { createKataKeys, KATA_CODES } from './input/kata.js';
 import { glowingKey, createTrainingMatch } from './game/gunkata.js';
@@ -134,9 +134,11 @@ function startMatch() {
     ? { wave: stageStart(single.storyStart), hp: FULL_HP, hp2: FULL_HP, skip: true } : null;
   // 건 카타 수련장: P1이 고른 캐릭터로 훈련용 전투 로봇과 끝없이 건 카타
   // 랭크: 처음 스테이지(옥상)부터 건너뛰기 없이 시작한 판만(저장한 판은 그 판이 그랬을 때만)
-  storyClean = storyMode() && !startAt && (resumeFrom ? resumeFrom.clean === true : true);
+  // 연속 플레이 모드(스토리 시작 칸에서 고름): 옥상에서 요원이 3명씩 끝없이(이어하기·건너뛰기로 이어 온 판은 아님)
+  const endless = storyMode() && !resumeFrom && single.storyStart === 'endless';
+  storyClean = storyMode() && !startAt && !endless && (resumeFrom ? resumeFrom.clean === true : true);
   match = mode === 'training' ? createTrainingMatch(loadout.P1)
-    : storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies())
+    : storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies(), { endless })
     // 2인 대결은 준비 화면에서 고른 경기장(넓은 옥상·고공 요새)
     : createMatch(mode === 'single' ? singleLoadout() : loadout, Date.now(), { wide: true, map: mode === 'versus' ? settings.versusMap ?? 'wide' : 'wide' });
   inputs = createInputs(match.players);
@@ -167,8 +169,8 @@ function pause() {
   mouse?.release();
   cancelAllInput();
   match.phase = 'paused';
-  const next = match.story && nextStageOf(match.story.stage);
-  screens.showPause(!!match.story, next ? `${STAGES[next].num}스테이지 ${STAGES[next].name}로 건너뛰기` : null);
+  const next = match.story && !match.story.endless && nextStageOf(match.story.stage);
+  screens.showPause(!!match.story && !match.story.endless, next ? `${STAGES[next].num}스테이지 ${STAGES[next].name}로 건너뛰기` : null);
 }
 
 /** 체력을 가득 채워 시작하라는 값(최대 체력으로 잘린다) */
@@ -390,14 +392,24 @@ function frame(now) {
       playEvents(events);
       for (const e of events) {
         if (e.type === 'wave') {
-          screens.announce(`${waveLabel(e.wave)} 시작`);
+          screens.announce(e.endless ? `연속 플레이 ${e.endless}웨이브 시작` : `${waveLabel(e.wave)} 시작`);
+        }
+        // 연속 플레이: 3웨이브마다 1코인 + 1승리(랭크 1레벨). 바로 저장되므로 중간에 그만둬도 남는다
+        if (e.type === 'endless-reward') {
+          const coins = modStore().addCoins(1);
+          const result = addWin(rank);
+          rank = result.rank;
+          saveRank(rank);
+          if (result.coins) modStore().addCoins(result.coins);
+          screens.setAccount(currentAccount(), rank);
+          coinToast(`${e.cleared}웨이브 돌파! 코인 +1 (가진 코인 ${coins + result.coins}) · ${rankMessage(result)}`);
         }
         // 스토리 스테이지를 깰 때마다 1코인(바로 저장되므로 중간에 그만둬도 남는다). 마지막 대교는 승리할 때
         if (match.story && (e.type === 'stage' || (e.type === 'result' && e.winner === 'earth'))) {
           const coins = modStore().addCoins(1);
           coinToast(`스테이지 클리어! 코인 +1 (가진 코인 ${coins})`);
         }
-        if (e.type === 'wave-clear') screens.announce(`${waveLabel(e.wave)} 클리어`);
+        if (e.type === 'wave-clear') screens.announce(e.endless ? `연속 플레이 ${e.endless}웨이브 클리어` : `${waveLabel(e.wave)} 클리어`);
         if (e.type === 'stage') {
           screens.announce({
             sky: '3스테이지 하늘. 라이트닝을 타고 공중전! 체력이 모두 회복되었습니다.',

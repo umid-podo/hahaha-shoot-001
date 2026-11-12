@@ -123,7 +123,7 @@ export function loadSingle() {
     if (single.storyPlayers !== 2) single.storyPlayers = 1;
     if (![0, 1, 2, 3].includes(single.storyAllies)) single.storyAllies = 0;
     single.storyAllyPicks = normalizeAllyPicks(single.storyAllyPicks);
-    if (!STAGE_ORDER.includes(single.storyStart)) single.storyStart = 'rooftop';
+    if (!STAGE_ORDER.includes(single.storyStart) && single.storyStart !== 'endless') single.storyStart = 'rooftop';
     return single;
   } catch {
     return defaults;
