@@ -57,7 +57,8 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
   chars.className = 'choices characters';
   chars.setAttribute('role', 'group');
   chars.setAttribute('aria-label', `${s.id} 캐릭터`);
-  for (const c of CHARACTERS.filter((ch) => !ch.hidden)) {
+  // 상점에서 산 탈것(강습 건쉽)도 고를 수 있다
+  for (const c of CHARACTERS.filter((ch) => !ch.hidden || (ch.shop && modStore().owns(ch.shop)))) {
     // 숨겨진 캐릭터: 이 버튼을 빠르게 unlockTaps번(기본 3번) 누르면 버튼이 그 숨겨진 캐릭터로 바뀐다.
     // 온이름은 2번 아크 트루퍼, 3번 제작자.
     // 숨겨진 캐릭터가 된 버튼을 (연타가 아니게) 한 번 누르면 원래 캐릭터로 돌아온다.
@@ -151,9 +152,14 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
   droneNote.className = 'drone-note';
   function syncWeapons() {
     const character = CHARACTERS.find((c) => c.id === loadout[s.id].characterId);
-    weapons.hidden = !!character?.weapon;
-    droneNote.hidden = !character?.weapon;
-    if (character?.weapon) {
+    const fixed = !!character?.weapon || !!character?.loadout;
+    weapons.hidden = fixed;
+    droneNote.hidden = !fixed;
+    if (character?.loadout) {
+      const { primary, secondaries } = character.loadout;
+      droneNote.textContent = `${character.name} 전용 · 체력 ${character.maxHp} · 주무기 ${WEAPONS[primary].name} · 보조무기 ${secondaries.map((id) => WEAPONS[id].name).join('·')}`
+        + ' · 하늘을 날며 점프키로 위로, 회피키로 아래로(3인칭)';
+    } else if (character?.weapon) {
       const w = WEAPONS[character.weapon];
       droneNote.textContent = `${character.name} 전용: ${w.name} (${weaponInfo(w)}) · 보조무기·수류탄 없음`;
     }

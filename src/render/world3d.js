@@ -33,6 +33,7 @@ const FOV = 74;
 const evadeKick = new Map();
 const RECOIL_TIME = 0.12;
 const DS_SCALE = 1.6;             // 데스스타 모델 크기(거대 비행선)
+const GUNSHIP_LIFT = 80;          // 강습 건쉽 모델을 발 높이(z)에서 띄우는 높이(캐논이 탄 높이에 오게)
 
 const toV = (x, h, y) => new THREE.Vector3(x, h, y);
 const clamp01 = (k) => Math.max(0, Math.min(1, k));
@@ -914,6 +915,7 @@ export function createWorld3D(canvas, wrap, assets) {
     if (a.modelKind === kind) return a.model;
     if (a.model) scene.remove(a.model);
     a.model = kind === 'lightning' ? M.makeLightning() : kind === 'gunship' ? M.makeHelicopter('gunship', 0.8)
+      : kind === 'assault' ? M.makeAssaultGunship()
       : kind === 'deathstar' ? M.makeDeathstar() : null;
     if (kind === 'deathstar') a.model.scale.setScalar(DS_SCALE);
     a.modelKind = kind;
@@ -971,7 +973,7 @@ export function createWorld3D(canvas, wrap, assets) {
       const a = actorOf(p);
       seen.add(p.id);
       const character = CHARACTERS.find((c) => c.id === p.characterId);
-      const aircraft = p.plane ? 'lightning' : character?.aircraft ? p.characterId : null;
+      const aircraft = p.plane ? 'lightning' : p.flier ? 'assault' : character?.aircraft ? p.characterId : null;
       let h = 0;
       if (e) {
         const k = clamp01(e.t / e.duration);
@@ -995,6 +997,27 @@ export function createWorld3D(canvas, wrap, assets) {
       }
       // 탈것 모델
       const model = setModel(a, aircraft);
+      if (model && aircraft === 'assault') {
+        // 강습 건쉽: 떠 있는 높이(z)에서 바라보는 쪽으로, 위아래 시선만큼 기수를 들고 숙이며 옆으로 움직이면 기운다. 팬이 돈다
+        a.sprite.visible = false;
+        model.visible = true;
+        const road = stage === 'road' ? CAR_ROOF : 0;
+        const dx = p.x - (p.previousX ?? p.x), dy = p.y - (p.previousY ?? p.y);
+        const side = -Math.sin(p.aim) * dx + Math.cos(p.aim) * dy;
+        a.bank = (a.bank ?? 0) + ((reducedMotion ? 0 : Math.max(-0.35, Math.min(0.35, side * 0.03))) - (a.bank ?? 0)) * 0.15;
+        const bob = reducedMotion || !p.alive ? 0 : Math.sin(time * 2.2 + p.x * 0.01) * 5;
+        model.position.set(p.x, (p.z ?? 0) + road + GUNSHIP_LIFT + bob, p.y);
+        model.rotation.set(0, 0, 0);
+        model.rotateY(-p.aim);
+        model.rotateX(p.alive ? a.bank : 0.5);
+        model.rotateZ(p.alive ? (p.pitch ?? 0) * 0.35 : -0.4);
+        for (const f of model.userData.fans) f.rotation.x = p.alive ? time * 40 : 0;
+        model.userData.lights.forEach((l, i) => { l.visible = reducedMotion || Math.floor(time * 2 + i) % 2 === 0; });
+        a.ring.visible = false;
+        setCar(a, false);
+        if (!p.alive && !reducedMotion && Math.random() < 0.4) addEffect('smoke', { x: p.x, y: p.y, h: (p.z ?? 0) + 150, dense: true });
+        continue;
+      }
       if (model) {
         a.sprite.visible = false;
         if (aircraft === 'gunship' && !p.alive) { model.visible = false; continue; }
@@ -1140,7 +1163,7 @@ export function createWorld3D(canvas, wrap, assets) {
     if (stage !== 'sky' && !match.cutscene && !match.killcam && !match.victory && match.phase !== 'countdown') {
       for (const p of match.players) {
         // AI(요원·동료)의 조준선은 아예 만들지 않는다
-        if (p.ai || !p.alive || p.entering || p.plane || p.scripted || p.dash) continue;
+        if (p.ai || !p.alive || p.entering || p.plane || p.flier || p.scripted || p.dash) continue;
         const w = WEAPONS[p.weapon];
         if (!w || w.thrown || w.dash) continue;
         let l = aimLines.get(p.id);
@@ -1438,7 +1461,7 @@ export function createWorld3D(canvas, wrap, assets) {
       m.scale.set(1.2, 0.8, 0.8);
       return m;
     }
-    const rockets = { rpg: '#4E6B3A', missile: '#C9CED6', dsmissile: '#3FAE4A', dualrpg: '#7A4A2A', jet: '#D9443A', tank: '#2A2E35', ship: '#2A2E35', turret: '#2A2E35' };
+    const rockets = { rpg: '#4E6B3A', missile: '#C9CED6', gsmissile: '#B8BEC8', gsrockets: '#8E96A2', dsmissile: '#3FAE4A', dualrpg: '#7A4A2A', jet: '#D9443A', tank: '#2A2E35', ship: '#2A2E35', turret: '#2A2E35' };
     if (rockets[b.weapon]) return makeRocket(rockets[b.weapon]);
     // 레이저는 빛 덩어리, 석궁은 화살, 나머지는 진짜 총알 모양(구리 탄두·놋쇠 몸통, 뒤로 옅은 빛줄기)
     if (b.weapon === 'laser') {
@@ -1452,7 +1475,7 @@ export function createWorld3D(canvas, wrap, assets) {
     const trail = bulletColor(b);
     if (b.weapon === 'shotgun' || b.weapon === 'flak') return makeBullet({ kind: 'pellet', trail, trailLen: 40 });
     if (b.weapon === 'sniper' || b.weapon === 'jsniper') return makeBullet({ trail, scale: 1.25, trailLen: 120 });
-    if (b.weapon === 'lightning' || b.weapon === 'gunship') return makeBullet({ trail, scale: 1.5, trailLen: 90 });
+    if (b.weapon === 'lightning' || b.weapon === 'gunship' || b.weapon === 'gscannon') return makeBullet({ trail, scale: 1.5, trailLen: 90 });
     return makeBullet({ trail });
   }
   /** 탄의 높이: 보통은 총 높이, 던진 수류탄은 포물선, 전투기·포탑 폭탄은 쏜 높이에서 목표 바닥으로 */
@@ -1860,8 +1883,27 @@ export function createWorld3D(canvas, wrap, assets) {
   // ── 카메라 ──
   const recoil = {};
   const viewKick = {};
+  /**
+   * 3인칭 카메라(강습 건쉽): 바라보는 방향(위아래 포함) 뒤에서 조금 위로, 건쉽 너머로 조준점이 가는 곳을 본다.
+   * 바닥·고지대 아래로는 내려가지 않는다. 쓰러지면 떨어지는 건쉽을 내려다본다.
+   */
+  function thirdPerson(cam, p, match) {
+    const road = match.story?.stage === 'road' ? CAR_ROOF : 0;
+    const cy = (p.z ?? 0) + road + GUNSHIP_LIFT + 70;
+    const pitch = p.alive ? p.pitch ?? 0 : -0.6;
+    const fx = Math.cos(p.aim) * Math.cos(pitch), fz = Math.sin(p.aim) * Math.cos(pitch), fy = Math.sin(pitch);
+    const back = 640, up = 260;
+    let x = p.x - fx * back, y = cy - fy * back + up, z = p.y - fz * back;
+    y = Math.max(y, groundAt(match, x, z, y) + road + 30);
+    if (Number.isFinite(match.ceiling)) y = Math.min(y, match.ceiling - 30);
+    cam.position.set(x, y, z);
+    // 건쉽이 화면 아래쪽에 오고 조준점(화면 가운데)은 건쉽 위로 트인 곳을 보게
+    cam.lookAt(p.x + fx * 1400, cy + fy * 1400 + up * 0.6, p.y + fz * 1400);
+  }
+
   /** 1인칭 카메라: 플레이어 p의 눈. 쓰러졌으면 몸 위에서 내려다본다. */
   function firstPerson(cam, p, match, time, reducedMotion, dt) {
+    if (p.flier) { thirdPerson(cam, p, match); return; }
     const stage = match.story?.stage;
     let h = p.plane ? PLANE_Y + 26 : EYE;
     if (stage === 'road' && !p.plane) h += CAR_ROOF;
@@ -2125,6 +2167,13 @@ export function createWorld3D(canvas, wrap, assets) {
     if (!match || NO_FLASH.has(e.weapon) || match.gunkata || match.cutscene) return;
     const p = match.players.find((q) => q.id === e.playerId);
     if (!p || p.plane || p.aircraft || WEAPONS[e.weapon]?.thrown) return;
+    if (p.flier) {
+      // 강습 건쉽: 양옆 포드 아래 캐논 끝에서 불꽃(3인칭이라 내 화면에서도 보인다)
+      const fx = Math.cos(p.aim), fz = Math.sin(p.aim), rx = -fz, rz = fx;
+      const h = GUN_Y + (currentStage === 'road' ? CAR_ROOF : 0) + (p.z ?? 0) + Math.sin(p.pitch ?? 0) * 120;
+      for (const s of [-1, 1]) addEffect('muzzle', { x: p.x + fx * 130 + rx * 150 * s, y: p.y + fz * 130 + rz * 150 * s, h, color: e.weapon === 'gsmissile' ? '#FFB050' : null, size: 54 });
+      return;
+    }
     const dx = Math.cos(p.aim), dz = Math.sin(p.aim);
     const x = p.x + dx * MUZZLE_OFFSET, y = p.y + dz * MUZZLE_OFFSET;
     const h = (currentStage === 'sky' ? PLANE_Y : GUN_Y) + (currentStage === 'road' ? CAR_ROOF : 0) + (p.z ?? 0);
@@ -2310,7 +2359,8 @@ export function createWorld3D(canvas, wrap, assets) {
         cam.fov = v.target ? 58 : FOV + kick * 9;
         cam.updateProjectionMatrix();
         // 내 몸(판·비행기)은 내 화면에서 숨긴다(쓰러지면 내려다보는 내 몸은 보인다)
-        const own = viewer?.alive && actors.get(viewer.id);
+        // 3인칭(강습 건쉽)이면 내 건쉽은 보인다
+        const own = viewer?.alive && !viewer.flier && actors.get(viewer.id);
         const ownVisible = own ? [own.sprite.visible, own.model?.visible, own.car?.visible, own.held?.visible] : null;
         if (own) { own.sprite.visible = false; if (own.model) own.model.visible = false; if (own.held) own.held.visible = false; }
         // 판 그림의 방향: 카메라 오른쪽 기준으로 캐릭터가 왼쪽을 보면 뒤집는다
@@ -2339,7 +2389,7 @@ export function createWorld3D(canvas, wrap, assets) {
         if (ownShield) ownShield.visible = ownShieldOn;
         for (const fx of ownFx) fx.obj.visible = true;
         // 손에 든 총(3D): 장착한 무기 모양 그대로, 쌍권총·석궁은 양손에 하나씩
-        if (viewer?.alive && !viewer.plane && !v.target) {
+        if (viewer?.alive && !viewer.plane && !viewer.flier && !v.target) {
           const smoke = viewmodel.render(renderer, viewer, pw / ph, {
             time, dt, reducedMotion, paused: match.phase === 'paused',
             moving: Math.hypot(viewer.x - viewer.previousX, viewer.y - (viewer.previousY ?? viewer.y)) > 0.5,
@@ -2357,7 +2407,7 @@ export function createWorld3D(canvas, wrap, assets) {
             if (p.entering && p.entering.t < 0) continue;
             const a = actors.get(p.id);
             if (!a || !(a.sprite.visible || a.model?.visible)) continue;
-            const top = a.model?.visible ? (p.characterId === 'deathstar' ? 360 : PLANE_Y + 70) : a.sprite.position.y + a.sprite.scale.y * (1 - footOf(a.image ?? p.characterId)) * 0.92;
+            const top = a.model?.visible ? (p.flier ? (p.z ?? 0) + GUNSHIP_LIFT + 160 : p.characterId === 'deathstar' ? 360 : PLANE_Y + 70) : a.sprite.position.y + a.sprite.scale.y * (1 - footOf(a.image ?? p.characterId)) * 0.92;
             const s = project(cam, v.rect, p.x, top + 16, p.y);
             if (!s) continue;
             const dist = cam.position.distanceTo(tmp.set(p.x, top, p.y));

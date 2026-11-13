@@ -771,3 +771,121 @@ export function makeWhiteCover(c, h = 84) {
   g.userData.white = true;
   return g;
 }
+
+/* ───────── 강습 건쉽(상점 탈것): 원작 디자인 ─────────
+ * 앞이 +X. 가운데 아래로 좁아지는 육각 조종석(앞 유리), 그 위로 넓게 펼친 각진 장갑 지붕 두 겹과 뒤쪽 계단 꼬리판,
+ * 양옆 각진 팔에 매단 팔각 엔진 포드(앞쪽 덕트 팬이 돈다), 포드마다 아래 쌍 캐논. 원점은 발 높이(z), 몸 가운데는 위로 약 70.
+ * userData.fans: 돌릴 팬, userData.lights: 깜빡일 표시등.
+ */
+export function makeAssaultGunship() {
+  const out = new THREE.Group();
+  const armor = mat('#2B313A', { metal: 0.55, rough: 0.45 });
+  const dark = mat('#171B21', { metal: 0.5, rough: 0.55 });
+  const edge = mat('#454E5B', { metal: 0.6, rough: 0.4 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: '#2E5F8E', metalness: 0.1, roughness: 0.08, transparent: true, opacity: 0.85, emissive: '#0E2440', emissiveIntensity: 0.6 });
+  // 옆에서 본 모양을 폭(z)만큼 밀어 만든다
+  const prism = (pts, depth, material) => {
+    const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 2, bevelSize: 2, bevelSegments: 1 });
+    geo.translate(0, 0, -depth / 2);
+    return new THREE.Mesh(geo, material);
+  };
+  // 조종석 몸통(아래로 좁아지고 앞이 비스듬히 깎인 육각)과 앞·옆 유리
+  out.add(prism([[-78, 70], [-60, 34], [44, 18], [80, 50], [88, 92], [52, 122], [-56, 122]], 74, armor));
+  const canopy = prism([[46, 26], [78, 54], [84, 90], [54, 114], [40, 112], [62, 86], [58, 56], [38, 34]], 60, glass);
+  canopy.position.x = 3;
+  out.add(canopy);
+  for (const s of [-1, 1]) {
+    const side = prism([[0, 40], [44, 32], [56, 60], [40, 100], [0, 104]], 2, glass);
+    side.position.set(10, 0, s * 39);
+    out.add(side);
+  }
+  out.add(at(box(70, 10, 80, dark), -20, 16, 0)); // 배 아래 판
+  // 장갑 지붕: 넓은 가운데 판 + 양옆으로 비스듬히 내려가는 판 두 겹 + 앞 모서리 판
+  const roofY = 136;
+  out.add(at(box(170, 12, 120, armor), -10, roofY, 0));
+  out.add(at(box(120, 8, 70, edge), 10, roofY + 10, 0));
+  out.add(at(box(40, 14, 50, dark), 50, roofY + 16, 0)); // 앞 센서 덮개
+  for (const s of [-1, 1]) {
+    const wing = at(box(190, 10, 150, armor), -14, roofY - 22, s * 128);
+    wing.rotation.x = s * 0.32;
+    out.add(wing);
+    const outer = at(box(150, 9, 110, edge), -30, roofY - 58, s * 238);
+    outer.rotation.x = s * 0.52;
+    out.add(outer);
+    // 지붕 아래 그물 무늬 통풍판(어둡게)
+    const vent = at(box(150, 3, 120, dark), -20, roofY - 36, s * 120);
+    vent.rotation.x = s * 0.32;
+    out.add(vent);
+    // 앞쪽 각진 판(지붕 앞 모서리)
+    const lip = at(box(30, 8, 140, edge), 74, roofY - 34, s * 118);
+    lip.rotation.set(s * 0.32, 0, -0.35);
+    out.add(lip);
+    // 뒤 꼬리판: 계단처럼 아래로 내려가는 판 셋
+    for (let i = 0; i < 3; i++) {
+      const fin = at(box(70, 6, 46, armor), -112 - i * 26, roofY - 34 - i * 22, s * (34 + i * 18));
+      fin.rotation.set(s * 0.2, 0, 0.5);
+      out.add(fin);
+    }
+    // 엔진 포드를 거는 각진 팔(위 팔·아래 팔)
+    const arm1 = at(box(26, 16, 100, dark), 0, 104, s * 86);
+    arm1.rotation.x = s * -0.5;
+    out.add(arm1);
+    const arm2 = at(box(18, 12, 96, edge), -26, 70, s * 96);
+    arm2.rotation.x = s * 0.35;
+    out.add(arm2);
+  }
+  // 엔진 포드: 팔각 통(축이 앞뒤 X), 앞에 덕트 팬, 아래 쌍 캐논, 옆 표시등
+  const fans = [], lights = [];
+  const fanMat = mat('#59636F', { metal: 0.8, rough: 0.3 });
+  const lamp = mat('#FFCB4A', { emissive: '#FFB020' });
+  for (const s of [-1, 1]) {
+    const pod = new THREE.Group();
+    pod.position.set(6, 48, s * 150);
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(42, 42, 96, 8, 1), armor);
+    shell.rotation.z = Math.PI / 2;
+    shell.rotation.x = Math.PI / 8;
+    pod.add(shell);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(36, 36, 6, 24, 1, true), dark);
+    ring.rotation.z = Math.PI / 2;
+    ring.position.x = 46;
+    pod.add(ring);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 8, 12), edge);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.x = 46;
+    pod.add(hub);
+    const fan = new THREE.Group();
+    fan.position.x = 45;
+    for (let i = 0; i < 9; i++) {
+      const blade = box(2, 30, 7, fanMat);
+      blade.position.y = 18;
+      const arm = new THREE.Group();
+      arm.rotation.x = (i / 9) * Math.PI * 2;
+      blade.rotation.y = 0.4;
+      arm.add(blade);
+      fan.add(arm);
+    }
+    pod.add(fan);
+    fans.push(fan);
+    // 뒤 배기구
+    const back = new THREE.Mesh(new THREE.CylinderGeometry(30, 34, 10, 8), dark);
+    back.rotation.z = Math.PI / 2;
+    back.position.x = -52;
+    pod.add(back);
+    // 쌍 캐논(포드 아래, 앞으로)
+    for (const dz of [-14, 14]) {
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 120, 10), dark);
+      barrel.rotation.z = Math.PI / 2;
+      barrel.position.set(52, -44, dz);
+      pod.add(barrel);
+      pod.add(at(box(10, 10, 10, dark), 114, -44, dz));
+    }
+    pod.add(at(box(40, 18, 40, edge), 4, -40, 0)); // 캐논 받침
+    const l = at(box(10, 10, 4, lamp), 20, 0, s * 44);
+    pod.add(l);
+    lights.push(l);
+    out.add(pod);
+  }
+  out.userData = { fans, lights };
+  return out;
+}

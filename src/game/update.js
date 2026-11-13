@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MIN_Y, MAX_Y, BULLET_RADIUS, ZONE, JUMP, COVER_HEIGHT,
-  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, secondaryIndex, secondarySlot, JET, TANK, SHIP, COVER, EVADE, PAD, VERTICAL_AIM, PITCH, SHOT_HEIGHT,
+  MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, secondaryIndex, secondarySlot, FLIGHT, JET, TANK, SHIP, COVER, EVADE, PAD, VERTICAL_AIM, PITCH, SHOT_HEIGHT,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { highAt, groundAt, structureHit, lineBlocked } from './terrain.js';
@@ -128,8 +128,9 @@ function verticalAim(match, player, aim, speed) {
     best = q; bestD = d;
   }
   if (!best) return 0;
-  const from = groundAt(match, player.x, player.y, player.z ?? 0);
-  const to = groundAt(match, best.x, best.y, best.z ?? 0);
+  // 나는 사람(강습 건쉽)은 바닥이 아니라 떠 있는 높이로 겨눈다
+  const from = player.flier ? player.z ?? 0 : groundAt(match, player.x, player.y, player.z ?? 0);
+  const to = best.flier ? best.z ?? 0 : groundAt(match, best.x, best.y, best.z ?? 0);
   const dz = to - from;
   if (Math.abs(dz) < VERTICAL_AIM.minDz) return 0;
   return dz / (bestD / speed);
@@ -222,6 +223,13 @@ function steer(match, b, turnRate, dt) {
   const next = heading + Math.max(-max, Math.min(max, diff));
   const speed = Math.hypot(b.vx, b.vy);
   b.vx = Math.cos(next) * speed; b.vy = Math.sin(next) * speed;
+  // 위아래로도 쫓는 유도탄(강습 건쉽 유도미사일): 닿을 때쯤 적 몸 높이가 되도록 위아래 속도를 조금씩 맞춘다
+  if (b.homing?.vertical && b.z !== undefined) {
+    const t = Math.max(0.05, Math.hypot(target.x - b.x, target.y - b.y) / Math.max(1, speed));
+    const want = ((target.z ?? 0) + 20 - b.z) / t;
+    const dv = speed * turnRate * dt;
+    b.vz = (b.vz ?? 0) + Math.max(-dv, Math.min(dv, want - (b.vz ?? 0)));
+  }
 }
 
 /**
@@ -599,7 +607,7 @@ const fireRate = (p) => (p.boost > 0 ? WEAPONS[(p.secondaries ?? [p.secondary]).
  * 스토리 공중전에서는 미사일(유도 없음)을 쏜다(p.item). 쿨타임 중이면 무시.
  */
 function throwGrenade(match, p, events) {
-  if (p.grenadeCooldown > 0) return;
+  if (p.grenadeCooldown > 0 || p.noItem) return;
   const item = WEAPONS[p.item ?? 'grenade'];
   p.grenadeCooldown = item.interval;
   spawnProjectile(match, p, p.aim, item.id);
@@ -639,7 +647,10 @@ function fire(match, p, events) {
     // 아킴보 석궁: 같은 방향으로 나란히
     const n = Math.max(1, Math.round(weapon.arrows));
     for (let i = 0; i < n; i++) {
-      spawnProjectile(match, p, p.aim, weapon.id, { offset: (i - (n - 1) / 2) * weapon.arrowGap, group });
+      const offset = (i - (n - 1) / 2) * weapon.arrowGap;
+      // converge: 양옆에서 쏜 탄이 앞쪽 converge 거리(조준점)에서 만나게 안쪽으로 조금 꺾는다(강습 건쉽 캐논)
+      const angle = weapon.converge ? p.aim - Math.atan2(offset, convergeAt(match, p, weapon.converge)) : p.aim;
+      spawnProjectile(match, p, angle, weapon.id, { offset, group });
     }
   } else if (weapon.flame) {
     // 화염방사기: 조준 방향 둘레로 흩어지는 불꽃
@@ -654,6 +665,20 @@ function fire(match, p, events) {
     spawnProjectile(match, p, p.aim);
   }
   events.push({ type: 'fire', playerId: p.id, weapon: p.weapon, ...(weapon.alternate ? { hand: p.hand } : {}) });
+}
+
+/**
+ * 양쪽 캐논이 모이는 거리: 조준 방향 12도 안에 적이 있으면 그 적까지의 거리(가로), 없으면 기본 거리(fallback).
+ */
+function convergeAt(match, p, fallback) {
+  let best = Infinity;
+  for (const q of match.players) {
+    if (!q.alive || q.team === p.team || q.entering) continue;
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    const a = Math.atan2(q.y - p.y, q.x - p.x);
+    if (d >= 150 && Math.abs(Math.atan2(Math.sin(a - p.aim), Math.cos(a - p.aim))) <= 0.21) best = Math.min(best, d);
+  }
+  return Number.isFinite(best) ? Math.min(4000, best) : fallback;
 }
 
 /** 경기 시작 뒤 흐른 시간(초). 카운트다운·일시정지는 세지 않는다. */
@@ -956,6 +981,29 @@ export function updateJump(match, p, jump, dt, events, held = false) {
 }
 
 /**
+ * 비행 한 틱(강습 건쉽): dir(+1 위, -1 아래, 0 그대로)으로 고도를 올리고 내린다. 입력이 없으면 그 높이에서 멈춰 떠 있는다(호버링).
+ * 바닥·고지대 위 FLIGHT.minAlt보다 낮게, FLIGHT.maxAlt(천장이 있으면 그 아래)보다 높게는 못 간다. 쓰러지면 바닥으로 떨어진다.
+ */
+export function updateFlight(match, p, dir, dt) {
+  p.z ??= FLIGHT.hoverAlt; p.vz ??= 0;
+  const ground = groundAt(match, p.x, p.y, p.z);
+  if (!p.alive) {
+    p.vz -= JUMP.gravity * dt;
+    p.z = Math.max(ground, p.z + p.vz * dt);
+    if (p.z <= ground) p.vz = 0;
+    return;
+  }
+  const min = ground + FLIGHT.minAlt;
+  const max = Math.min(FLIGHT.maxAlt, Number.isFinite(match.ceiling) ? match.ceiling - 260 : Infinity);
+  const want = Math.max(-1, Math.min(1, dir)) * FLIGHT.climb;
+  const step = FLIGHT.accel * dt;
+  p.vz += Math.max(-step, Math.min(step, want - p.vz));
+  p.z += p.vz * dt;
+  if (p.z < min) { p.z = min; if (p.vz < 0) p.vz = 0; }
+  if (p.z > max) { p.z = max; if (p.vz > 0) p.vz = 0; }
+}
+
+/**
  * 고정 틱 한 번. 렌더·사운드용 이벤트 목록을 돌려준다.
  * 순서: 전투기(이동·사격) → 플레이어 무기 전환·이동·아이템·자동 발사 → 탄환 이동·충돌(엄폐물·적, 엄폐물 내구도) → 쓰러짐·승패.
  */
@@ -1000,6 +1048,7 @@ export function step(match, inputs, dt = TICK) {
     p.previousX = p.x;
     p.previousY = p.y;
     p.hurt = Math.max(0, p.hurt - dt);
+    if (!p.alive && p.flier && p.z > 0) updateFlight(match, p, 0, dt); // 격추된 건쉽은 바닥으로 떨어진다
     if (!p.alive || p.entering) continue;
     const input = inputs[p.id];
     // 전용 무기 캐릭터(R-10·숨겨진 캐릭터)는 주무기 하나뿐이고 아이템도 없다
@@ -1043,12 +1092,19 @@ export function step(match, inputs, dt = TICK) {
     const stuck = frozen(p);
     if (input.evade) {
       input.evade = false;
-      if (!p.rooted && !p.scripted && !p.plane && !stuck) startEvade(p, input, events);
+      // 나는 캐릭터는 회피키가 고도 내리기라 돌진하지 않는다
+      if (!p.rooted && !p.scripted && !p.plane && !p.flier && !stuck) startEvade(p, input, events);
     }
     if (stuck) p.evade = null;
     if (p.evade) updateEvade(match, p, dt);
     else if (!p.rooted && !stuck) move(match, p, input.moveAxis, input.moveY ?? 0, dt);
-    updateJump(match, p, input.jump && !p.rooted && !stuck, dt, events, !!(input.jumpHeld || input.touchJump) && !stuck);
+    if (p.flier) {
+      // 고도: 점프키(누르고 있는 동안) 위로, 회피키(누르고 있는 동안) 아래로. AI는 flyDir로
+      const up = input.jump || input.jumpHeld || input.touchJump, down = input.descendHeld || input.touchDescend;
+      updateFlight(match, p, stuck ? 0 : input.flyDir ?? ((up ? 1 : 0) - (down ? 1 : 0)), dt);
+    } else {
+      updateJump(match, p, input.jump && !p.rooted && !stuck, dt, events, !!(input.jumpHeld || input.touchJump) && !stuck);
+    }
     input.jump = false;
     if (shocked(p)) {
       // 감전: 아이템·사격·점사 모두 멈춘다. 손을 떼면 쏘는 무기가 풀리자마자 나가지 않게 조준도 풀린 것으로 둔다

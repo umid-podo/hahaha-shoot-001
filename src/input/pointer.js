@@ -122,14 +122,17 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       item.setAttribute('aria-label', `${p.id} 수류탄 던지기`);
       // 전용 무기 캐릭터는 주무기 하나뿐이고 아이템도 없다
       for (const b of seconds) b.disabled = p.primaryOnly;
-      item.disabled = p.primaryOnly;
+      item.disabled = p.primaryOnly || p.noItem;
       const jump = actionButton('jump-btn', () => { frame.jump = true; frame.touchJump = true; });
       // 꾹 누르고 있는 동안 더 높이 뛴다(손을 떼면 그만 모은다)
       for (const type of ['pointerup', 'pointercancel', 'pointerleave']) jump.addEventListener(type, () => { frame.touchJump = false; });
-      jump.innerHTML = '<small>점프</small><span>▲</span>';
+      // 강습 건쉽: 점프 버튼은 고도 올리기, 회피 버튼은 고도 내리기(누르고 있는 동안)
+      jump.innerHTML = p.flier ? '<small>올라가기</small><span>▲</span>' : '<small>점프</small><span>▲</span>';
       jump.setAttribute('aria-label', `${p.id} 점프`);
-      const evade = actionButton('evade-btn', () => { frame.evade = true; });
-      evade.innerHTML = '<small>회피</small><span></span>';
+      const evade = actionButton('evade-btn', () => { frame.evade = true; frame.touchDescend = true; });
+      // 강습 건쉽: 회피 버튼을 누르고 있는 동안 고도를 내린다(점프 버튼은 올림)
+      for (const type of ['pointerup', 'pointercancel', 'pointerleave']) evade.addEventListener(type, () => { frame.touchDescend = false; });
+      evade.innerHTML = p.flier ? '<small>내려가기</small><span>▼</span>' : '<small>회피</small><span></span>';
       evade.setAttribute('aria-label', `${p.id} 회피(빠른 돌진, 2번 연속)`);
       evade.disabled = !!p.plane;
       actions.append(primary, ...seconds, item, jump, evade);
@@ -206,11 +209,11 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
         });
         // 회피: 남은 횟수를 점으로(●●), 다 쓰면 다시 채워질 때까지 회색
         const charges = p.evadeCharges ?? EVADE.charges;
-        const evadeText = '●'.repeat(charges) + '○'.repeat(Math.max(0, EVADE.charges - charges));
+        const evadeText = p.flier ? '▼' : '●'.repeat(charges) + '○'.repeat(Math.max(0, EVADE.charges - charges));
         if (b.evadeText !== evadeText) {
           b.evadeText = evadeText;
           b.evade.lastChild.textContent = evadeText;
-          b.evade.classList.toggle('cooling', charges <= 0);
+          b.evade.classList.toggle('cooling', !p.flier && charges <= 0);
         }
         b.evade.disabled = !!p.plane;
         const ready = p.alive && p.grenadeCooldown <= 0;

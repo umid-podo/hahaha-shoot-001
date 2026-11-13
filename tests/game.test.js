@@ -956,7 +956,7 @@ test('아킴보 석궁은 숨겨진 무기(쌍권총 2번)이고, 모든 일반 
   assert.equal(WEAPONS.crossbow.hidden, true, '목록에는 안 보임');
   assert.equal(WEAPONS.crossbow.unlockFrom, 'dual');
   assert.equal(WEAPONS.crossbow.unlockTaps, 2);
-  for (const c of CHARACTERS.filter((ch) => !ch.weapon)) {
+  for (const c of CHARACTERS.filter((ch) => !ch.weapon && !ch.loadout)) { // 무기 구성이 정해진 강습 건쉽은 빼고
     const { P1 } = playing({ P1: { characterId: c.id, weapon: 'crossbow' } });
     assert.equal(P1.weapon, 'crossbow', c.name);
   }

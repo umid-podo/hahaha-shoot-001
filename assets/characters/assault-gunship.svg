@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 강습 건쉽(원작 디자인): 앞에서 본 모습. 각진 장갑 지붕, 가운데 유리 조종석, 양옆 엔진 포드(덕트 팬)와 쌍 캐논 -->
+  <defs>
+    <linearGradient id="armor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A5260"/><stop offset="1" stop-color="#1F242C"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7FB6E8"/><stop offset="0.55" stop-color="#2E5F8E"/><stop offset="1" stop-color="#16314E"/>
+    </linearGradient>
+    <radialGradient id="fan" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#9AA6B6"/><stop offset="0.6" stop-color="#3A424E"/><stop offset="1" stop-color="#12161B"/>
+    </radialGradient>
+  </defs>
+  <!-- 지붕 장갑: 넓게 펼친 각진 판 세 겹(가운데가 높고 끝이 아래로) -->
+  <path d="M40 176 L118 118 L210 104 L256 88 L302 104 L394 118 L472 176 L430 186 L360 158 L256 150 L152 158 L82 186 Z" fill="url(#armor)" stroke="#0C0F13" stroke-width="5"/>
+  <path d="M70 196 L140 160 L256 154 L372 160 L442 196 L404 206 L338 184 L256 180 L174 184 L108 206 Z" fill="#2A3039" stroke="#0C0F13" stroke-width="4"/>
+  <path d="M206 112 L256 98 L306 112 L292 128 L220 128 Z" fill="#59626F" stroke="#0C0F13" stroke-width="3"/>
+  <g stroke="#0C0F13" stroke-width="3" fill="none" opacity="0.8">
+    <path d="M118 128 L176 146"/><path d="M394 128 L336 146"/><path d="M160 122 L204 140"/><path d="M352 122 L308 140"/>
+  </g>
+  <!-- 팔(포드를 거는 각진 지지대) -->
+  <path d="M190 210 L120 268 L132 282 L202 228 Z" fill="#232830" stroke="#0C0F13" stroke-width="4"/>
+  <path d="M322 210 L392 268 L380 282 L310 228 Z" fill="#232830" stroke="#0C0F13" stroke-width="4"/>
+  <!-- 가운데 조종석: 아래로 좁아지는 육각 몸통과 유리창 -->
+  <path d="M196 180 L316 180 L332 236 L314 360 L282 392 L230 392 L198 360 L180 236 Z" fill="url(#armor)" stroke="#0C0F13" stroke-width="5"/>
+  <path d="M214 196 L298 196 L310 240 L296 330 L216 330 L202 240 Z" fill="url(#glass)" stroke="#0C0F13" stroke-width="4"/>
+  <path d="M222 206 L262 206 L232 300 L214 300 Z" fill="#FFFFFF" opacity="0.18"/>
+  <path d="M232 344 L280 344 L276 370 L236 370 Z" fill="#14181E" stroke="#0C0F13" stroke-width="3"/>
+  <!-- 엔진 포드(양옆): 팔각 상자 안에 덕트 팬 -->
+  <g id="pod">
+    <path d="M44 270 L76 252 L148 252 L168 272 L168 342 L148 362 L76 362 L44 342 Z" fill="url(#armor)" stroke="#0C0F13" stroke-width="5"/>
+    <circle cx="106" cy="307" r="38" fill="url(#fan)" stroke="#0C0F13" stroke-width="4"/>
+    <g stroke="#0C0F13" stroke-width="3">
+      <path d="M106 271 L106 343"/><path d="M70 307 L142 307"/><path d="M80 281 L132 333"/><path d="M132 281 L80 333"/>
+    </g>
+    <circle cx="106" cy="307" r="9" fill="#5A6370" stroke="#0C0F13" stroke-width="3"/>
+    <!-- 쌍 캐논 -->
+    <rect x="68" y="362" width="10" height="70" fill="#15191F" stroke="#0C0F13" stroke-width="2"/>
+    <rect x="96" y="362" width="10" height="84" fill="#15191F" stroke="#0C0F13" stroke-width="2"/>
+    <rect x="64" y="430" width="18" height="12" fill="#0C0F13"/><rect x="92" y="444" width="18" height="12" fill="#0C0F13"/>
+    <rect x="150" y="300" width="18" height="14" fill="#FFCB4A" stroke="#0C0F13" stroke-width="2"/>
+  </g>
+  <use href="#pod" transform="translate(512 0) scale(-1 1)"/>
+</svg>
