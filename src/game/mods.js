@@ -227,12 +227,12 @@ export const LEGEND_SHOP = [
 ];
 /**
  * 상점 탈것(캐릭터): 사면 그 캐릭터(config.js에서 shop이 이 id인 캐릭터)가 캐릭터 선택에 나타난다(영구).
- * 강습 건쉽: 체력 3000, 양쪽 캐논·유도미사일·유탄 발사, 스테이지 위를 날아다니며 고도를 바꾸는 3인칭 비행.
+ * 강습 건쉽: 체력 3000, 양쪽 캐논·유도미사일·미사일 5연발, 스테이지 위를 날아다니며 고도를 바꾸는 3인칭 비행.
  */
 export const VEHICLE_PRICE = 100;
 export const VEHICLE_SHOP = [
   { id: 'vehicle-gunship', character: 'assault-gunship', grade: 'legendary', kind: 'vehicle', name: '강습 건쉽', price: VEHICLE_PRICE, parts: [],
-    info: '체력 3000 · 양쪽 캐논(주무기) · 유도미사일 50·유탄 20×4(보조무기) · 스테이지 위를 날며 고도를 올리고 내리는 3인칭 비행' },
+    info: '체력 3000 · 양쪽 캐논(주무기) · 유도미사일 50·미사일 15×5(보조무기) · 스테이지 위를 날며 고도를 올리고 내리는 3인칭 비행' },
 ];
 export const SHOP_BY_ID = Object.fromEntries([...LEGEND_SHOP, ...VEHICLE_SHOP, ...SHOP].map((g) => [g.id, g]));
 /** 그 무기를 살 수 있는 상점 항목(전설 무기가 아니면 null) */

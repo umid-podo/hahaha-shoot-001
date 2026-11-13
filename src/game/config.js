@@ -309,10 +309,11 @@ export const WEAPONS = {
     id: 'gsmissile', name: '유도미사일', interval: 4, damage: 50, speed: 750, burst: 1, ownCooldown: true,
     splash: { damage: 15, radius: 120 }, homing: { turnRate: 4, vertical: true }, life: 3, // vertical: 위아래로도 적 높이를 쫓는다
   },
-  // 유탄 발사(보조무기): 조준한 뒤 떼면 유탄 4발을 연달아 쏜다. 각각 직격 20(맞지 않으면 터져 폭발 20). 쿨타임 6초
-  gsgrenade: {
-    id: 'gsgrenade', name: '유탄 발사', interval: 6, damage: 20, speed: 900, burst: 4, burstGap: 0.12, trigger: 'release', ownCooldown: true,
-    splash: { damage: 20, radius: 110 }, life: 1.2,
+  // 미사일 5연발(보조무기): 조준한 뒤 떼면 작은 미사일 5발을 연달아 쏜다. 각각 15(맞히면 직격 15, 빗나가면 터져 근처에 15).
+  // 적 쪽으로 약하게 유도(위아래 포함). 쿨타임 6초
+  gsrockets: {
+    id: 'gsrockets', name: '미사일 5연발', interval: 6, damage: 15, speed: 750, burst: 5, burstGap: 0.08, trigger: 'release', ownCooldown: true,
+    splash: { damage: 15, radius: 90 }, homing: { turnRate: 2.5, vertical: true }, life: 3,
   },
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
   // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)
@@ -437,12 +438,12 @@ export const CHARACTERS = [
   },
   /**
    * 강습 건쉽: 상점(총기 개조 → 상점 → 탈것)에서 100코인에 사면 캐릭터 선택에 나온다(shop). 체력이 매우 높고,
-   * 주무기는 양쪽 캐논, 보조무기는 유도미사일·유탄 발사로 고정(loadout, 수류탄 없음). flier: 스테이지 위를 날아다니며
+   * 주무기는 양쪽 캐논, 보조무기는 유도미사일·미사일 5연발로 고정(loadout, 수류탄 없음). flier: 스테이지 위를 날아다니며
    * 고도를 올리고 내린다(점프키 위로, 회피키 아래로). 1인칭 대신 뒤에서 보는 3인칭 화면.
    */
   {
     id: 'assault-gunship', name: '강습 건쉽', hidden: true, shop: 'vehicle-gunship', flier: true, noItem: true,
-    loadout: { primary: 'gscannon', secondaries: ['gsmissile', 'gsgrenade'] },
+    loadout: { primary: 'gscannon', secondaries: ['gsmissile', 'gsrockets'] },
     maxHp: 3000, radius: 80, speed: MAX_SPEED * 1.2, image: 'assets/characters/assault-gunship.svg',
   },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 3번 누르면 나타난다. 모습은 온이름 + 몸에 빨간 '제작자'. 즉사기 전용.

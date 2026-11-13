@@ -1456,12 +1456,12 @@ export function createWorld3D(canvas, wrap, assets) {
       return new THREE.Mesh(GEO.grenade, M.mat('#4E6B3A'));
     }
     if (b.weapon === 'energyrpg') return makeEnergyRocket();
-    if (b.weapon === 'grenadelauncher' || b.weapon === 'gsgrenade') {
+    if (b.weapon === 'grenadelauncher') {
       const m = new THREE.Mesh(GEO.grenade, M.mat('#3E4A2E', { metal: 0.4, rough: 0.5 }));
       m.scale.set(1.2, 0.8, 0.8);
       return m;
     }
-    const rockets = { rpg: '#4E6B3A', missile: '#C9CED6', gsmissile: '#B8BEC8', dsmissile: '#3FAE4A', dualrpg: '#7A4A2A', jet: '#D9443A', tank: '#2A2E35', ship: '#2A2E35', turret: '#2A2E35' };
+    const rockets = { rpg: '#4E6B3A', missile: '#C9CED6', gsmissile: '#B8BEC8', gsrockets: '#8E96A2', dsmissile: '#3FAE4A', dualrpg: '#7A4A2A', jet: '#D9443A', tank: '#2A2E35', ship: '#2A2E35', turret: '#2A2E35' };
     if (rockets[b.weapon]) return makeRocket(rockets[b.weapon]);
     // 레이저는 빛 덩어리, 석궁은 화살, 나머지는 진짜 총알 모양(구리 탄두·놋쇠 몸통, 뒤로 옅은 빛줄기)
     if (b.weapon === 'laser') {
