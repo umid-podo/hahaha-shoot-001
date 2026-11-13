@@ -1,6 +1,6 @@
 import {
   RAIL_Y, COUNTDOWN, MAX_HP, BODY_RADIUS, MAX_SPEED, ARENA_WIDTH, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, normalizeSecondaries, JET, COVERS, COVER,
-  STEEL, STEEL_SPOTS, HIGHS, ARENA_BOUNDS, EVADE,
+  STEEL, STEEL_SPOTS, HIGHS, ARENA_BOUNDS, EVADE, FLIGHT,
 } from './config.js';
 import { applyMap } from './maps.js';
 
@@ -56,9 +56,11 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
   const characterId = characterOf(pick.characterId) ? pick.characterId : slot.characterId;
   const character = characterOf(characterId);
   // R-10·숨겨진 캐릭터는 전용 무기 고정. 그 외에는 고른 주무기(주무기 목록에 없으면 자리 기본값).
-  const weapon = character.weapon ?? (weaponPool.includes(pick.weapon) ? pick.weapon : slot.weapon);
+  // 강습 건쉽처럼 무기 구성이 정해진 캐릭터(loadout)는 그 주무기·보조무기
+  const weapon = character.loadout?.primary ?? character.weapon ?? (weaponPool.includes(pick.weapon) ? pick.weapon : slot.weapon);
   // 보조무기 최대 3개(secondaries). 예전 선택(secondary 하나)도 받는다. secondary는 첫 번째 보조무기
-  const secondaries = normalizeSecondaries(pick.secondaries ?? (SECONDARY_IDS.includes(pick.secondary) ? [pick.secondary] : [DEFAULT_SECONDARY]));
+  const secondaries = character.loadout ? [...character.loadout.secondaries]
+    : normalizeSecondaries(pick.secondaries ?? (SECONDARY_IDS.includes(pick.secondary) ? [pick.secondary] : [DEFAULT_SECONDARY]));
   const secondary = secondaries[0];
   const maxHp = pick.maxHp > 0 ? Math.round(pick.maxHp) : character.maxHp ?? MAX_HP;
   const name = pick.name ?? character.name;
@@ -75,6 +77,8 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
     primary: weapon, secondary, secondaries, slot: 'primary', weapon,
     // shield: 폭동 진압 방패를 세웠으면 { hp(남은 막을 피해), t(남은 초) }, blind: 섬광에 눈이 먼 남은 초
     shield: null, blind: 0,
+    // flier: 하늘을 나는 캐릭터(강습 건쉽) — 점프 대신 고도를 올리고 내리며 떠 있다. noItem: 아이템(수류탄) 없음
+    flier: !!character.flier, noItem: !!character.noItem,
     battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
     // item: 아이템 버튼 무기(평소 수류탄, 스토리 공중전은 미사일). boost: 과냉각이 남은 시간(그동안 주무기 연사가 빨라짐)
     item: 'grenade', boost: 0,
@@ -84,7 +88,7 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
     // ammo: 무기별 남은 총알(없으면 가득), reload: 장전 중이면 { weapon, t(남은 초), total }
     ammo: {}, reload: null,
     // z: 발 높이(점프·고지대), vz: 위로 가는 속도
-    z: 0, vz: 0,
+    z: character.flier ? FLIGHT.hoverAlt : 0, vz: 0,
     // shock: 감전 남은 초(움직이지도 쏘지도 못함), freeze: 마비 남은 초(움직이지 못함)
     shock: 0, freeze: 0,
     // evade: 회피 돌진 중이면 { dx, dy, t(남은 초) }, evadeCharges: 남은 연속 회피 횟수, evadeCooldown: 다시 채워질 때까지 남은 초
@@ -181,6 +185,8 @@ export function createInput(player) {
     // pitch: 위아래 시선(라디안, +위). look·touchLook: 이번 틱에 고개를 드는 속도(-1~1, 키·스틱·터치), mousePitch: 마우스로 든 각도
     // jumpHeld·touchJump: 점프키(터치 점프 버튼)를 누르고 있는지 — 꾹 누를수록 높이 뛴다
     pitch: 0, look: 0, touchLook: 0, jumpHeld: false, touchJump: false,
+    // descendHeld·touchDescend: 회피키(터치 회피 버튼)를 누르고 있는지 — 나는 캐릭터(강습 건쉽)는 이것으로 고도를 내린다
+    descendHeld: false, touchDescend: false,
   };
 }
 
@@ -193,6 +199,6 @@ export function cancelInputs(inputs) {
   for (const f of Object.values(inputs)) {
     f.moveAxis = 0; f.moveY = 0; f.fwd = 0; f.side = 0; f.touchFwd = 0; f.touchSide = 0; f.turn = 0; f.touchTurn = 0;
     f.aiming = false; f.swap = false; f.select = null; f.item = false; f.kata = 0; f.jump = false; f.evade = false;
-    f.look = 0; f.touchLook = 0; f.jumpHeld = false; f.touchJump = false;
+    f.look = 0; f.touchLook = 0; f.jumpHeld = false; f.touchJump = false; f.descendHeld = false; f.touchDescend = false;
   }
 }

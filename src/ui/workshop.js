@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.min.js';
-import { WEAPONS } from '../game/config.js';
+import { WEAPONS, CHARACTERS } from '../game/config.js';
 import {
-  GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, SHOP, SHOP_BY_ID, SHOP_PRICE, LEGEND_SHOP, LEGEND_PRICE, canMount, modStore, moddableWeapons,
+  GRADE, GRADES, PART_SLOTS, SLOT, MOD_WEAPONS, DRAW_COST, SHOP, SHOP_BY_ID, SHOP_PRICE, LEGEND_SHOP, LEGEND_PRICE, canMount, modStore, moddableWeapons, VEHICLE_SHOP, VEHICLE_PRICE,
 } from '../game/mods.js';
 import { buildShowcase, environmentMap } from '../render/guns.js';
 import { weaponIcon } from './widgets.js';
@@ -388,7 +388,7 @@ export function createWorkshop({ show, onClose }) {
     $('#mod-shop').hidden = tab !== 'shop';
   }
   function renderShopFilter() {
-    const opts = [['all', '전체'], ['legendary', `전설 무기 (${LEGEND_PRICE}코인)`], ['rare', `레어 (${SHOP_PRICE.rare}코인)`], ['elite', `엘리트 (${SHOP_PRICE.elite}코인)`], ['weapon', `${WEAPONS[weapon].name}만`]];
+    const opts = [['all', '전체'], ['vehicle', `탈것 (${VEHICLE_PRICE}코인)`], ['legendary', `전설 무기 (${LEGEND_PRICE}코인)`], ['rare', `레어 (${SHOP_PRICE.rare}코인)`], ['elite', `엘리트 (${SHOP_PRICE.elite}코인)`], ['weapon', `${WEAPONS[weapon].name}만`]];
     $('#mod-shop-filter').replaceChildren(...opts.map(([id, name]) => {
       const b = el('button', 'small', name);
       b.type = 'button';
@@ -399,8 +399,10 @@ export function createWorkshop({ show, onClose }) {
   }
   function renderShop() {
     renderShopFilter();
-    const list = [...LEGEND_SHOP, ...SHOP].filter((g) => shopFilter === 'all' || g.grade === shopFilter || (shopFilter === 'weapon' && g.weapon === weapon));
+    const list = [...VEHICLE_SHOP, ...LEGEND_SHOP, ...SHOP].filter((g) => shopFilter === 'all' || (shopFilter === 'vehicle' ? g.kind === 'vehicle' : g.kind !== 'vehicle' && g.grade === shopFilter)
+      || (shopFilter === 'weapon' && g.weapon === weapon));
     $('#mod-shop-list').replaceChildren(...list.map((g) => {
+      if (g.kind === 'vehicle') return vehicleCard(g);
       if (g.unlocks) return legendCard(g);
       const owned = store.owns(g.id);
       const card = el('div', `mod-item shop-item grade-border-${g.grade}${previewShop === g.id ? ' previewing' : ''}`);
@@ -439,6 +441,31 @@ export function createWorkshop({ show, onClose }) {
       card.append(view, actions);
       return card;
     }));
+  }
+  /** 탈것 카드: 사면 캐릭터 선택에 그 탈것(강습 건쉽)이 나타난다 */
+  function vehicleCard(g) {
+    const owned = store.owns(g.id);
+    const card = el('div', 'mod-item shop-item grade-border-legendary vehicle-item');
+    const view = el('div', 'mod-item-view');
+    const icon = el('img', 'legend-thumb');
+    icon.src = CHARACTERS.find((c) => c.id === g.character)?.image ?? '';
+    icon.alt = '';
+    view.append(icon, el('span', 'mod-item-name', `🚁 ${g.name}`));
+    const meta = el('span', 'mod-item-meta');
+    meta.append(gradeChip('legendary'), el('span', 'shop-weapon', '탈것 · 새 캐릭터'));
+    view.append(meta, el('span', 'shop-info', g.info));
+    const actions = el('div', 'mod-item-actions');
+    const btn = el('button', `small${owned ? '' : ' primary'}`, owned ? '보유 · 캐릭터 선택에서 고름' : `구매 🪙${g.price}`);
+    btn.type = 'button';
+    btn.disabled = owned || !store.canBuy(g.id);
+    btn.addEventListener('click', () => {
+      store.buy(g.id);
+      if (store.owns(g.id)) renderAll();
+    });
+    btn.setAttribute('aria-label', `${g.name} ${btn.textContent}`);
+    actions.append(btn);
+    card.append(view, actions);
+    return card;
   }
   /** 전설 무기 카드: 사면 주무기 선택 목록에 그 무기가 나타난다(파츠가 아니라 새 총) */
   function legendCard(g) {

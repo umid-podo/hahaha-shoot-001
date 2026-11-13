@@ -225,7 +225,16 @@ export const LEGEND_SHOP = [
   { id: 'legend-energyrpg', weapon: 'energyrpg', unlocks: 'energyrpg', grade: 'legendary', name: '에너지 RPG', price: LEGEND_PRICE, parts: [],
     info: '약하게 유도되는 에너지 로켓 · 폭발 범위가 RPG보다 훨씬 큼 · 맞은 적은 4초 감전(못 움직이고 못 쏨) · 피해는 RPG보다 낮음' },
 ];
-export const SHOP_BY_ID = Object.fromEntries([...LEGEND_SHOP, ...SHOP].map((g) => [g.id, g]));
+/**
+ * 상점 탈것(캐릭터): 사면 그 캐릭터(config.js에서 shop이 이 id인 캐릭터)가 캐릭터 선택에 나타난다(영구).
+ * 강습 건쉽: 체력 3000, 양쪽 캐논·유도미사일·유탄 발사, 스테이지 위를 날아다니며 고도를 바꾸는 3인칭 비행.
+ */
+export const VEHICLE_PRICE = 100;
+export const VEHICLE_SHOP = [
+  { id: 'vehicle-gunship', character: 'assault-gunship', grade: 'legendary', kind: 'vehicle', name: '강습 건쉽', price: VEHICLE_PRICE, parts: [],
+    info: '체력 3000 · 양쪽 캐논(주무기) · 유도미사일 50·유탄 20×4(보조무기) · 스테이지 위를 날며 고도를 올리고 내리는 3인칭 비행' },
+];
+export const SHOP_BY_ID = Object.fromEntries([...LEGEND_SHOP, ...VEHICLE_SHOP, ...SHOP].map((g) => [g.id, g]));
 /** 그 무기를 살 수 있는 상점 항목(전설 무기가 아니면 null) */
 export const legendFor = (weaponId) => LEGEND_SHOP.find((g) => g.unlocks === weaponId) ?? null;
 
@@ -320,6 +329,8 @@ export function createModStore(storage = defaultStorage(), { starterCoins = STAR
     canBuy(shopId) { const g = SHOP_BY_ID[shopId]; return !!g && !this.owns(shopId) && state.coins >= g.price; },
     /** 그 무기를 쓸 수 있는지: 전설 무기는 상점에서 샀을 때만, 나머지는 언제나 */
     ownsWeapon(weaponId) { const g = legendFor(weaponId); return !g || this.owns(g.id); },
+    /** 그 캐릭터를 고를 수 있는지: 상점 탈것(shop)이면 샀을 때만 */
+    ownsCharacter(character) { return !character?.shop || this.owns(character.shop); },
     /**
      * 상점 구매: 코인을 내고 그 총기 스킨의 파츠 한 벌을 배낭에 넣는다(영구 보관, 분해 불가). 산 총에 바로 장착한다.
      * 전설 무기는 파츠 없이 그 무기를 쓸 수 있게 된다(owns·ownsWeapon으로 확인).
@@ -330,7 +341,7 @@ export function createModStore(storage = defaultStorage(), { starterCoins = STAR
       if (!this.canBuy(shopId)) return [];
       state.coins -= g.price;
       state.owned.push(shopId);
-      if (g.unlocks) { save(); return []; }
+      if (g.unlocks || g.kind === 'vehicle') { save(); return []; }
       const got = g.parts.map((part) => ({ id: state.nextId++, ...part, shop: shopId }));
       state.items.push(...got);
       state.equips[g.weapon] = { ...state.equips[g.weapon], ...Object.fromEntries(got.map((i) => [i.slot, i.id])) };

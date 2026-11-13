@@ -3223,7 +3223,7 @@ export function createRenderer(canvas, wrap, assets) {
       return cool > 0 ? `${WEAPONS[id].name} ${Math.ceil(cool)}초` : WEAPONS[id]?.name;
     });
     const second = p.primaryOnly ? '전용 무기' : `다른 칸 ${others.join(' · ')}`
-      + ` · ${p.grenadeCooldown > 0 ? `${item.name} ${Math.ceil(p.grenadeCooldown)}초` : `${item.name} 준비`}`;
+      + (p.noItem ? '' : ` · ${p.grenadeCooldown > 0 ? `${item.name} ${Math.ceil(p.grenadeCooldown)}초` : `${item.name} 준비`}`);
     ctx.save();
     ctx.font = others.length > 2 ? '13px system-ui, sans-serif' : ctx.font;
     ctx.fillText(second, wx + 14, wy + 46, 272);
@@ -3259,6 +3259,16 @@ export function createRenderer(canvas, wrap, assets) {
   /** 회피 남은 횟수 점(오른쪽 끝이 (x, y)). 다 쓰면 다시 채워질 때까지 회색 점 */
   function drawEvadePips(p, x, y) {
     if (p.plane) return;
+    // 강습 건쉽: 회피 대신 지금 고도
+    if (p.flier) {
+      ctx.save();
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold 13px system-ui, sans-serif';
+      ctx.fillStyle = '#9FD8FF';
+      ctx.fillText(`고도 ${Math.round(p.z ?? 0)}`, x, y + 1);
+      ctx.restore();
+      return;
+    }
     const left = p.evadeCharges ?? EVADE.charges;
     ctx.save();
     ctx.textAlign = 'right';

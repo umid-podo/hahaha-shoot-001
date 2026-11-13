@@ -88,5 +88,6 @@ export function applyGamepads(inputs, players) {
     frame.turn = clamp1(frame.turn + s.turn);
     frame.look = clamp1((frame.look ?? 0) + (s.look ?? 0));
     if (s.jump) frame.jumpHeld = true;
+    if (s.evade) frame.descendHeld = true; // 강습 건쉽: LT로 고도 내리기
   });
 }

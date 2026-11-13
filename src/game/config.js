@@ -29,6 +29,12 @@ export const JUMP = {
 };
 /** 위아래 시선(1인칭): 고개를 들고 숙일 수 있는 최대 각도(라디안, 약 80°). 쏜 탄도 그 각도로 날아간다 */
 export const PITCH = { max: 1.4 };
+/**
+ * 비행(강습 건쉽): climb는 고도를 올리고 내리는 최고 속도(초당), accel은 그 속도까지 붙는 가속(초당²).
+ * 바닥(또는 그 아래 고지대) 위 minAlt보다 낮게 내려가지 못하고 maxAlt보다 높이 오르지 못한다(복도 홀은 천장 아래까지).
+ * 처음엔 hoverAlt 높이에 떠 있고, 고도 입력이 없으면 그 높이에 멈춰 떠 있다(호버링).
+ */
+export const FLIGHT = { climb: 700, accel: 2600, minAlt: 40, maxAlt: 2600, hoverAlt: 260 };
 /** 탄이 실제로 날아가는 높이: 발 높이(탄의 z) + SHOT_HEIGHT(총 높이). 구조물·바닥·천장 충돌에 쓴다 */
 export const SHOT_HEIGHT = 84;
 export const COVER_HEIGHT = 84;
@@ -294,6 +300,20 @@ export const WEAPONS = {
     id: 'grenade', name: '수류탄', interval: 10, damage: 0, speed: 700, burst: 1, thrown: true,
     splash: { damage: 50, radius: 240 },
   },
+  // ── 강습 건쉽(상점 100코인 캐릭터) 전용 무기 ──
+  // 양쪽 캐논(주무기): 양옆 엔진 포드 아래 캐논에서 2발이 나란히(arrowGap 간격) 연사
+  // converge: 두 캐논 탄이 이 거리 앞(조준점)에서 만나도록 안쪽으로 모아 쏜다
+  gscannon: { id: 'gscannon', name: '양쪽 캐논', interval: 0.14, damage: 14, speed: 1300, burst: 1, arrows: 2, arrowGap: 300, converge: 900 },
+  // 유도미사일(보조무기): 한 발 50, 가장 가까운 적 쪽으로 휘어 날아가 맞거나 끝에서 터진다. 쿨타임 4초
+  gsmissile: {
+    id: 'gsmissile', name: '유도미사일', interval: 4, damage: 50, speed: 750, burst: 1, ownCooldown: true,
+    splash: { damage: 15, radius: 120 }, homing: { turnRate: 4, vertical: true }, life: 3, // vertical: 위아래로도 적 높이를 쫓는다
+  },
+  // 유탄 발사(보조무기): 조준한 뒤 떼면 유탄 4발을 연달아 쏜다. 각각 직격 20(맞지 않으면 터져 폭발 20). 쿨타임 6초
+  gsgrenade: {
+    id: 'gsgrenade', name: '유탄 발사', interval: 6, damage: 20, speed: 900, burst: 4, burstGap: 0.12, trigger: 'release', ownCooldown: true,
+    splash: { damage: 20, radius: 110 }, life: 1.2,
+  },
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
   // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)
   lightning: { id: 'lightning', name: '라이트닝 기관포', interval: 0.16, damage: 9, speed: 1300, burst: 1, arrows: 2, arrowGap: 30 },
@@ -414,6 +434,16 @@ export const CHARACTERS = [
   {
     id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 10000, radius: 130, speed: 70 * 2,
     image: 'assets/characters/deathstar.svg',
+  },
+  /**
+   * 강습 건쉽: 상점(총기 개조 → 상점 → 탈것)에서 100코인에 사면 캐릭터 선택에 나온다(shop). 체력이 매우 높고,
+   * 주무기는 양쪽 캐논, 보조무기는 유도미사일·유탄 발사로 고정(loadout, 수류탄 없음). flier: 스테이지 위를 날아다니며
+   * 고도를 올리고 내린다(점프키 위로, 회피키 아래로). 1인칭 대신 뒤에서 보는 3인칭 화면.
+   */
+  {
+    id: 'assault-gunship', name: '강습 건쉽', hidden: true, shop: 'vehicle-gunship', flier: true, noItem: true,
+    loadout: { primary: 'gscannon', secondaries: ['gsmissile', 'gsgrenade'] },
+    maxHp: 3000, radius: 80, speed: MAX_SPEED * 1.2, image: 'assets/characters/assault-gunship.svg',
   },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 3번 누르면 나타난다. 모습은 온이름 + 몸에 빨간 '제작자'. 즉사기 전용.
   {

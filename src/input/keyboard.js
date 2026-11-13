@@ -77,13 +77,14 @@ export function applyKeyboard(inputs, players) {
   for (const p of players) {
     const frame = inputs[p.id];
     const maps = solo ? [KEYMAP.P1, KEYMAP.P2] : [KEYMAP[p.id]].filter(Boolean);
-    frame.fwd = 0; frame.side = 0; frame.turn = 0; frame.look = 0; frame.jumpHeld = false;
+    frame.fwd = 0; frame.side = 0; frame.turn = 0; frame.look = 0; frame.jumpHeld = false; frame.descendHeld = false;
     for (const map of maps) {
       frame.fwd += axis(map.forward, map.back);
       frame.side += axis(map.right, map.left);
       frame.turn += axis(map.turnRight, map.turnLeft);
       frame.look += axis(map.lookUp, map.lookDown);
       if (held.has(map.jump)) frame.jumpHeld = true;
+      if (held.has(map.evade)) frame.descendHeld = true; // 강습 건쉽: 회피키로 고도 내리기
     }
   }
 }

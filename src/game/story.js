@@ -542,11 +542,13 @@ function setupSky(match, { heal = true } = {}) {
   for (const p of list) {
     p.ground ??= {
       primary: p.primary, secondary: p.secondary, secondaries: p.secondaries, weapon: p.primary, item: p.item, primaryOnly: p.primaryOnly,
+      flier: p.flier, noItem: p.noItem, radius: p.radius,
       drone: p.drone, jetpack: p.jetpack, scale: p.scale, speed: p.speed,
     };
   }
   list.forEach((p, i) => Object.assign(p, {
     plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', secondaries: ['overcool'], item: 'missile', slot: 'primary', shield: null,
+    flier: false, noItem: false, z: 0, vz: 0, radius: Math.min(p.radius, 46),
     primaryOnly: !!p.ai, drone: false, jetpack: null, scale: 1,
     speed: MAX_SPEED_BASE * SKY.planeSpeed, hurt: 0, dash: null, evade: null,
     // 이어하기(heal: false)는 저장한 체력·쓰러짐을 그대로 둔다
