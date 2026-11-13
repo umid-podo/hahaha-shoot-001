@@ -302,8 +302,9 @@ export const WEAPONS = {
   },
   // ── 강습 건쉽(상점 100코인 캐릭터) 전용 무기 ──
   // 양쪽 캐논(주무기): 양옆 엔진 포드 아래 캐논에서 2발이 나란히(arrowGap 간격) 연사
-  // converge: 두 캐논 탄이 이 거리 앞(조준점)에서 만나도록 안쪽으로 모아 쏜다
-  gscannon: { id: 'gscannon', name: '양쪽 캐논', interval: 0.14, damage: 14, speed: 1300, burst: 1, arrows: 2, arrowGap: 300, converge: 900 },
+  // converge: 두 캐논 탄이 조준점(조준 방향의 적·구조물, 없으면 이 거리 앞)에서 만나도록 안쪽으로 모아 쏜다.
+  // autoFire: 발사키와 상관없이 살아 있는 동안 계속 쏜다(다른 무기를 들고 있어도)
+  gscannon: { id: 'gscannon', name: '양쪽 캐논', interval: 0.14, damage: 14, speed: 1300, burst: 1, arrows: 2, arrowGap: 300, converge: 4000, autoFire: true },
   // 유도미사일(보조무기): 한 발 50, 가장 가까운 적 쪽으로 휘어 날아가 맞거나 끝에서 터진다. 쿨타임 4초
   gsmissile: {
     id: 'gsmissile', name: '유도미사일', interval: 4, damage: 50, speed: 750, burst: 1, ownCooldown: true,
