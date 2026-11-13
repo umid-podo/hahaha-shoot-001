@@ -1127,8 +1127,9 @@ export function createWorld3D(canvas, wrap, assets) {
   const laserGeo = new THREE.BoxGeometry(1, 1, 1);
   const laserMat = new THREE.MeshBasicMaterial({ color: '#FF2A2A', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
   const aimLines = new Map();
-  function aimEnd(match, p, sx, sy, sh, pitch) {
-    const max = 4000;
+  // 강습 건쉽 조준선: 멀리서도(3인칭) 보이게 더 진하게
+  const gunshipLaserMat = new THREE.MeshBasicMaterial({ color: '#FF2A2A', transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+  function aimEnd(match, p, sx, sy, sh, pitch, max = 4000) {
     const flat = Math.cos(pitch);
     const ex = sx + Math.cos(p.aim) * max * flat, ey = sy + Math.sin(p.aim) * max * flat, eh = sh + Math.sin(pitch) * max;
     let t = 1;
@@ -1163,7 +1164,8 @@ export function createWorld3D(canvas, wrap, assets) {
     if (stage !== 'sky' && !match.cutscene && !match.killcam && !match.victory && match.phase !== 'countdown') {
       for (const p of match.players) {
         // AI(요원·동료)의 조준선은 아예 만들지 않는다
-        if (p.ai || !p.alive || p.entering || p.plane || p.flier || p.scripted || p.dash) continue;
+        if (p.ai || !p.alive || p.entering || p.plane || p.scripted || p.dash) continue;
+        if (p.flier) { placeGunshipLines(match, p, live); continue; }
         const w = WEAPONS[p.weapon];
         if (!w || w.thrown || w.dash) continue;
         let l = aimLines.get(p.id);
@@ -1193,6 +1195,7 @@ export function createWorld3D(canvas, wrap, assets) {
     for (const [id, l] of aimLines) {
       l.live = live.has(id);
       l.line.visible = false; l.dot.visible = false;
+      if (l.line2) l.line2.visible = false;
     }
   }
   // ── 폭동 진압 방패: 세운 사람 몸 앞에 투명한 큰 방패(내 화면에서는 내 방패를 숨기고 HUD로 보여 준다) ──
@@ -1225,12 +1228,50 @@ export function createWorld3D(canvas, wrap, assets) {
     for (const [id, m] of shieldMeshes) m.visible = live.has(id);
   }
 
+  /**
+   * 강습 건쉽의 조준선: 양옆 캐논 끝에서 조준점(조준 방향으로 처음 닿는 적·구조물·바닥, 없으면 4000 앞)까지 빨간 선 두 줄.
+   * 탄도 그 조준점에서 모인다. l.end는 화면의 조준점(크로스헤어) 자리.
+   */
+  function placeGunshipLines(match, p, live) {
+    let l = aimLines.get(p.id);
+    if (!l || !l.line2) {
+      if (l) scene.remove(l.line, l.dot);
+      const line = new THREE.Mesh(laserGeo, gunshipLaserMat), line2 = new THREE.Mesh(laserGeo, gunshipLaserMat);
+      const dot = new THREE.Sprite(new THREE.SpriteMaterial({ map: getFlashTexture(), color: '#FF3030', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      scene.add(line, line2, dot);
+      l = { line, line2, dot, owner: p.id };
+      aimLines.set(p.id, l);
+    }
+    live.add(p.id);
+    const road = match.story?.stage === 'road' ? CAR_ROOF : 0;
+    const pitch = p.pitch ?? 0, flat = Math.cos(pitch);
+    const fx = Math.cos(p.aim), fz = Math.sin(p.aim), rx = -fz, rz = fx;
+    const reach = WEAPONS[p.primary]?.converge ?? 4000;
+    // 조준점: 건쉽 가운데(캐논 높이)에서 조준 방향으로
+    const sh = GUN_Y + (p.z ?? 0);
+    const end = aimEnd(match, p, p.x + fx * 60 * flat, p.y + fz * 60 * flat, sh, pitch, reach);
+    end.h += road;
+    l.end = end;
+    l.hit = end.hit;
+    for (const [m, side] of [[l.line, -1], [l.line2, 1]]) {
+      const ox = p.x + fx * 130 * flat + rx * 150 * side, oz = p.y + fz * 130 * flat + rz * 150 * side;
+      const oh = sh + road + Math.sin(pitch) * 130;
+      const len = Math.max(1, Math.hypot(end.x - ox, end.y - oz, end.h - oh));
+      m.position.set((ox + end.x) / 2, (oh + end.h) / 2, (oz + end.y) / 2);
+      m.rotation.set(0, -Math.atan2(end.y - oz, end.x - ox), Math.asin(Math.max(-1, Math.min(1, (end.h - oh) / len))), 'YZX');
+      m.scale.set(len, 4, 4);
+    }
+    l.dot.position.set(end.x, end.h, end.y);
+    l.dot.scale.setScalar(26);
+  }
+
   /** 화면 칸 하나를 그리기 직전: 그 화면 주인(viewerId)의 조준선만 보이게 한다(장면 카메라면 모두 숨김) */
   function showAimLinesFor(viewerId) {
     for (const l of aimLines.values()) {
       const on = l.live && viewerId !== null && l.owner === viewerId;
       l.line.visible = on;
-      l.dot.visible = on && l.hit;
+      if (l.line2) l.line2.visible = on;
+      l.dot.visible = on && (l.hit || !!l.line2);
     }
   }
 
@@ -2427,7 +2468,10 @@ export function createWorld3D(canvas, wrap, assets) {
           const s = project(cam, v.rect, k.victim.x, stageH + 70, k.victim.y);
           if (s) bubble = { text: k.shot.bubble, x: s.x, y: s.y };
         }
-        out.push({ id: v.id, rect: v.rect, cinematic: !!v.target, viewer, tags, labels: words, bubble, cameraYaw: viewer?.aim ?? 0 });
+        // 3인칭(강습 건쉽): 크로스헤어는 화면 가운데가 아니라 캐논 탄이 모이는 조준점 자리
+        const gl = viewer?.flier && !v.target ? aimLines.get(viewer.id) : null;
+        const crosshair = gl?.live && gl.end ? project(cam, v.rect, gl.end.x, gl.end.h, gl.end.y) : null;
+        out.push({ id: v.id, rect: v.rect, cinematic: !!v.target, viewer, tags, labels: words, bubble, cameraYaw: viewer?.aim ?? 0, crosshair });
       }
       return out;
     },

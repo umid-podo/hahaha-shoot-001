@@ -2960,8 +2960,9 @@ export function createRenderer(canvas, wrap, assets) {
    * 조준점: 작은 형광 연두 십자 + 가운데 점, 검은 테두리로 밤하늘·회색 바닥·붉은 조준선 어디서든 또렷하게.
    * 쏠 수 없는 동안(쿨타임·장전·방전·과열)은 흰색, 내 탄이 맞으면 붉은 X 표시.
    */
-  function drawCrosshair(p, rect, reloading, kick, hitT) {
-    const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+  function drawCrosshair(p, rect, reloading, kick, hitT, at = null) {
+    // at: 크로스헤어 자리(3인칭 강습 건쉽은 조준점이 화면에 비치는 곳), 없으면 화면 가운데
+    const cx = at?.x ?? rect.x + rect.w / 2, cy = at?.y ?? rect.y + rect.h / 2;
     ctx.save();
     ctx.translate(cx, cy);
     const k = crosshairScale();
@@ -3302,7 +3303,7 @@ export function createRenderer(canvas, wrap, assets) {
       const weapon = WEAPONS[p.weapon];
       const reloading = (weapon.trigger === 'release' && p.cooldown > 0) || (weapon.ownCooldown && (p.cooldowns[weapon.id] ?? 0) > 0)
         || (weapon.battery && p.battery <= 0) || (weapon.heat && p.overheat > 0);
-      drawCrosshair(p, rect, reloading, kick, hud.hitMarker[p.id] ?? 0);
+      drawCrosshair(p, rect, p.flier ? false : reloading, kick, hud.hitMarker[p.id] ?? 0, v.crosshair);
       // 떼면 쏘는 무기를 조준 중이면 '떼면 발사'
       if (weapon.trigger === 'release' && inputs?.[p.id]?.aiming) {
         ctx.font = 'bold 18px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFD45E';

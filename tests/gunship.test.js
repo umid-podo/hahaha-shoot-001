@@ -15,6 +15,7 @@ function playing(P1 = {}, P2 = {}, opts = { wide: true }) {
   match.jetTimer = Infinity;
   const inputs = createInputs(match.players);
   const [a, b] = match.players;
+  b.hp = b.maxHp = 1e6; // 캐논이 늘 쏘므로 상대가 일찍 쓰러지지 않게
   return { match, inputs, P1: a, P2: b };
 }
 function run(match, inputs, seconds, each) {
@@ -42,6 +43,7 @@ test('상점에서 100코인으로 사면 캐릭터 선택에 나온다(사기 �
 
 test('강습 건쉽: 체력이 월등히 높고 양쪽 캐논(주무기)·유도미사일 50·미사일 15×5(보조무기), 수류탄 없음', () => {
   const others = CHARACTERS.filter((c) => !c.hidden).map((c) => c.maxHp);
+  assert.ok(WEAPONS.gscannon.autoFire, '양쪽 캐논은 늘 계속 쏜다');
   assert.ok(GUNSHIP.maxHp >= 2 * Math.max(...others) && GUNSHIP.maxHp >= 6 * MAX_HP, `체력 ${GUNSHIP.maxHp}`);
   const { P1 } = playing({ weapon: 'rpg', secondaries: ['katana'] });
   assert.equal(P1.hp, GUNSHIP.maxHp);
@@ -122,7 +124,7 @@ test('유도미사일·미사일 5연발: 보조무기 칸에서 쏜다(유도�
   inputs.P1.aiming = false;
   run(match, inputs, 2);
   assert.ok(ev.some((e) => e.type === 'fire' && e.weapon === 'gsmissile'));
-  assert.ok(5000 - P2.hp >= 50, `미사일 ${5000 - P2.hp}`);
+  assert.ok(match.stats.P1.weapons.gsmissile.damage >= 50, `미사일 ${match.stats.P1.weapons.gsmissile.damage}`);
   inputs.P1.select = 'secondary2';
   run(match, inputs, 0.5);
   assert.equal(P1.weapon, 'gsrockets');
@@ -130,11 +132,10 @@ test('유도미사일·미사일 5연발: 보조무기 칸에서 쏜다(유도�
   inputs.P1.aiming = true;
   const first = step(match, inputs);
   inputs.P1.aiming = false;
-  const hpBefore = P2.hp;
   const fired = [...first, ...run(match, inputs, 2)].filter((e) => e.type === 'fire' && e.weapon === 'gsrockets').length;
   assert.equal(fired, 5, '미사일 5발');
-  const dealt = hpBefore - P2.hp;
-  assert.ok(dealt >= 15 && dealt <= 75, `15씩 명중 ${dealt}`);
+  const dealt = match.stats.P1.weapons.gsrockets.damage;
+  assert.ok(dealt >= 15 && dealt <= 75 && dealt % 15 === 0, `15씩 명중 ${dealt}`);
 });
 
 test('AI도 하늘에 떠 있는 건쉽을 겨눠 맞힌다', () => {
@@ -145,4 +146,22 @@ test('AI도 하늘에 떠 있는 건쉽을 겨눠 맞힌다', () => {
   const brain = createAI('P2', 'hard', 4);
   run(match, inputs, 4, () => updateAI(brain, match, inputs));
   assert.ok(P1.hp < P1.maxHp, `맞음 ${P1.maxHp - P1.hp}`);
+});
+
+test('양쪽 캐논은 발사키를 누르지 않아도, 보조무기를 들고 있어도 계속 쏜다', () => {
+  const { match, inputs, P1 } = playing();
+  match.highs = []; match.covers = [];
+  const ev = run(match, inputs, 1);
+  const shots = ev.filter((e) => e.type === 'fire' && e.weapon === 'gscannon').length;
+  assert.ok(Math.abs(shots - 1 / WEAPONS.gscannon.interval) <= 1, `1초에 ${shots}번`);
+  inputs.P1.select = 'secondary';
+  run(match, inputs, 0.5);
+  assert.equal(P1.weapon, 'gsmissile');
+  const more = run(match, inputs, 1).filter((e) => e.type === 'fire' && e.weapon === 'gscannon').length;
+  assert.ok(more >= 6, '보조무기를 들어도 캐논은 계속');
+  // 쓰러지면 멈춘다
+  P1.hp = 0;
+  run(match, inputs, TICK);
+  const after = run(match, inputs, 0.5).filter((e) => e.type === 'fire' && e.weapon === 'gscannon').length;
+  assert.equal(after, 0);
 });
