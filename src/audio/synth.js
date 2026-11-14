@@ -233,6 +233,8 @@ const REAL = {
   shotgun: { body: 3600, decay: 0.32, boom: 70, crack: 0.6, wet: 0.8, volume: 1.5, mech: 0.38, pump: true },
   lightning: { body: 5500, decay: 0.08, boom: 110, crack: 0.9, wet: 0.3, volume: 0.6 },
   gunship: { body: 4200, decay: 0.12, boom: 95, crack: 0.8, wet: 0.4, volume: 0.8 },
+  // 강습 건쉽 게틀링: 아주 빠른 연사라 짧고 날카롭게
+  gsgatling: { body: 6200, decay: 0.06, boom: 130, crack: 1.1, wet: 0.25, volume: 0.6 },
   turret: { body: 3800, decay: 0.22, boom: 90, crack: 0.9, wet: 0.6, volume: 1 },
 };
 

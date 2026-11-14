@@ -342,6 +342,13 @@ export const WEAPONS = {
     splash: { damage: 7, radius: 90 }, homing: { turnRate: 6, vertical: true }, life: 5.5,
     pattern: { kind: 'swarm', spread: 100, turns: 3, omega: 12, rise: 160 },
   },
+  /**
+   * 게틀링(강습 건쉽 아이템, 수류탄 대신): 아이템 버튼을 누르고 있는 동안(hold) interval초마다 탄속이 매우 빠른 총알을 연사한다.
+   * 앞부분 총열 묶음이 돌며 쏜다
+   */
+  gsgatling: {
+    id: 'gsgatling', name: '게틀링', interval: 0.05, damage: 4, speed: 3200, burst: 1, hold: true,
+  },
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
   // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)
   lightning: { id: 'lightning', name: '라이트닝 기관포', interval: 0.16, damage: 9, speed: 1300, burst: 1, arrows: 2, arrowGap: 30 },
@@ -460,16 +467,17 @@ export const CHARACTERS = [
     image: 'assets/characters/gunship.svg',
   },
   {
-    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 10000, radius: 130, speed: 70 * 2,
+    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 3000, radius: 130, speed: 70 * 2,
     image: 'assets/characters/deathstar.svg',
   },
   /**
    * 강습 건쉽: 상점(총기 개조 → 상점 → 탈것)에서 100코인에 사면 캐릭터 선택에 나온다(shop). 체력이 매우 높고,
-   * 주무기는 계속 쏘는 미사일 5연발, 보조무기는 유도미사일로 고정(loadout, 수류탄 없음). flier: 스테이지 위를 날아다니며
-   * 고도를 올리고 내린다(점프키 위로, 회피키 아래로). 1인칭 대신 뒤에서 보는 3인칭 화면.
+   * 주무기는 계속 쏘는 미사일 5연발, 보조무기는 유도미사일로 고정(loadout), 아이템은 수류탄 대신 게틀링(item, 누르고 있는 동안 연사).
+   * flier: 스테이지 위를 날아다니며 고도를 올리고 내린다(점프키 위로, 회피키 아래로). 1인칭 대신 뒤에서 보는 3인칭 화면.
+   * 사지 않아도 스토리 공중전(3스테이지 하늘)에서는 라이트닝 대신 탈 수 있다(skyCraft).
    */
   {
-    id: 'assault-gunship', name: '강습 건쉽', hidden: true, shop: 'vehicle-gunship', flier: true, noItem: true,
+    id: 'assault-gunship', name: '강습 건쉽', hidden: true, shop: 'vehicle-gunship', flier: true, item: 'gsgatling',
     loadout: { primary: 'gsrockets', secondaries: ['gsmissile'] },
     maxHp: 3000, radius: 80, speed: MAX_SPEED * 1.2, image: 'assets/characters/assault-gunship.svg',
   },

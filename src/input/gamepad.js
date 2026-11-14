@@ -69,6 +69,7 @@ export function pollGamepads(players, inputs, onPause) {
     if (!frame) return;
     if (s.swap && !before.swap) frame.swap = true;
     if (s.item && !before.item) frame.item = true;
+    frame.padItem = !!s.item; // 강습 건쉽 게틀링: 누르고 있는 동안 연사
     if (s.jump && !before.jump) frame.jump = true;
     if (s.evade && !before.evade) frame.evade = true;
     if (s.fire !== !!before.fire) frame.aiming = s.fire;

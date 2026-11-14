@@ -11,6 +11,8 @@ export const SLOTS = [
 ];
 
 export const characterOf = (id) => CHARACTERS.find((c) => c.id === id);
+/** 스토리 공중전에서 라이트닝 대신 탈 수 있는 기체(사지 않아도 된다) */
+export const SKY_GUNSHIP = 'assault-gunship';
 export const characterName = (id) => characterOf(id)?.name ?? id;
 
 /** 기본 선택. { P1: { characterId, weapon, secondary }, P2: ... } */
@@ -79,9 +81,11 @@ export function createPlayer(slot, pick = {}, weaponPool = PRIMARY_IDS) {
     shield: null, blind: 0,
     // flier: 하늘을 나는 캐릭터(강습 건쉽) — 점프 대신 고도를 올리고 내리며 떠 있다. noItem: 아이템(수류탄) 없음
     flier: !!character.flier, noItem: !!character.noItem,
+    // skyCraft: 스토리 공중전(하늘)에서 탈 기체('lightning' 라이트닝·'assault-gunship' 강습 건쉽)
+    skyCraft: pick.skyCraft === SKY_GUNSHIP ? SKY_GUNSHIP : 'lightning',
     battery: WEAPONS[weapon].battery?.shots ?? 0, sinceShot: Infinity, heat: 0, overheat: 0, grenadeCooldown: 0,
     // item: 아이템 버튼 무기(평소 수류탄, 스토리 공중전은 미사일). boost: 과냉각이 남은 시간(그동안 주무기 연사가 빨라짐)
-    item: 'grenade', boost: 0,
+    item: character.item ?? 'grenade', boost: 0,
     x, previousX: x, y: RAIL_Y[slot.team],
     aim: initialAim(slot.team),
     hp: maxHp, maxHp, alive: true, hurt: 0,
@@ -187,6 +191,8 @@ export function createInput(player) {
     pitch: 0, look: 0, touchLook: 0, jumpHeld: false, touchJump: false,
     // descendHeld·touchDescend: 회피키(터치 회피 버튼)를 누르고 있는지 — 나는 캐릭터(강습 건쉽)는 이것으로 고도를 내린다
     descendHeld: false, touchDescend: false,
+    // itemHeld·touchItem·padItem: 아이템키(버튼)를 누르고 있는지 — 강습 건쉽 게틀링은 누르고 있는 동안 연사
+    itemHeld: false, touchItem: false, padItem: false,
   };
 }
 
@@ -200,5 +206,6 @@ export function cancelInputs(inputs) {
     f.moveAxis = 0; f.moveY = 0; f.fwd = 0; f.side = 0; f.touchFwd = 0; f.touchSide = 0; f.turn = 0; f.touchTurn = 0;
     f.aiming = false; f.swap = false; f.select = null; f.item = false; f.kata = 0; f.jump = false; f.evade = false;
     f.look = 0; f.touchLook = 0; f.jumpHeld = false; f.touchJump = false; f.descendHeld = false; f.touchDescend = false;
+    f.itemHeld = false; f.touchItem = false; f.padItem = false;
   }
 }

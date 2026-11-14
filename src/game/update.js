@@ -612,7 +612,12 @@ function throwGrenade(match, p, events) {
   if (p.grenadeCooldown > 0 || p.noItem) return;
   const item = WEAPONS[p.item ?? 'grenade'];
   p.grenadeCooldown = item.interval;
-  spawnProjectile(match, p, p.aim, item.id);
+  if (item.hold) {
+    // 강습 건쉽 게틀링: 양 날개 끝 개틀링건에서 번갈아 쏜다(쏘는 동안 총열이 빠르게 돈다)
+    p.gatlingSide = p.gatlingSide === 1 ? -1 : 1;
+    p.gatlingSpin = 0.2;
+    spawnProjectile(match, p, p.aim, item.id, { offset: p.gatlingSide * (p.flier ? 150 : 12) });
+  } else spawnProjectile(match, p, p.aim, item.id);
   const ws = weaponStats(match, p.id, item.id);
   if (ws) ws.shots++;
   events.push({ type: 'fire', playerId: p.id, weapon: item.id });
@@ -912,6 +917,7 @@ function blocked(p, weapon, match) {
 function updateResources(p, firing, dt) {
   p.sinceShot += dt;
   p.grenadeCooldown = Math.max(0, p.grenadeCooldown - dt);
+  if (p.gatlingSpin > 0) p.gatlingSpin = Math.max(0, p.gatlingSpin - dt); // 강습 건쉽 게틀링 총열이 도는 남은 시간
   p.boost = Math.max(0, (p.boost ?? 0) - dt);
   for (const id of Object.keys(p.cooldowns)) p.cooldowns[id] = Math.max(0, p.cooldowns[id] - dt);
   const battery = WEAPONS[p.primary].battery;
@@ -1210,7 +1216,9 @@ export function step(match, inputs, dt = TICK) {
     if (p.scripted) { input.item = false; p.wasAiming = false; continue; }
     // 강습 건쉽 미사일 5연발: 늘 계속 쏜다(발사키는 유도미사일용)
     autoFire(match, p, dt, events);
-    if (input.item) {
+    // 누르고 있는 동안 연사하는 아이템(강습 건쉽 게틀링): 쿨타임(interval)마다 계속 쏜다
+    const holdItem = WEAPONS[p.item ?? 'grenade']?.hold;
+    if (input.item || (holdItem && (input.itemHeld || input.touchItem || input.padItem))) {
       input.item = false;
       if (!p.primaryOnly) throwGrenade(match, p, events);
     }

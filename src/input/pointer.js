@@ -117,7 +117,9 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       // 보조무기 칸마다 버튼(최대 3개)
       const seconds = (p.secondaries ?? [p.secondary]).map((id, i) => slotBtn(i === 0 ? 'secondary' : `secondary${i + 1}`, id));
       const secondary = seconds[0];
-      const item = actionButton('item-btn', () => { frame.item = true; });
+      const item = actionButton('item-btn', () => { frame.item = true; frame.touchItem = true; });
+      // 강습 건쉽 게틀링: 누르고 있는 동안 연사(손을 떼면 멈춤)
+      for (const type of ['pointerup', 'pointercancel', 'pointerleave']) item.addEventListener(type, () => { frame.touchItem = false; });
       item.innerHTML = '<small>아이템</small><span></span>';
       item.setAttribute('aria-label', `${p.id} 수류탄 던지기`);
       // 전용 무기 캐릭터는 주무기 하나뿐이고 아이템도 없다
@@ -213,10 +215,14 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
         if (b.evadeText !== evadeText) {
           b.evadeText = evadeText;
           b.evade.lastChild.textContent = evadeText;
+          // 공중전에서 강습 건쉽으로 바뀌거나 내리면 점프·회피 버튼 이름도 바꾼다
+          b.evade.firstChild.textContent = p.flier ? '내려가기' : '회피';
+          b.jump.firstChild.textContent = p.flier ? '올라가기' : '점프';
           b.evade.classList.toggle('cooling', !p.flier && charges <= 0);
         }
         b.evade.disabled = !!p.plane;
-        const ready = p.alive && p.grenadeCooldown <= 0;
+        b.item.disabled = !!(p.primaryOnly || p.noItem);
+        const ready = p.alive && (p.grenadeCooldown <= 0 || !!WEAPONS[p.item]?.hold); // 연사 아이템(게틀링)은 늘 이름으로
         const text = p.primaryOnly ? '없음' : ready ? WEAPONS[p.item ?? 'grenade'].name : `${Math.ceil(p.grenadeCooldown)}초`;
         if (b.itemText !== text) {
           b.itemText = text;

@@ -1013,7 +1013,8 @@ export function createWorld3D(canvas, wrap, assets) {
         model.rotateZ(p.alive ? (p.pitch ?? 0) * 0.35 : -0.4);
         for (const f of model.userData.fans) f.rotation.x = p.alive ? time * 40 : 0;
         // 날개 끝 개틀링건 총열이 돈다(미사일을 쏘는 동안 더 빨리)
-        for (const g of model.userData.gatlings ?? []) g.rotation.x = p.alive && !reducedMotion ? time * (p.autoBurst > 0 ? 40 : 8) : 0;
+        // 게틀링(아이템)을 쏘는 동안은 아주 빠르게
+        for (const g of model.userData.gatlings ?? []) g.rotation.x = p.alive && !reducedMotion ? time * (p.gatlingSpin > 0 ? 70 : p.autoBurst > 0 ? 40 : 8) : 0;
         model.userData.lights.forEach((l, i) => { l.visible = reducedMotion || Math.floor(time * 2 + i) % 2 === 0; });
         a.ring.visible = false;
         setCar(a, false);

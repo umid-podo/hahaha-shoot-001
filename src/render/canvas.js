@@ -329,7 +329,7 @@ export function createRenderer(canvas, wrap, assets) {
       row++;
     }
     // 수류탄(아이템) 쿨타임: 던진 뒤 다시 쓸 수 있을 때까지 회색 막대
-    if (!p.primaryOnly && p.grenadeCooldown > 0) {
+    if (!p.primaryOnly && p.grenadeCooldown > 0 && !WEAPONS[p.item ?? 'grenade'].hold) { // 연사 아이템(게틀링)은 쿨타임 막대 없음
       bar(p.x - HP_BAR.w / 2, gaugeY + row * (GAUGE_H + 2), HP_BAR.w,
         1 - p.grenadeCooldown / WEAPONS[p.item ?? 'grenade'].interval, '#9A9EA5');
     }
@@ -3224,7 +3224,7 @@ export function createRenderer(canvas, wrap, assets) {
       return cool > 0 ? `${WEAPONS[id].name} ${Math.ceil(cool)}초` : WEAPONS[id]?.name;
     });
     const second = p.primaryOnly ? '전용 무기' : `다른 칸 ${others.join(' · ')}`
-      + (p.noItem ? '' : ` · ${p.grenadeCooldown > 0 ? `${item.name} ${Math.ceil(p.grenadeCooldown)}초` : `${item.name} 준비`}`);
+      + (p.noItem ? '' : ` · ${item.hold ? `${item.name}(누르고 있으면 연사)` : p.grenadeCooldown > 0 ? `${item.name} ${Math.ceil(p.grenadeCooldown)}초` : `${item.name} 준비`}`);
     ctx.save();
     ctx.font = others.length > 2 ? '13px system-ui, sans-serif' : ctx.font;
     ctx.fillText(second, wx + 14, wy + 46, 272);

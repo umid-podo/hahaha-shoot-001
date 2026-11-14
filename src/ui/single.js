@@ -277,6 +277,8 @@ export function createSingleSetup(onChange) {
   function syncEndlessMaps() {
     const maps = $('#endless-maps');
     if (maps) maps.hidden = !(single.mode === 'story' && single.storyStart === 'endless');
+    // 공중전 기체 고르기는 스토리 모드(연속 플레이 빼고, 하늘 스테이지가 있을 때)만
+    for (const el of document.querySelectorAll('#single-player .sky-craft')) el.hidden = !(single.mode === 'story' && single.storyStart !== 'endless');
   }
 
   function syncMode() {

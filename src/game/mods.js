@@ -234,7 +234,7 @@ export const LEGEND_SHOP = [
 export const VEHICLE_PRICE = 100;
 export const VEHICLE_SHOP = [
   { id: 'vehicle-gunship', character: 'assault-gunship', grade: 'legendary', kind: 'vehicle', name: '강습 건쉽', price: VEHICLE_PRICE, parts: [],
-    info: '체력 3000 · 계속 쏘는 미사일 5연발(발당 7, 공중에서 3바퀴 돈 뒤 유도, 주무기) · 유도미사일 50(보조무기) · 스테이지 위를 날며 고도를 올리고 내리는 3인칭 비행' },
+    info: '체력 3000 · 계속 쏘는 미사일 5연발(발당 7, 공중에서 3바퀴 돈 뒤 유도, 주무기) · 유도미사일 50(보조무기) · 게틀링(아이템, 누르고 있으면 탄속이 매우 빠른 총알 연사) · 스테이지 위를 날며 고도를 올리고 내리는 3인칭 비행 · 사지 않아도 스토리 공중전에서는 탈 수 있음' },
 ];
 export const SHOP_BY_ID = Object.fromEntries([...LEGEND_SHOP, ...VEHICLE_SHOP, ...SHOP].map((g) => [g.id, g]));
 /** 그 무기를 살 수 있는 상점 항목(전설 무기가 아니면 null) */
