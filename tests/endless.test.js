@@ -1,11 +1,11 @@
-// 스토리 연속 플레이 모드: 옥상에서 요원이 3명씩 끝없이, 웨이브마다 랭크 1레벨(wave-clear), 3웨이브마다 1코인(endless-reward)
+// 스토리 연속 플레이 모드: 옥상에서 요원이 3명씩 끝없이, 웨이브마다 랭크 1레벨(wave-clear), 웨이브마다 1코인(endless-reward)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInputs, createInput } from '../src/game/state.js';
 import { step } from '../src/game/update.js';
 import { createStoryMatch, defaultStory, ENDLESS, checkpoint, WAVES, endlessBoost } from '../src/game/story.js';
 
-test('연속 플레이: 옥상(고공 요새)에서 요원이 3명씩 끝없이 오고, 3웨이브마다 보상 이벤트, 저장은 안 됨', () => {
+test('연속 플레이: 옥상(고공 요새)에서 요원이 3명씩 끝없이 오고, 웨이브마다 보상 이벤트, 저장은 안 됨', () => {
   const settings = { ...defaultStory(), gunkata: false };
   const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, settings, 7, null, null, 0, { endless: true });
   assert.equal(match.story.stage, 'rooftop');
@@ -19,7 +19,7 @@ test('연속 플레이: 옥상(고공 요새)에서 요원이 3명씩 끝없이 
   const rewards = [];
   const levels = [];
   let fightingWave = null;
-  for (let i = 0; i < 60 * 400 && rewards.length < 3; i++) {
+  for (let i = 0; i < 60 * 400 && levels.length < 9; i++) {
     hero.hp = hero.maxHp; // 주인공은 쓰러지지 않게
     for (const p of match.players) inputs[p.id] ??= createInput(p);
     const agents = match.players.filter((p) => p.team === 'isb');
@@ -37,7 +37,7 @@ test('연속 플레이: 옥상(고공 요새)에서 요원이 3명씩 끝없이 
     }
     assert.notEqual(match.phase, 'result', '주인공이 서 있으면 끝나지 않는다');
   }
-  assert.deepEqual(rewards, [3, 6, 9], '3웨이브마다 코인');
+  assert.deepEqual(rewards, [1, 2, 3, 4, 5, 6, 7, 8, 9], '웨이브마다 1코인');
   assert.deepEqual(levels, [1, 2, 3, 4, 5, 6, 7, 8, 9], '웨이브마다 레벨(웨이브 클리어 이벤트)');
   assert.ok(sizes.length >= 9 && sizes.every((n) => n === ENDLESS.count), `요원 3명씩: ${sizes}`);
   assert.equal(match.story.stage, 'rooftop', '옥상에서 벗어나지 않음');

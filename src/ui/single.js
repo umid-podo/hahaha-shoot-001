@@ -1,7 +1,7 @@
 import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP, CHARACTERS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
-import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart, ENDLESS, ENDLESS_MAPS, endlessMapOf } from '../game/story.js';
+import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart, ENDLESS, ENDLESS_MAPS, endlessMapOf, endlessRewardText } from '../game/story.js';
 import { weaponLabel, weaponInfo, choiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -235,7 +235,7 @@ export function createSingleSetup(onChange) {
       const label = document.createElement('span');
       label.textContent = '♾️ 연속 플레이 모드';
       const info = document.createElement('small');
-      info.textContent = `스테이지를 골라서 · 요원 ${ENDLESS.count}명씩 무한 웨이브 · 웨이브마다 랭크 1레벨 · ${ENDLESS.reward}웨이브마다 1코인(중간에 그만둬도 보상 유지)`;
+      info.textContent = `스테이지를 골라서 · 요원 ${ENDLESS.count}명씩 무한 웨이브 · 웨이브마다 랭크 1레벨 · ${endlessRewardText()}(중간에 그만둬도 보상 유지)`;
       const btn = choiceButton([label, info], single.storyStart === 'endless', () => {
         single.storyStart = 'endless';
         syncEndlessMaps();

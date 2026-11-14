@@ -1972,7 +1972,7 @@ export function createRenderer(canvas, wrap, assets) {
     const wave = WAVES[index];
     const { n, total } = stageProgress(index);
     // 연속 플레이: 몇 번째 웨이브인지와 받은 보상
-    const text = story.endless ? `${endlessLabel(story)} · 레벨 +${story.endless.cleared} · 코인 +${story.endless.rewards} (다음 코인까지 ${ENDLESS.reward - (story.endless.cleared % ENDLESS.reward)}웨이브)`
+    const text = story.endless ? `${endlessLabel(story)} · 레벨 +${story.endless.cleared} · 코인 +${story.endless.rewards}${ENDLESS.reward > 1 ? ` (다음 코인까지 ${ENDLESS.reward - (story.endless.cleared % ENDLESS.reward)}웨이브)` : ' (웨이브마다 코인 +1)'}`
       : `${waveLabel(index)} (${n}/${total})`;
     ctx.font = 'bold 20px system-ui, sans-serif';
     ctx.textAlign = 'left';

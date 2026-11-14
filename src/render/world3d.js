@@ -1450,6 +1450,19 @@ export function createWorld3D(canvas, wrap, assets) {
     g.add(core, glow, trail);
     return g;
   }
+  /** 날아가는 투척용 단검: 은빛 칼날과 손잡이가 빙글빙글 돈다(userData.spinner) */
+  function makeThrownKnife() {
+    const g = new THREE.Group();
+    const spinner = new THREE.Group();
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(26, 6, 1.2), M.mat('#D6DBE2', { metal: 1, rough: 0.15 }));
+    blade.position.x = 8;
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(16, 4, 3), M.mat('#3A2A55', { rough: 0.8 }));
+    handle.position.x = -12;
+    spinner.add(blade, handle);
+    g.add(spinner);
+    g.userData.spinner = spinner;
+    return g;
+  }
   /** 날아가는 화염폭탄: 초록 병과 불붙은 심지 */
   function makeFirebombShot() {
     const g = new THREE.Group();
@@ -1494,6 +1507,7 @@ export function createWorld3D(canvas, wrap, assets) {
   function makeShot(b) {
     if (b.weapon === 'stunlauncher') return makeStunDart();
     if (b.weapon === 'firebomb') return makeFirebombShot();
+    if (b.weapon === 'throwknives') return makeThrownKnife();
     if (b.weapon === 'flaregun') return makeFlareShot();
     if (b.thrown) {
       return new THREE.Mesh(GEO.grenade, M.mat('#4E6B3A'));
@@ -1550,6 +1564,7 @@ export function createWorld3D(canvas, wrap, assets) {
       else m.rotation.set(0, -yaw, Math.atan2(h - prev, Math.hypot(b.vx, b.vy) / 60) * 0.5);
       m.userData.h = h;
       if (b.flame) updateFlame(m, b);
+      if (m.userData.spinner) m.userData.spinner.rotation.z = reducedMotion ? 0 : performance.now() / 1000 * 40;
       // 로켓 연기(윌슨 요원의 쌍 RPG는 진하게)
       if (!reducedMotion && (b.splash && !b.thrown)) {
         const last = smokeFrom.get(b.id);
@@ -2208,7 +2223,7 @@ export function createWorld3D(canvas, wrap, assets) {
   }
   let lastMatch = null;
   let lastScene = null;
-  const NO_FLASH = new Set(['grenade', 'dagger', 'crossbow', 'overcool']);
+  const NO_FLASH = new Set(['grenade', 'dagger', 'crossbow', 'overcool', 'throwknives']);
   /** 쏜 사람의 총구(경기장 좌표)에 불꽃·연기. 1인칭으로 보는 내 화면에서는 불꽃을 숨기고(손에 든 총이 따로 번쩍인다) 연기는 보인다 */
   function muzzleFx(match, e) {
     if (!match || NO_FLASH.has(e.weapon) || match.gunkata || match.cutscene) return;

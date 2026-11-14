@@ -29,7 +29,8 @@ import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
  *   돌격소총 요원이 더 나온다(보스전 제외). 사람 주인공이 모두 쓰러지면 동료가 남아 있어도 패배.
  *   쓰러진 동료는 스테이지를 깰 때 체력 가득으로 다시 일어난다. 요원·포탑은 가까운 쪽 주인공을 노린다.
  */
-export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'crossbow', 'flamethrower'].includes(id) && !WEAPONS[id].legendary);
+// 새 주무기(3점사 소총·개틀링·AK-47·투척용 쌍수단검)는 요원 무작위 무기에 넣지 않는다(스토리 설정에서 요원마다 고를 수는 있다)
+export const STORY_WEAPONS = PRIMARY_IDS.filter((id) => !['rpg', 'sniper', 'crossbow', 'flamethrower', 'burstrifle', 'gatling', 'ak47', 'throwknives'].includes(id) && !WEAPONS[id].legendary);
 export const BOSS_NAME = '스미스 요원';
 export const R10_NAME = 'R-10';
 export const WILSON_NAME = '윌슨 요원';
@@ -101,10 +102,10 @@ export const waveLabel = (i) => `${STAGES[WAVES[i].stage].name} ${WAVES[i].title
 /**
  * 연속 플레이 모드(스토리 모드 시작 칸에서 고름): 1스테이지 옥상만, 요원이 헬리콥터로 ENDLESS.count명씩 끝없이 온다(웨이브 무한).
  * 웨이브는 옥상 2웨이브(wave) 설정(체력·무기 등, 스토리 설정)을 쓰고 요원 수만 count명. 보스·다음 스테이지는 없다.
- * 웨이브를 깰 때마다 랭크 1레벨(1승리), reward웨이브마다 1코인(main.js가 바로 저장하므로 중간에 그만둬도 남음).
+ * 웨이브를 깰 때마다 랭크 1레벨(1승리), reward웨이브마다(기본 1: 웨이브마다) 1코인(main.js가 바로 저장하므로 중간에 그만둬도 남음).
  */
 export const ENDLESS = {
-  wave: 1, count: 3, reward: 3,
+  wave: 1, count: 3, reward: 1,
   // 웨이브마다 요원이 강해진다(깬 웨이브 수 n만큼): 체력 ×(1 + hp·n), 피해 ×(1 + damage·n, 최대 damageMax배),
   // 이동 속도·탄속 ×(1 + speed·n, 최대 speedMax배). normalAt웨이브부터 적어도 보통, hardAt웨이브부터 어려움 난이도
   grow: { hp: 0.12, damage: 0.06, damageMax: 3, speed: 0.02, speedMax: 1.5, normalAt: 3, hardAt: 6 },
@@ -124,6 +125,8 @@ export const ENDLESS_MAPS = [
 export const endlessMapOf = (id) => ENDLESS_MAPS.find((m) => m.id === id) ?? ENDLESS_MAPS[0];
 
 /** 연속 플레이에서 깬 웨이브 수 n일 때 요원 강화 배율 { hp, damage, speed, difficulty(최소 난이도 또는 null) } */
+/** 코인 보상 안내: '웨이브마다 1코인'(reward가 1) 또는 'N웨이브마다 1코인' */
+export const endlessRewardText = () => (ENDLESS.reward === 1 ? '웨이브마다 1코인' : `${ENDLESS.reward}웨이브마다 1코인`);
 export function endlessBoost(n) {
   const g = ENDLESS.grow;
   return {
@@ -352,7 +355,7 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
     // 연속 플레이: 옥상에서 헬리콥터가 요원 ENDLESS.count명씩 끝없이 데려온다. cleared: 깬 웨이브 수, rewards: 받은 보상 수
     match.story.endless = { cleared: 0, rewards: 0 };
     Object.assign(match.story, { wave: ENDLESS.wave, phase: 'clear', timer: CLEAR_TIME / 2, started: false });
-    match.story.banner = banner(`연속 플레이 모드 · ${pickMap.name}`, `요원이 ${ENDLESS.count}명씩 끝없이 온다 · 웨이브마다 랭크 +1레벨 · ${ENDLESS.reward}웨이브마다 1코인`);
+    match.story.banner = banner(`연속 플레이 모드 · ${pickMap.name}`, `요원이 ${ENDLESS.count}명씩 끝없이 온다 · 웨이브마다 랭크 +1레벨 · ${endlessRewardText()}`);
     return match;
   }
   if (start === 0) {
