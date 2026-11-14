@@ -1082,6 +1082,8 @@ export function updateFlight(match, p, dir, dt) {
     if (p.z <= ground) p.vz = 0;
     return;
   }
+  // 공중전(하늘): 건쉽·적 비행기가 모두 같은 높이에서 싸운다(고도를 바꾸지 않음)
+  if (match.story?.stage === 'sky') { p.z = 0; p.vz = 0; return; }
   const min = ground + FLIGHT.minAlt;
   const max = Math.min(FLIGHT.maxAlt, Number.isFinite(match.ceiling) ? match.ceiling - 260 : Infinity);
   const want = Math.max(-1, Math.min(1, dir)) * FLIGHT.climb;
