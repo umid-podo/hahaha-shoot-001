@@ -800,7 +800,7 @@ test('요원별 주무기: 모든 요원(R-10 빼고)의 주무기를 정할 수
     ['rifle', 'rifle'], ['random', 'random', 'random'], ['random', 'random', 'random', 'random'], [],
     ['random', 'random', 'random'], ['random', 'random', 'random', 'random'], ['random', 'random', 'random', 'random', 'random'], [],
   ]);
-  assert.deepEqual(AGENT_WEAPON_CHOICES, ['random', 'rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower']);
+  assert.deepEqual(AGENT_WEAPON_CHOICES, ['random', 'rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'burstrifle', 'gatling', 'ak47', 'throwknives']);
 
   // 정한 무기대로 나온다(무작위가 아니면 RPG·저격총·석궁도)
   settings.waves[0].weapons = ['sniper'];

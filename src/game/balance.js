@@ -67,6 +67,14 @@ export const SECTIONS = [
         ['불꽃이 날아가는 시간(사거리)', ['flame', 'life'], { min: 0.05, max: 3, step: 0.05, unit: SEC }],
         ['흩어지는 각도(도)', ['flame', 'spread'], { max: 90, step: 1 }],
       ]),
+      ...gun('burstrifle', [['점사 수', ['burst'], { min: 1, max: 10 }], ['점사 간격', ['burstGap'], { min: 0.02, max: 1, step: 0.01, unit: SEC }]]),
+      ...gun('gatling'),
+      ...gun('ak47'),
+      ...gun('throwknives', [
+        ['한 번에 던지는 단검 수', ['burst'], { min: 1, max: 10 }],
+        ['단검 사이 간격', ['burstGap'], { min: 0.02, max: 1, step: 0.01, unit: SEC }],
+        ['날아가는 시간(사거리)', ['life'], { min: 0.1, max: 5, step: 0.05, unit: SEC }],
+      ]),
       ...gun('energyrifle', [['튕기는 횟수', ['bounces'], { max: 20, step: 1 }]]),
       ...gun('energydual'),
       ...gun('energyrpg', [

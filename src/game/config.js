@@ -210,6 +210,18 @@ export const WEAPONS = {
     id: 'crossbow', name: '아킴보 석궁', interval: 0.7, damage: 12, speed: 1500, burst: 1, arrows: 2, arrowGap: 26, mag: 6, reload: 1.8,
     hidden: true, unlockFrom: 'dual', unlockTaps: 2,
   },
+  // 3점사 소총: 방아쇠를 당길 때마다 3발을 빠르게 연달아(점사). 점사 사이는 조금 쉰다
+  burstrifle: { id: 'burstrifle', name: '3점사 소총', interval: 0.42, damage: 12, speed: 820, burst: 3, burstGap: 0.07, mag: 30, reload: 2 },
+  // 개틀링: 총열 여섯 개가 돌며 아주 빠르게 연사. 한 발은 약하지만 200발 큰 탄통(장전이 길다)
+  gatling: { id: 'gatling', name: '개틀링', interval: 0.045, damage: 5, speed: 800, burst: 1, mag: 200, reload: 3.5 },
+  // AK-47: 돌격소총보다 한 발이 세고 조금 느린 연사
+  ak47: { id: 'ak47', name: 'AK-47', interval: 0.13, damage: 11, speed: 780, burst: 1, mag: 30, reload: 2.2 },
+  // 투척용 쌍수단검: 양손의 단검 2개를 빠르게 연달아(burstGap) 던진다(탄속이 빠르고 life초만큼만 날아감).
+  // 둘 다 던지면(mag 2) 손에서 새 단검을 뱅글뱅글 빠르게 돌리며 reload초 만에 다시 채운다
+  throwknives: {
+    id: 'throwknives', name: '투척용 쌍수단검', interval: 0.3, damage: 26, speed: 1300, burst: 2, burstGap: 0.09, mag: 2, reload: 0.8,
+    life: 0.6, alternate: true, knife: true,
+  },
   // 화염방사기: 불꽃을 짧게 뿜는다. 가까이에서 아주 세지만 사거리가 짧다(불꽃 0.45초 ≈ 330 거리)
   flamethrower: {
     id: 'flamethrower', name: '화염방사기', interval: 0.05, damage: 4, speed: 650, burst: 1, mag: 80, reload: 2.4,
@@ -368,7 +380,7 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
  * 준비 화면에서 고르는 주무기·보조무기(숨겨진 무기 포함, 목록에는 hidden이 아닌 것만 보인다). 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,
  * 수류탄은 아이템 버튼으로 바로 던진다.
  */
-export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'energyrifle', 'energydual', 'energyrpg'];
+export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'burstrifle', 'gatling', 'ak47', 'throwknives', 'energyrifle', 'energydual', 'energyrpg'];
 /** 상점에서 사야 쓸 수 있는 전설 무기 */
 export const LEGENDARY_IDS = PRIMARY_IDS.filter((id) => WEAPONS[id].legendary);
 export const SECONDARY_IDS = ['smg', 'dagger', 'shotgun', 'grenadelauncher', 'stunlauncher', 'firebomb', 'katana', 'riotshield', 'flaregun'];

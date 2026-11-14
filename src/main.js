@@ -396,7 +396,7 @@ function frame(now) {
         if (e.type === 'wave') {
           screens.announce(e.endless ? `연속 플레이 ${e.endless}웨이브 시작` : `${waveLabel(e.wave)} 시작`);
         }
-        // 연속 플레이: 웨이브를 깰 때마다 랭크 1레벨, 3웨이브마다 1코인. 바로 저장되므로 중간에 그만둬도 남는다
+        // 연속 플레이: 웨이브를 깰 때마다 랭크 1레벨·1코인. 바로 저장되므로 중간에 그만둬도 남는다
         if (e.type === 'wave-clear' && e.endless) {
           const result = addWin(rank);
           rank = result.rank;
