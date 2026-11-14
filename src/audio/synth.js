@@ -416,9 +416,87 @@ function knifeSlash() {
   osc.stop(t + 0.15);
 }
 
+/**
+ * 카타나로 검기를 날리며 베는 '쉬익-촥!': 긴 칼날이 공기를 크게 가르는 소리(공진이 낮은 데서 높이 휙 올라갔다 내려감)
+ * → 끝에서 날카롭게 찢는 '촥' → 칼날이 길게 우는 '스아앙'(비정수배 금속 배음) + 검기가 날아가는 낮은 '우웅'
+ */
+function katanaSlash() {
+  if (!ctx || muted) return;
+  const t = T0;
+  const out = realBus();
+  // 공기를 가르는 '쉬이익'
+  const src = ac.createBufferSource();
+  src.buffer = noiseBuffer();
+  const band = ac.createBiquadFilter();
+  band.type = 'bandpass';
+  band.Q.value = 3;
+  band.frequency.setValueAtTime(500, t);
+  band.frequency.exponentialRampToValueAtTime(4600, t + 0.13);
+  band.frequency.exponentialRampToValueAtTime(1500, t + 0.3);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(GAIN * 6, t + 0.12);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+  src.connect(band).connect(g).connect(out);
+  const send = ac.createGain();
+  send.gain.value = 0.25;
+  g.connect(send).connect(room);
+  src.start(t, Math.random() * 0.6);
+  src.stop(t + 0.34);
+  // 날이 공기를 찢는 '촥'
+  noiseHit(t + 0.1, [{ type: 'highpass', freq: 3500 }, { type: 'bandpass', freq: 7000, to: 3800, q: 1.2, time: 0.06 }], GAIN * 5, 0.002, 0.07, 0.2);
+  // 칼날 울림 '스아앙'
+  for (const [f, a] of [[2650, 1], [4180, 0.7], [6390, 0.45], [8870, 0.25]]) {
+    const osc = ac.createOscillator();
+    const og = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(f * 0.85, t + 0.04);
+    osc.frequency.linearRampToValueAtTime(f, t + 0.14);
+    og.gain.setValueAtTime(0.0001, t + 0.04);
+    og.gain.exponentialRampToValueAtTime(GAIN * 0.7 * a, t + 0.12);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    osc.connect(og).connect(out);
+    osc.start(t + 0.04);
+    osc.stop(t + 0.62);
+  }
+  // 검기가 날아가는 낮은 '우웅'
+  const hum = ac.createOscillator();
+  const hg = ac.createGain();
+  hum.type = 'triangle';
+  hum.frequency.setValueAtTime(220, t + 0.08);
+  hum.frequency.exponentialRampToValueAtTime(90, t + 0.4);
+  hg.gain.setValueAtTime(GAIN * 1.6, t + 0.08);
+  hg.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+  hum.connect(hg).connect(out);
+  hum.start(t + 0.08);
+  hum.stop(t + 0.44);
+}
+
+/** 쌍 카타나 장전 시작: 칼을 칼집 쪽으로 돌리며 칼등이 칼집 쇠테에 '스르릉' 긁힘 */
+function katanaSheathe() {
+  if (!ctx || muted) return;
+  const t = T0;
+  scrape(t, 0.22, { freq: 2600, to: 5200, q: 5, volume: 1.2 });
+  partHit(t + 0.22, { modes: [[3300, 18, 0.4, 0.05], [5100, 20, 0.3, 0.04]], click: 0.6, volume: 0.8 });
+}
+
+/**
+ * 쌍 카타나 장전 끝: 쇠와 쇠가 맞물려 끼워지고 세게 부딪치는 '철컥!'.
+ * 쇠붙이가 서로 미끄러져 들어가는 '스윽' → 맞물리며 부딪치는 '철!'(쇠의 굵은 공진·묵직한 몸통) → 걸쇠가 걸리는 '컥!' → 두 쇠가 함께 우는 짧은 여운
+ */
+function katanaClack() {
+  if (!ctx || muted) return;
+  const t = T0;
+  scrape(t, 0.07, { freq: 1800, to: 3200, q: 4, volume: 1.2 });                                                         // 스윽(쇠끼리 미끄러짐)
+  partHit(t + 0.07, { modes: [[980, 7, 0.9, 0.08], [1870, 9, 0.85, 0.07], [3150, 11, 0.6, 0.05], [4900, 14, 0.4, 0.04]], click: 2, thump: 1.8, thumpFreq: 340, volume: 1.5, wet: 0.3 }); // 철!
+  partHit(t + 0.115, { modes: [[2400, 14, 0.7, 0.04], [4300, 16, 0.5, 0.03], [6200, 18, 0.3, 0.02]], click: 1.6, thump: 0.8, thumpFreq: 500, volume: 1.4, wet: 0.25 }); // 컥!
+  metalClick(t + 0.12, { pitch: 0.9, volume: 1.1, ring: 0.22 });                                                         // 두 쇠가 함께 우는 여운
+  partHit(t + 0.135, { modes: [[5600, 20, 0.3, 0.02]], click: 0.5, volume: 0.7 });                                       // 걸쇠 잠김
+}
+
 /** 장전 소리 크기(녹음본 재생 배율)와 철컥 소리를 내지 않는 무기(탄창이 없는 것) */
 const RELOAD_VOLUME = 1.8;
-const NO_CLACK = new Set(['throwknives', 'flamethrower']);
+const NO_CLACK = new Set(['throwknives', 'flamethrower', 'twinkatana']);
 
 /** 녹음해 둘 소리: 이름 → [길이(초), 레시피, 변형 수]. 변형마다 높낮이·세기가 조금씩 다르다. */
 const RECIPES = {
@@ -430,6 +508,9 @@ const RECIPES = {
   swap: [0.9, weaponSwap, 1],
   'knife-swing': [0.9, knifeSwing, 2],
   'knife-slash': [0.9, knifeSlash, 2],
+  'katana-wave': [1.2, katanaSlash, 3],
+  'katana-sheathe': [0.9, katanaSheathe, 2],
+  'katana-clack': [1.2, katanaClack, 2],
 };
 // 기본 무기(권총·쌍권총)·장전부터 먼저 녹음
 const RENDER_ORDER = ['shot-pistol', 'shot-dual', 'reload-out', 'reload-in', 'swap', 'shot-rifle', 'shot-smg',
@@ -613,6 +694,7 @@ export function playEvents(events) {
     else if (e.type === 'fire' && e.weapon === 'stunlauncher') { gunshot({ filter: 1400, q: 0.8, decay: 0.18, thump: 60, volume: 0.9 }); slide(1800, 600, 0.25, 'square', 0.35); } // 전기충격기: 퓽
     else if (e.type === 'fire' && e.weapon === 'flamethrower') flameRoar();
     else if (e.type === 'fire' && e.weapon === 'dagger') { if (!playRecorded('knife-swing')) gunshot(SHOT.dagger); }
+    else if (e.type === 'fire' && e.weapon === 'twinkatana') { if (!playRecorded('katana-wave', 1.3)) { gunshot({ filter: 3000, q: 1, decay: 0.2, thump: 0, volume: 0.9 }); slide(2600, 900, 0.25, 'sawtooth', 0.3); } } // 칼로 베는 '쉬익-촥'
     else if (e.type === 'fire' && REAL[e.weapon] && playRecorded(`shot-${e.weapon}`)) { /* 녹음본 재생 */ }
     else if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
     // 탄창 갈아 끼우기(실제 소리): 빼기(딸깍·스윽·퉁) … 꽂기(스윽·착!)·노리쇠(촤악·철컥!). 투척용 단검은 탄창이 없어 소리 없이 돌린다
@@ -624,6 +706,9 @@ export function playEvents(events) {
         else { tone(380, 0.05, 'square'); tone(200, 0.07, 'square', 0.05); tone(420, 0.05, 'square', 0.26); tone(190, 0.08, 'square', 0.31); }
       }
     }
+    // 쌍 카타나: 칼집 쪽으로 '스르릉' … 쇠와 쇠가 끼워지며 부딪치는 '철컥!'
+    if (e.type === 'reload' && e.weapon === 'twinkatana' && !playRecorded('katana-sheathe', RELOAD_VOLUME)) tone(2400, 0.08, 'sawtooth');
+    if (e.type === 'reloaded' && e.weapon === 'twinkatana' && !playRecorded('katana-clack', RELOAD_VOLUME)) { tone(900, 0.04, 'square'); tone(1800, 0.05, 'square', 0.04); tone(420, 0.08, 'square', 0.05); }
     if (e.type === 'overheat') [700, 500, 300].forEach((f, i) => tone(f, 0.08, 'sawtooth', i * 0.07)); // 과열 경고
     if (e.type === 'jet-fire') gunshot(SHOT.jet); // 미사일 발사음
     if (e.type === 'tank-fire') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 130, volume: 1.4 }); tone(70, 0.2, 'square', 0.02); } // 탱크 포성
@@ -637,7 +722,7 @@ export function playEvents(events) {
     if (e.type === 'jump') slide(900, 250, 0.6, 'triangle', 0.6); // 뛰어내림
     if (e.type === 'chute') { gunshot({ filter: 1800, q: 0.6, decay: 0.25, thump: 0, volume: 0.8 }); slide(300, 180, 0.4, 'sine', 0.5); } // 낙하산 펴짐(펄럭)
     if (e.type === 'swap' && !playRecorded('swap')) { tone(1200, 0.03, 'square'); tone(900, 0.04, 'square', 0.05); } // 철컥
-    if (e.type === 'hit' && e.weapon === 'dagger') { if (!playRecorded('knife-slash')) tone(880, 0.07, 'square'); } // 써걱
+    if (e.type === 'hit' && (e.weapon === 'dagger' || e.weapon === 'twinkatana')) { if (!playRecorded('knife-slash')) tone(880, 0.07, 'square'); } // 써걱
     else if (e.type === 'hit') tone(880, 0.07, 'square');
     if (e.type === 'block') tone(300, 0.05, 'triangle');
     if (e.type === 'bounce') tone(1500, 0.04, 'sine'); // 에너지 볼트 튕김: 띵

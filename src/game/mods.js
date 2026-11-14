@@ -224,6 +224,8 @@ export const LEGEND_SHOP = [
     info: '푸른 에너지 볼트를 엄청난 연사로 · 250발 · 탄속 매우 빠름 · 피해 낮음' },
   { id: 'legend-energyrpg', weapon: 'energyrpg', unlocks: 'energyrpg', grade: 'legendary', name: '에너지 RPG', price: LEGEND_PRICE, parts: [],
     info: '약하게 유도되는 에너지 로켓 · 폭발 범위가 RPG보다 훨씬 큼 · 맞은 적은 4초 감전(못 움직이고 못 쏨) · 피해는 RPG보다 낮음' },
+  { id: 'legend-twinkatana', weapon: 'twinkatana', unlocks: 'twinkatana', grade: 'legendary', name: '쌍 카타나', price: LEGEND_PRICE, parts: [],
+    info: '투척용 쌍수단검의 전설 등급 · 양손 카타나로 초승달 검기 2개를 날림 · 범위가 넓고 적을 꿰뚫음 · 한 발 45(단검 26)' },
 ];
 /**
  * 상점 탈것(캐릭터): 사면 그 캐릭터(config.js에서 shop이 이 id인 캐릭터)가 캐릭터 선택에 나타난다(영구).

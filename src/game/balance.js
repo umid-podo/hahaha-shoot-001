@@ -83,6 +83,12 @@ export const SECTIONS = [
         ['감전 시간(못 움직이고 못 쏨)', ['shock'], { max: 30, step: 0.5, unit: SEC }],
         ['유도(초당 꺾는 각도, 라디안)', ['homing', 'turnRate'], { max: 10, step: 0.05 }],
       ]),
+      ...gun('twinkatana', [
+        ['검기 폭(명중 반지름)', ['wave', 'radius'], { min: 5, max: 300, step: 1 }],
+        ['한 번에 날리는 검기 수', ['burst'], { min: 1, max: 10 }],
+        ['검기 사이 간격', ['burstGap'], { min: 0.02, max: 1, step: 0.01, unit: SEC }],
+        ['날아가는 시간(사거리)', ['life'], { min: 0.1, max: 5, step: 0.05, unit: SEC }],
+      ]),
     ],
   },
   {

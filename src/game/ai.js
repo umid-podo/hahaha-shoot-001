@@ -125,7 +125,7 @@ function threats(ai, match, me) {
   for (const b of match.projectiles) {
     if (b.team === me.team || b.ownerId === me.id) continue;
     // 폭발 무기는 폭발 반경까지, 던진 무기는 직격 없이 폭발만
-    const direct = b.thrown ? 0 : me.radius + BULLET_RADIUS;
+    const direct = b.thrown ? 0 : me.radius + (b.hitRadius ?? BULLET_RADIUS); // 넓은 검기(쌍 카타나)는 더 멀리 비켜야 한다
     const reach = Math.max(direct, b.splash ? b.splash.radius + me.radius : 0) + DODGE_MARGIN;
     approach(b.id, b.x, b.y, b.vx, b.vy, reach, RULES.bulletLife - b.life, !!(b.splash || b.field));
   }

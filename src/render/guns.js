@@ -1115,6 +1115,11 @@ function build(weapon, equipped = {}) {
       items.push(set(gun(throwKnifeModel(), 'one'), { x: 11, y: -10, z: -24, yaw: 0.25, pitch: 0.4, roll: -0.4 }));
       items.push(set(gun(throwKnifeModel(), 'one'), { x: -11, y: -10, z: -24, yaw: -0.25, pitch: 0.4, roll: 0.4, mirror: true }));
       break;
+    case 'twinkatana':
+      // 쌍 카타나(전설): 양손에 한 자루씩 비스듬히 들고, 번갈아 휘둘러 검기를 날린다
+      items.push(set(gun(katanaModel(), 'one'), { x: 13, y: -12, z: -26, yaw: 0.5, pitch: 0.55, roll: -0.6 }));
+      items.push(set(gun(katanaModel(), 'one'), { x: -13, y: -12, z: -26, yaw: -0.5, pitch: 0.55, roll: 0.6, mirror: true }));
+      break;
     case 'katana':
       // 오른손에 비스듬히 든 칼(벨 때 가로로 휘두른다)
       items.push(set(gun(katanaModel(), 'one'), { x: 13, y: -12, z: -26, yaw: 0.55, pitch: 0.55, roll: -0.6 }));
@@ -1262,6 +1267,7 @@ export function environmentMap(renderer) {
 /** 작업실 책상에 올려놓을 총(손 없이, 개조 파츠 장착). 쌍권총·석궁은 한 자루. 앞이 +X */
 const SHOWCASE = {
   energyrifle: () => energyRifleModel(), energydual: () => energyPistolModel(), energyrpg: () => energyRpgModel(), flamethrower: () => flamethrowerModel(),
+  twinkatana: () => katanaModel(),
   rifle: () => rifleModel(), smg: () => smgModel(), sniper: () => sniperModel(), shotgun: () => shotgunModel(), pistol: () => pistolModel(), dual: () => pistolModel({ twoTone: true }), rpg: () => rpgModel(), crossbow: () => crossbowModel() };
 export function buildShowcase(weapon, equipped = {}) {
   const model = applyMods((SHOWCASE[weapon] ?? SHOWCASE.rifle)(), equipped);
@@ -1280,9 +1286,9 @@ const HELD = {
   energyrifle: () => energyRifleModel(), energydual: () => energyPistolModel(), flamethrower: () => flamethrowerModel(),
   energyrpg: () => energyRpgModel(), grenadelauncher: () => grenadeLauncherModel(), stunlauncher: () => stunLauncherModel(),
   ak47: () => ak47Model(), burstrifle: () => burstRifleModel(), gatling: () => gatlingModel(), throwknives: () => throwKnifeModel(),
-  katana: () => katanaModel(), riotshield: () => riotShieldModel(), firebomb: () => firebombModel(), flaregun: () => flareGunModel(),
+  katana: () => katanaModel(), twinkatana: () => katanaModel(), riotshield: () => riotShieldModel(), firebomb: () => firebombModel(), flaregun: () => flareGunModel(),
 };
-const PAIRED = new Set(['dual', 'dualrpg', 'crossbow', 'energydual', 'throwknives']);
+const PAIRED = new Set(['dual', 'dualrpg', 'crossbow', 'energydual', 'throwknives', 'twinkatana']);
 export const hasHeldGun = (weapon) => !!HELD[weapon];
 export function makeHeldGun(weapon, equipped = {}) {
   const root = new THREE.Group();
@@ -1330,12 +1336,13 @@ const span = (k, a, b) => ease((k - a) / (b - a));
 
 /** 장전 때 권총을 돌리는 바퀴 수(쌍권총 종류) */
 // 투척용 쌍수단검: 두 개 다 던지면 새 단검을 손가락에 걸고 뱅글뱅글 빠르게 세 바퀴 돌리며 다시 채운다
-const SPIN_TURNS = { dual: 2, dualrpg: 2, energydual: 4, throwknives: 3 };
+// 쌍 카타나: 칼을 손 안에서 한 바퀴 휙 돌려 칼집에 '철컥' 끼웠다 뽑는다
+const SPIN_TURNS = { dual: 2, dualrpg: 2, energydual: 4, throwknives: 3, twinkatana: 1 };
 /** 장전할 때 총 전체의 움직임(카메라 기준 cm·라디안). 탄창 총은 기울여 탄창 구멍을 보이고, RPG는 총구를 내리고, 석궁은 내린다 */
 function reloadPose(weapon, rl, e) {
   const out = { x: 0, y: 0, z: 0, pitch: 0, roll: 0 };
   if (rl === null) return out;
-  if (weapon === 'dual' || weapon === 'dualrpg' || weapon === 'energydual' || weapon === 'throwknives') {
+  if (weapon === 'dual' || weapon === 'dualrpg' || weapon === 'energydual' || weapon === 'throwknives' || weapon === 'twinkatana') {
     out.y = 2.2 * e; out.roll = -0.25 * e; // 쌍권총: 조금 들어 올려 바깥으로 기울이고 돌린다
   } else if (weapon === 'rpg' || weapon === 'energyrpg') {
     out.y = -2.5 * e; out.pitch = -0.16 * e; out.x = -2 * e;
@@ -1455,6 +1462,8 @@ export function createViewmodel() {
       if (weapon === 'grenade' || weapon === 'missile' || weapon === 'overcool') return;
       // 카타나: 가로로 휘두르기, 방패·화염폭탄: 반동·불꽃 없이 살짝 내밀기
       if (weapon === 'katana') { s.slash = 1; return; }
+      // 쌍 카타나: 오른손·왼손이 번갈아 가로로 베며 검기를 날린다
+      if (weapon === 'twinkatana') { s.slashes = s.slashes ?? [0, 0]; s.slashes[s.shot++ % 2] = 1; return; }
       if (weapon === 'riotshield' || weapon === 'firebomb') { s.kick = [0.8, 0]; return; }
       // 석궁은 양손이 한꺼번에, 쌍권총·레이저 캐논은 번갈아 쏜다
       if (weapon === 'crossbow') { s.kick = [0.8, 0.8]; return; } // 칼·석궁은 불꽃이 없다
@@ -1482,6 +1491,7 @@ export function createViewmodel() {
       if (!paused) {
         s.swap = Math.max(0, s.swap - dt * 3.2);
         s.slash = Math.max(0, (s.slash ?? 0) - dt * 3.2);
+        if (s.slashes) for (let i = 0; i < 2; i++) s.slashes[i] = Math.max(0, s.slashes[i] - dt * 4.5);
         if (s.thrown) for (let i = 0; i < 2; i++) s.thrown[i] = Math.max(0, s.thrown[i] - dt);
         s.spin = Math.max(0, (s.spin ?? 0) - dt * 2.5);
         s.barrel = (s.barrel ?? 0) + dt * 30 * (s.spin ?? 0);
@@ -1541,6 +1551,15 @@ export function createViewmodel() {
           const k2 = 1 - s.slash;
           item.position.x += (14 - k2 * 40) * far;
           item.position.y += 6 * Math.sin(Math.PI * k2) * far;
+          item.rotateX(-1.1 * Math.sin(Math.PI * k2));
+          item.rotateZ(-0.9 + k2 * 0.4);
+        }
+        // 쌍 카타나: 오른손은 오른쪽→왼쪽, 왼손은 왼쪽→오른쪽으로 크게 가로 베기
+        if (weapon === 'twinkatana' && (s.slashes?.[hand] ?? 0) > 0) {
+          const k2 = 1 - s.slashes[hand];
+          item.position.x += (14 - k2 * 36) * mirror * far;
+          item.position.y += 6 * Math.sin(Math.PI * k2) * far;
+          item.position.z -= 4 * Math.sin(Math.PI * k2) * far;
           item.rotateX(-1.1 * Math.sin(Math.PI * k2));
           item.rotateZ(-0.9 + k2 * 0.4);
         }

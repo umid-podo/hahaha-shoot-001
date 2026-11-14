@@ -492,8 +492,9 @@ export function createWorkshop({ show, onClose }) {
     btn.addEventListener('click', () => {
       store.buy(g.id);
       if (!store.owns(g.id)) return;
-      // 산 전설 무기를 바로 개조할 총으로 골라 책상에 올린다
-      weapon = g.unlocks; previewShop = null;
+      // 산 전설 무기를 바로 개조할 총으로 골라 책상에 올린다(쌍 카타나처럼 파츠를 붙일 수 없는 무기는 그대로)
+      if (MOD_WEAPONS[g.unlocks]) weapon = g.unlocks;
+      previewShop = null;
       renderAll();
     });
     btn.setAttribute('aria-label', `${g.name} ${btn.textContent}`);
