@@ -562,68 +562,75 @@ function sidePlates(g, points, t, material, z) {
  * 에너지 돌격소총(사용자가 준 디자인): 흰 윗몸통·검은 아랫판, 몸통에서 총구까지 이어지는 연두색 빛 띠, 위아래 두 겹 앞 덮개
  * (위 흰 덮개·아래 검은 덮개, 끝이 하늘색으로 빛남), 위에 검은 망원 조준경, 손잡이 앞 하늘색 빛 고리, 가운데가 뚫린 흰 뼈대 개머리판과 검은 받침.
  */
-const E_LIME = () => mat('#3CF04A', { metal: 0, rough: 0.3, emissive: '#1FD43A', intensity: 1.1 });
-const E_GREY = () => role(mat('#B9C0C8', { metal: 0.2, rough: 0.4 }), 'furniture');
+// 그림에서 뽑은 색: 살짝 차가운 흰 외장, 남색 도는 검정, 연두 빛 띠(가운데는 거의 흰빛), 옅은 청록 빛 고리, 하늘색 렌즈
+const R_WHITE = () => role(mat('#E0E0E6', { metal: 0.1, rough: 0.35 }), 'furniture');
+const R_BLACK = () => role(mat('#1C2430', { metal: 0.3, rough: 0.45 }), 'metal');
+const R_DARK = () => role(mat('#15222D', { metal: 0.35, rough: 0.4 }), 'metal');
+const R_CHANNEL = () => role(mat('#23413C', { metal: 0.3, rough: 0.4 }), 'metal');
+const E_LIME = () => mat('#38D034', { metal: 0, rough: 0.35, emissive: '#22C020', intensity: 0.75 });
+const R_CORE = () => mat('#DDFDD8', { metal: 0, rough: 0.3, emissive: '#B8FFB0', intensity: 0.9 });
+const R_CYAN = () => mat('#A8EEE4', { metal: 0, rough: 0.3, emissive: '#5ED8D0', intensity: 1.3 });
+const E_GREY = () => role(mat('#9AA0A8', { metal: 0.2, rough: 0.4 }), 'furniture');
 function energyRifleModel() {
   const g = new THREE.Group();
   // ── 몸통: 흰 윗몸통(뒤가 조금 낮다) · 검은 아랫판 ──
-  g.add(slab([[-10, 0], [14, 0], [15, 1.2], [15, 5.0], [-6, 5.6], [-10, 4.6]], 3.8, E_WHITE(), { bevel: 0.3 }));
-  g.add(slab([[-10, 0.2], [16, 0.2], [16, -2.6], [12, -4.2], [-10, -4.2]], 3.4, E_BLACK(), { bevel: 0.3 }));
-  g.add(box(26, 0.4, 3.9, E_BLACK(), 2.5, 0.2)); // 윗몸통과 아랫판 사이 검은 줄
-  for (const x of [-4, 6]) for (const z of [1, -1]) g.add(box(0.35, 4.4, 0.1, E_BLACK(), x, 2.8, z * 1.95)); // 판 이음선
+  g.add(slab([[-10, 0], [14, 0], [15, 1.2], [15, 5.0], [-6, 5.6], [-10, 4.6]], 3.8, R_WHITE(), { bevel: 0.3 }));
+  g.add(slab([[-10, 0.2], [16, 0.2], [16, -2.6], [12, -4.2], [-10, -4.2]], 3.4, R_BLACK(), { bevel: 0.3 }));
+  g.add(box(26, 0.4, 3.9, R_BLACK(), 2.5, 0.2)); // 윗몸통과 아랫판 사이 검은 줄
+  for (const x of [-4, 6]) for (const z of [1, -1]) g.add(box(0.35, 4.4, 0.1, R_BLACK(), x, 2.8, z * 1.95)); // 판 이음선
   // ── 앞 덮개 두 겹: 위 흰 덮개(앞으로 길게) · 아래 검은 덮개(조금 짧게) ──
-  g.add(slab([[14, 1.6], [38, 1.6], [39.4, 2.6], [39.4, 4.4], [37.6, 5.2], [14, 5.0]], 3.4, E_WHITE(), { bevel: 0.3 }));
-  g.add(slab([[14, 1.1], [36, 1.1], [36.6, 0.2], [36.6, -2.6], [35.4, -3.2], [14, -3.2]], 3.0, E_BLACK(), { bevel: 0.3 }));
+  g.add(slab([[14, 1.6], [38, 1.6], [39.4, 2.6], [39.4, 4.4], [37.6, 5.2], [14, 5.0]], 3.4, R_WHITE(), { bevel: 0.3 }));
+  g.add(slab([[14, 1.1], [36, 1.1], [36.6, 0.2], [36.6, -2.6], [35.4, -3.2], [14, -3.2]], 3.0, R_BLACK(), { bevel: 0.3 }));
   g.add(box(22, 0.5, 3.1, E_GREY(), 25, 1.35)); // 두 덮개 사이 틈(회색 테)
-  g.add(slab([[18, -3.0], [31, -3.0], [29.4, -5.0], [19.6, -5.0]], 2.6, E_DARK(), { bevel: 0.3 })); // 아래 손받침
+  g.add(slab([[18, -3.0], [31, -3.0], [29.4, -5.0], [19.6, -5.0]], 2.6, R_DARK(), { bevel: 0.3 })); // 아래 손받침
   // 끝: 위 덮개 끝면과 아래 총구가 하늘색으로 빛남
-  g.add(box(0.4, 2.4, 3.0, E_GLOW(), 39.6, 3.4));
-  g.add(tube(1.2, 1.2, 36.4, 40.6, E_BLACK(), { y: -1.0, seg: 16 }));
-  g.add(tube(1.25, 1.25, 39.6, 40.4, E_GLOW(), { y: -1.0, seg: 16 })); // 총구 하늘색 고리
+  g.add(box(0.4, 2.4, 3.0, R_CYAN(), 39.6, 3.4));
+  g.add(tube(1.2, 1.2, 36.4, 40.6, R_BLACK(), { y: -1.0, seg: 16 }));
+  g.add(tube(1.25, 1.25, 39.6, 40.4, R_CYAN(), { y: -1.0, seg: 16 })); // 총구 하늘색 고리
   g.add(tube(0.75, 0.75, 40.5, 40.7, E_BORE(), { y: -1.0, seg: 14 }));
   // ── 연두색 빛 띠: 몸통 가운데에서 앞 덮개 끝까지(양옆) + 하늘색 짧은 띠 ──
   for (const z of [1, -1]) {
-    g.add(box(31, 1.7, 0.1, E_BLACK(), 22.5, 3.3, z * 1.93)); // 빛 띠가 들어간 검은 홈
-    g.add(box(31, 0.9, 0.12, E_LIME(), 22.5, 3.3, z * 1.99));
+    g.add(box(31, 1.7, 0.1, R_CHANNEL(), 22.5, 3.3, z * 1.93)); // 빛 띠가 들어간 짙은 청록 홈
+    g.add(box(31, 1.3, 0.12, E_LIME(), 22.5, 3.3, z * 1.99));
+    g.add(box(30, 0.3, 0.12, R_CORE(), 22.5, 3.3, z * 2.03)); // 빛 띠 가운데 흰빛
     g.add(box(22, 0.35, 0.12, E_LIME(), 26, 2.2, z * 1.76));
-    g.add(box(4, 0.6, 0.12, E_GLOW(), 1.5, 1.4, z * 1.96));
+    g.add(box(4, 0.6, 0.12, E_LIME(), 1.5, 1.4, z * 1.96));
   }
   g.add(box(22, 0.35, 1.2, E_LIME(), 26, 5.15)); // 윗면 빛 줄
   // ── 망원 조준경(개조 스코프를 달면 숨김): 받침 · 몸통 · 앞 큰 렌즈통 · 뒤 접안부 · 위 손잡이 ──
   const sight = sub(g);
-  sight.add(box(6.5, 1.6, 2.0, E_BLACK(), -1.5, 6.2));
-  sight.add(tube(1.3, 1.3, -8, 5, E_BLACK(), { y: 8.4, seg: 18 }));
-  sight.add(tube(1.4, 2.2, 5, 8.6, E_BLACK(), { y: 8.4, seg: 18 }));
-  sight.add(tube(1.9, 1.5, -10.6, -8, E_BLACK(), { y: 8.4, seg: 18 }));
-  const lens = new THREE.Mesh(new THREE.CircleGeometry(1.9, 20), mat('#1C3A4A', { metal: 0.9, rough: 0.05, emissive: '#0E4A5A', intensity: 0.6 }));
+  sight.add(box(6.5, 1.6, 2.0, R_BLACK(), -1.5, 6.2));
+  sight.add(tube(1.3, 1.3, -8, 5, R_BLACK(), { y: 8.4, seg: 18 }));
+  sight.add(tube(1.4, 2.2, 5, 8.6, R_BLACK(), { y: 8.4, seg: 18 }));
+  sight.add(tube(1.9, 1.5, -10.6, -8, R_BLACK(), { y: 8.4, seg: 18 }));
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(1.9, 20), mat('#7ABFD8', { metal: 0.6, rough: 0.1, emissive: '#3E8FB0', intensity: 0.5 }));
   lens.rotation.y = Math.PI / 2;
   lens.position.set(8.65, 8.4, 0);
   sight.add(lens);
-  sight.add(tube(0.6, 0.6, -0.8, 0.8, E_BLACK(), { y: 10.2, seg: 12 }).rotateZ(Math.PI / 2));
-  sight.add(box(1.6, 0.8, 1.6, E_BLACK(), 0, 10.3));
+  sight.add(tube(0.6, 0.6, -0.8, 0.8, R_BLACK(), { y: 10.2, seg: 12 }).rotateZ(Math.PI / 2));
+  sight.add(box(1.6, 0.8, 1.6, R_BLACK(), 0, 10.3));
   // ── 손잡이 · 방아쇠울 · 짧은 검은 탄창 · 하늘색 빛 고리 ──
-  g.add(slab([[-6, -4], [-10, -4], [-12.8, -13.6], [-12.0, -15.0], [-8.8, -14.4]], 3.0, E_BLACK(), { bevel: 0.35 }));
-  g.add(box(6.2, 0.45, 1.3, E_BLACK(), -3.2, -6.2));
-  g.add(box(0.5, 2.2, 1.3, E_BLACK(), -0.2, -5.1));
-  g.add(box(0.35, 1.8, 0.5, E_BLACK(), -4.4, -5.0)); // 방아쇠
-  const mag = magazine(g, [slab([[1, -4], [6, -4], [6.6, -9.6], [1.8, -10.2]], 2.6, E_BLACK(), { bevel: 0.25 })], [0.08, -1], [4, -10]);
+  g.add(slab([[-6, -4], [-10, -4], [-12.8, -13.6], [-12.0, -15.0], [-8.8, -14.4]], 3.0, R_BLACK(), { bevel: 0.35 }));
+  g.add(box(6.2, 0.45, 1.3, R_BLACK(), -3.2, -6.2));
+  g.add(box(0.5, 2.2, 1.3, R_BLACK(), -0.2, -5.1));
+  g.add(box(0.35, 1.8, 0.5, R_BLACK(), -4.4, -5.0)); // 방아쇠
+  const mag = magazine(g, [slab([[1, -4], [6, -4], [6.6, -9.6], [1.8, -10.2]], 2.6, R_BLACK(), { bevel: 0.25 })], [0.08, -1], [4, -10]);
   for (const z of [1, -1]) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.32, 8, 24), E_GLOW());
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.32, 8, 24), R_CYAN());
     ring.position.set(9, -1.9, z * 1.75);
     g.add(ring);
-    const core = new THREE.Mesh(new THREE.CircleGeometry(1.2, 18), E_BLACK());
+    const core = new THREE.Mesh(new THREE.CircleGeometry(1.2, 18), R_BLACK());
     core.position.set(9, -1.9, z * 1.74);
     if (z < 0) core.rotation.y = Math.PI;
     g.add(core);
   }
   // ── 개머리판(개조 개머리판을 달면 숨김): 가운데가 크게 뚫린 흰 뼈대 · 아래 회색 테 · 뒤 검은 받침 ──
   const stock = sub(g);
-  stock.add(slab([[-10, 4.6], [-10, -1.0], [-13.6, -8.4], [-33, -10.6], [-34, -10.6], [-34, 4.4], [-14, 5.0]], 3.2, E_WHITE(), {
+  stock.add(slab([[-10, 4.6], [-10, -1.0], [-13.6, -8.4], [-33, -10.6], [-34, -10.6], [-34, 4.4], [-14, 5.0]], 3.2, R_WHITE(), {
     bevel: 0.3, holes: [[[-13.4, 2.6], [-15.4, -6.0], [-31.4, -8.0], [-31.4, 2.4]]],
   }));
   stock.add(slab([[-14.2, -7.8], [-33, -10.0], [-33, -10.8], [-14.6, -8.6]], 3.4, E_GREY(), { bevel: 0.1 }));
-  stock.add(box(1.4, 16, 3.6, E_BLACK(), -34.8, -3.1)); // 검은 받침
-  sidePlates(stock, chamfer(-28, 3.0, -18, 3.9, 0.3), 0.3, E_GLOW(), 1.7); // 개머리판 위 하늘색 짧은 띠
+  stock.add(box(1.4, 16, 3.6, R_BLACK(), -34.8, -3.1)); // 검은 받침
   g.userData = {
     muzzle: [40.8, -1.0, 0], grip: { x: -8.4, y: -9.0, tilt: 0.28, w: 3.0, d: 3.6 }, support: { x: 24, y: -4.0, r: 3.0 }, mag,
     mods: { size: 1, bore: 1.2, scope: [-1.5, 5.6], sight, stock, stockAt: [-10, 1.8], stockFit: { len: 22, top: 4.6, bottom: -10.6 } },
