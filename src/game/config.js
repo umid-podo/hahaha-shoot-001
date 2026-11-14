@@ -305,16 +305,25 @@ export const WEAPONS = {
   // converge: 두 캐논 탄이 조준점(조준 방향의 적·구조물, 없으면 이 거리 앞)에서 만나도록 안쪽으로 모아 쏜다.
   // autoFire: 발사키와 상관없이 살아 있는 동안 계속 쏜다(다른 무기를 들고 있어도)
   gscannon: { id: 'gscannon', name: '양쪽 캐논', interval: 0.14, damage: 14, speed: 1300, burst: 1, arrows: 2, arrowGap: 300, converge: 4000, autoFire: true },
-  // 유도미사일(보조무기): 한 발 50, 가장 가까운 적 쪽으로 휘어 날아가 맞거나 끝에서 터진다. 쿨타임 4초
+  /**
+   * 유도미사일(보조무기): 한 발 50. pattern 'loiter': 쏘면 공중으로 솟으며 orbit초 동안 빠르게 원을 그리고(초당 omega 라디안),
+   * hover초 동안 공중에 멈춰 가장 가까운 적을 조준한 뒤, 그 적에게 dash배 빠르기로 날아간다(그 뒤로도 위아래까지 약하게 유도).
+   * 맞거나 끝에서 터진다. 쿨타임 4초
+   */
   gsmissile: {
     id: 'gsmissile', name: '유도미사일', interval: 4, damage: 50, speed: 750, burst: 1, ownCooldown: true,
-    splash: { damage: 15, radius: 120 }, homing: { turnRate: 4, vertical: true }, life: 3, // vertical: 위아래로도 적 높이를 쫓는다
+    splash: { damage: 15, radius: 120 }, homing: { turnRate: 2, vertical: true }, life: 4,
+    pattern: { kind: 'loiter', orbit: 0.55, omega: 11, rise: 260, hover: 0.4, dash: 1.4 },
   },
-  // 미사일 5연발(보조무기): 조준한 뒤 떼면 작은 미사일 5발을 연달아 쏜다. 각각 15(맞히면 직격 15, 빗나가면 터져 근처에 15).
-  // 적 쪽으로 약하게 유도(위아래 포함). 쿨타임 6초
+  /**
+   * 미사일 5연발(보조무기): 조준한 뒤 떼면 작은 미사일 5발을 연달아 쏜다. 각각 15(맞히면 직격 15, 빗나가면 터져 근처에 15).
+   * pattern 'swarm': 5발이 spread도 부채꼴로 흩어져 나가 orbit초 동안 저마다 빠르게 원을 그리며 돈 뒤(omega, 방향은 번갈아),
+   * 가장 가까운 적에게 세게 유도되어(위아래 포함) 날아간다. 쿨타임 6초
+   */
   gsrockets: {
     id: 'gsrockets', name: '미사일 5연발', interval: 6, damage: 15, speed: 750, burst: 5, burstGap: 0.08, trigger: 'release', ownCooldown: true,
-    splash: { damage: 15, radius: 90 }, homing: { turnRate: 2.5, vertical: true }, life: 3,
+    splash: { damage: 15, radius: 90 }, homing: { turnRate: 6, vertical: true }, life: 4,
+    pattern: { kind: 'swarm', spread: 100, orbit: 0.6, omega: 12, rise: 120 },
   },
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
   // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)

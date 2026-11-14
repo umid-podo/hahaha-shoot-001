@@ -1539,15 +1539,19 @@ export function createWorld3D(canvas, wrap, assets) {
       if (!m) { m = makeShot(b); scene.add(m); shots.set(b.id, m); }
       const h = shotHeight(b, stage);
       m.position.set(b.x, h, b.y);
-      const yaw = Math.atan2(b.vy, b.vx);
+      // 공중에 멈춘 미사일(강습 건쉽 유도미사일 조준 중)은 마지막 방향을 그대로 두고 조금 떤다
+      const still = !b.vx && !b.vy;
+      const yaw = still ? m.userData.yaw ?? 0 : Math.atan2(b.vy, b.vx);
+      m.userData.yaw = yaw;
       const prev = m.userData.h ?? h;
-      m.rotation.set(0, -yaw, Math.atan2(h - prev, Math.hypot(b.vx, b.vy) / 60) * 0.5);
+      if (still) m.rotation.set(0, -yaw + (reducedMotion ? 0 : (Math.random() - 0.5) * 0.08), 0);
+      else m.rotation.set(0, -yaw, Math.atan2(h - prev, Math.hypot(b.vx, b.vy) / 60) * 0.5);
       m.userData.h = h;
       if (b.flame) updateFlame(m, b);
       // 로켓 연기(윌슨 요원의 쌍 RPG는 진하게)
       if (!reducedMotion && (b.splash && !b.thrown)) {
         const last = smokeFrom.get(b.id);
-        const step = b.weapon === 'dualrpg' ? 26 : 50;
+        const step = b.weapon === 'dualrpg' ? 26 : b.pattern ? 30 : 50; // 원을 그리는 미사일은 촘촘히(나선 연기)
         if (!last || Math.hypot(b.x - last.x, b.y - last.y) >= step) {
           smokeFrom.set(b.id, { x: b.x, y: b.y });
           addEffect('smoke', { x: b.x - Math.cos(yaw) * 20, y: b.y - Math.sin(yaw) * 20, h, dense: b.weapon === 'dualrpg' });
@@ -2263,6 +2267,8 @@ export function createWorld3D(canvas, wrap, assets) {
         const h = lastMatch ? heightOf(lastMatch, e.x, e.y) : GUN_Y;
         if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, energy: e.energy, h: currentStage === 'sky' ? PLANE_Y : currentStage === 'road' ? CAR_ROOF : e.z ?? 0 });
         if (e.type === 'field') addEffect(e.kind === 'fire' ? 'fire' : 'field', { x: e.x, y: e.y, radius: e.radius, spread: e.spread, life: e.life, h: e.h ?? 0 });
+        // 강습 건쉽 유도미사일이 공중에 멈춰 적을 조준: 붉은 고리가 번쩍
+        if (e.type === 'missile-lock') { addEffect('ring', { x: e.x, y: e.y, h: e.h, color: '#FF3B30' }); label('조준!', e.x, e.y, e.h + 60, '#FF5A4A', 0.6, 26); }
         if (e.type === 'flash') addEffect('flashbang', { x: e.x, y: e.y, h: e.h, radius: e.radius });
         if (e.type === 'slash') addEffect('slash', { x: e.x, y: e.y, h: e.h, aim: e.aim, range: e.range, arc: e.arc });
         if (e.type === 'shield-hit') {

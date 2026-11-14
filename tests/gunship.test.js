@@ -165,3 +165,58 @@ test('양쪽 캐논은 발사키를 누르지 않아도, 보조무기를 들고 
   const after = run(match, inputs, 0.5).filter((e) => e.type === 'fire' && e.weapon === 'gscannon').length;
   assert.equal(after, 0);
 });
+
+test('미사일 5연발: 5발이 흩어져 나가 저마다 빠르게 원을 그리며 돈 뒤 적에게 유도된다', () => {
+  const { match, inputs, P1, P2 } = playing();
+  match.highs = []; match.covers = [];
+  P1.x = P1.previousX = 800; P1.y = P1.previousY = 900; P1.z = 300;
+  P2.x = P2.previousX = 800; P2.y = P2.previousY = -400; P2.z = 0;
+  inputs.P1.select = 'secondary2';
+  run(match, inputs, 0.5);
+  inputs.P1.aim = -Math.PI / 2;
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  run(match, inputs, 0.4);
+  const rockets = match.projectiles.filter((b) => b.weapon === 'gsrockets');
+  assert.equal(rockets.length, 5, '5발');
+  // 흩어짐: 처음 나간 방향이 서로 다르고(부채꼴), 도는 방향은 번갈아
+  assert.ok(new Set(rockets.map((b) => b.pattern.dir)).size === 2, '도는 방향 번갈아');
+  const spread = rockets.map((b) => Math.hypot(b.x - P1.x, b.y - P1.y));
+  assert.ok(Math.max(...rockets.map((b) => b.x)) - Math.min(...rockets.map((b) => b.x)) > 150, '흩어져 있음');
+  assert.ok(spread.every((d) => d < 1200), '아직 근처에서 돈다');
+  // 원을 그림: 한 발의 진행 방향이 도는 동안 크게 바뀐다
+  const r = rockets[0];
+  const h0 = Math.atan2(r.vy, r.vx);
+  run(match, inputs, 0.15);
+  assert.equal(r.pattern.phase, 'orbit');
+  const turned = Math.abs(Math.atan2(Math.sin(Math.atan2(r.vy, r.vx) - h0), Math.cos(Math.atan2(r.vy, r.vx) - h0)));
+  assert.ok(turned > 1, `빠르게 돎 ${turned.toFixed(2)}rad`);
+  // 그 뒤 적에게 유도돼 맞는다
+  run(match, inputs, 3);
+  assert.ok(rockets.every((b) => b.pattern.phase === 'home' || !match.projectiles.includes(b)));
+  assert.ok(match.stats.P1.weapons.gsrockets.damage >= 15 * 3, `여러 발 명중 ${match.stats.P1.weapons.gsrockets.damage}`);
+});
+
+test('유도미사일: 공중에서 빠르게 원을 그리다가 잠시 멈춰 적을 조준한 뒤 적에게 날아간다', () => {
+  const { match, inputs, P1, P2 } = playing();
+  match.highs = []; match.covers = [];
+  P1.x = P1.previousX = 800; P1.y = P1.previousY = 900; P1.z = 300;
+  P2.x = P2.previousX = 1400; P2.y = P2.previousY = -200; P2.z = 0;
+  inputs.P1.select = 'secondary';
+  run(match, inputs, 0.5);
+  inputs.P1.aim = -Math.PI / 2;
+  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
+  const m = match.projectiles.find((b) => b.weapon === 'gsmissile');
+  assert.equal(m.pattern.phase, 'orbit');
+  const z0 = m.z;
+  const lockEvents = [];
+  let hovered = 0;
+  for (let t = 0; t < 2.5 && match.projectiles.includes(m); t += TICK) {
+    const ev = step(match, inputs);
+    lockEvents.push(...ev.filter((e) => e.type === 'missile-lock'));
+    if (m.pattern.phase === 'hover') { hovered += TICK; assert.ok(!m.vx && !m.vy && !m.vz, '멈춰 있음'); }
+    if (m.pattern.phase === 'orbit') assert.ok(m.z >= z0 - 1, '공중으로 솟으며 돈다');
+  }
+  assert.equal(lockEvents.length, 1, '조준');
+  assert.ok(hovered >= WEAPONS.gsmissile.pattern.hover - 2 * TICK, `잠시 멈춤 ${hovered.toFixed(2)}초`);
+  assert.ok(match.stats.P1.weapons.gsmissile.damage >= 50, '적에게 날아가 명중');
+});

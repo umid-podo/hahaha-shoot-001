@@ -662,7 +662,8 @@ function fire(match, p, events) {
     p.hand = p.hand === 1 ? -1 : 1;
     spawnProjectile(match, p, p.aim, weapon.id, { offset: p.hand * 12, group });
   } else {
-    spawnProjectile(match, p, p.aim);
+    if (weapon.pattern) spawnPatterned(match, p, weapon);
+    else spawnProjectile(match, p, p.aim);
   }
   events.push({ type: 'fire', playerId: p.id, weapon: p.weapon, ...(weapon.alternate ? { hand: p.hand } : {}) });
 }
@@ -706,6 +707,84 @@ function autoFire(match, p, dt, events) {
     spawnProjectile(match, p, p.aim - Math.atan2(offset, at), w.id, { offset, group });
   }
   events.push({ type: 'fire', playerId: p.id, weapon: w.id });
+}
+
+/**
+ * 비행 무늬가 있는 미사일 한 발(강습 건쉽). swarm(5연발): 쏠 때마다 부채꼴 자리를 하나씩 돌아가며 흩어지고 도는 방향도 번갈아.
+ * loiter(유도미사일): 조준 방향으로 쏜다. 처음엔 'orbit'(빠르게 원을 그림) 단계.
+ */
+function spawnPatterned(match, p, weapon) {
+  const pt = weapon.pattern;
+  let angle = p.aim, dir = 1;
+  if (pt.kind === 'swarm') {
+    const n = Math.max(1, weapon.burst);
+    const i = (p.swarmIndex = ((p.swarmIndex ?? -1) + 1) % n);
+    angle = p.aim + ((n === 1 ? 0 : i / (n - 1) - 0.5) * pt.spread * Math.PI) / 180;
+    dir = i % 2 ? -1 : 1;
+  }
+  const b = spawnProjectile(match, p, angle, weapon.id);
+  b.vz = (b.vz ?? 0) + (pt.rise ?? 0);
+  b.pattern = { kind: pt.kind, phase: 'orbit', t: 0, dir, omega: pt.omega * (0.9 + ((b.id * 37) % 20) / 100) };
+  return b;
+}
+
+/** 가장 가까운 살아 있는 적(유도 목표) */
+function nearestEnemy(match, b) {
+  let target = null, best = Infinity;
+  for (const p of match.players) {
+    if (!p.alive || p.team === b.team || p.entering) continue;
+    const d = Math.hypot(p.x - b.x, p.y - b.y, (p.z ?? 0) - (b.z ?? 0));
+    if (d < best) { best = d; target = p; }
+  }
+  return target;
+}
+
+/**
+ * 비행 무늬 한 틱. 'orbit': 수평으로 빠르게 원을 그리며(초당 omega 라디안) 위로 조금 솟는다.
+ * swarm은 orbit이 끝나면 바로 'home'(세게 유도). loiter는 'hover'(공중에 멈춰 적을 조준) 뒤 그 적 쪽으로 빠르게 곧장 날아가고 'home'.
+ */
+function flyPattern(match, b, dt, events) {
+  const pt = WEAPONS[b.weapon]?.pattern;
+  const st = b.pattern;
+  if (!pt || !st) return;
+  st.t += dt;
+  if (st.phase === 'orbit') {
+    const speed = Math.hypot(b.vx, b.vy) || WEAPONS[b.weapon].speed;
+    const heading = Math.atan2(b.vy, b.vx) + st.dir * st.omega * dt;
+    b.vx = Math.cos(heading) * speed; b.vy = Math.sin(heading) * speed;
+    b.vz = (b.vz ?? 0) * Math.max(0, 1 - 3 * dt); // 솟는 힘은 점점 줄어든다
+    if (st.t < pt.orbit) return;
+    st.t = 0;
+    if (pt.kind === 'loiter') {
+      // 공중에 멈춰 조준
+      st.phase = 'hover';
+      st.speed = speed;
+      b.vx = 0; b.vy = 0; b.vz = 0;
+      events.push({ type: 'missile-lock', x: b.x, y: b.y, h: (b.z ?? 0) + SHOT_HEIGHT, ownerId: b.ownerId });
+    } else {
+      st.phase = 'home';
+      // 가장 가까운 적 쪽으로 머리를 돌려 곧장
+      const t = nearestEnemy(match, b);
+      if (t) {
+        const a = Math.atan2(t.y - b.y, t.x - b.x);
+        const s = Math.hypot(b.vx, b.vy);
+        b.vx = Math.cos(a) * s; b.vy = Math.sin(a) * s;
+      }
+    }
+    return;
+  }
+  if (st.phase === 'hover') {
+    b.vx = 0; b.vy = 0; b.vz = 0;
+    if (st.t < pt.hover) return;
+    // 조준한 적에게 빠르게 날아간다(위아래 포함 곧장)
+    st.phase = 'home';
+    const t = nearestEnemy(match, b);
+    const speed = (st.speed ?? WEAPONS[b.weapon].speed) * (pt.dash ?? 1);
+    if (!t) { b.vx = speed; return; }
+    const dx = t.x - b.x, dy = t.y - b.y, dz = (t.z ?? 0) + 20 - (b.z ?? 0);
+    const d = Math.hypot(dx, dy, dz) || 1;
+    b.vx = (dx / d) * speed; b.vy = (dy / d) * speed; b.vz = (dz / d) * speed;
+  }
 }
 
 /** 경기 시작 뒤 흐른 시간(초). 카운트다운·일시정지는 세지 않는다. */
@@ -1177,7 +1256,9 @@ export function step(match, inputs, dt = TICK) {
   const sky = match.story?.stage === 'sky';
   for (const b of match.projectiles) {
     b.previousX = b.x; b.previousY = b.y; b.previousZ = b.z ?? 0;
-    if (b.homing) steer(match, b, b.homing.turnRate, dt);
+    // 원을 그리며 돌다가 적에게 가는 미사일(강습 건쉽): 도는 동안·멈춘 동안은 유도하지 않는다
+    if (b.pattern) flyPattern(match, b, dt, events);
+    if (b.homing && (!b.pattern || b.pattern.phase === 'home')) steer(match, b, b.homing.turnRate, dt);
     b.x += b.vx * dt; b.y += b.vy * dt;
     if (b.vz) b.z = (b.z ?? 0) + b.vz * dt;
     b.life -= dt;
