@@ -447,7 +447,7 @@ function slashKatana(match, p, weapon, events) {
 /** RPG 폭발: 직접 맞은 대상을 뺀 주변 살아있는 적과, 범위에 걸친 엄폐물에 범위 피해. */
 function explode(match, b, x, y, directVictim, directCover, events) {
   const { splash } = b;
-  events.push({ type: 'explode', x, y, z: b.z ?? 0, radius: splash.radius, ...(b.shock ? { energy: true } : {}) });
+  events.push({ type: 'explode', x, y, z: b.z ?? 0, radius: splash.radius, weapon: b.weapon, ...(b.shock ? { energy: true } : {}) });
   for (const p of match.players) {
     if (!p.alive || p.team === b.team || p === directVictim || invulnerable(p)) continue;
     // 높이가 폭발 범위보다 한참 다르면(고지대 위·아래) 닿지 않는다
