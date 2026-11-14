@@ -136,7 +136,7 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
       for (const type of ['pointerup', 'pointercancel', 'pointerleave']) evade.addEventListener(type, () => { frame.touchDescend = false; });
       evade.innerHTML = p.flier ? '<small>내려가기</small><span>▼</span>' : '<small>회피</small><span></span>';
       evade.setAttribute('aria-label', `${p.id} 회피(빠른 돌진, 2번 연속)`);
-      evade.disabled = !!p.plane;
+      evade.disabled = false;
       actions.append(primary, ...seconds, item, jump, evade);
       buttons[p.id] = { primary, secondary, seconds, item, jump, evade, slot: null, itemText: null, evadeText: null, secondTexts: [] };
 
@@ -211,16 +211,16 @@ export function createControls(groups, players, inputs, sideOf = (p) => p.team, 
         });
         // 회피: 남은 횟수를 점으로(●●), 다 쓰면 다시 채워질 때까지 회색
         const charges = p.evadeCharges ?? EVADE.charges;
-        const evadeText = p.flier ? '▼' : '●'.repeat(charges) + '○'.repeat(Math.max(0, EVADE.charges - charges));
+        const evadeText = p.flier || p.plane ? '▼' : '●'.repeat(charges) + '○'.repeat(Math.max(0, EVADE.charges - charges));
         if (b.evadeText !== evadeText) {
           b.evadeText = evadeText;
           b.evade.lastChild.textContent = evadeText;
           // 공중전에서 강습 건쉽으로 바뀌거나 내리면 점프·회피 버튼 이름도 바꾼다
-          b.evade.firstChild.textContent = p.flier ? '내려가기' : '회피';
-          b.jump.firstChild.textContent = p.flier ? '올라가기' : '점프';
-          b.evade.classList.toggle('cooling', !p.flier && charges <= 0);
+          b.evade.firstChild.textContent = p.flier || p.plane ? '내려가기' : '회피';
+          b.jump.firstChild.textContent = p.flier || p.plane ? '올라가기' : '점프';
+          b.evade.classList.toggle('cooling', !p.flier && !p.plane && charges <= 0);
         }
-        b.evade.disabled = !!p.plane;
+        b.evade.disabled = false; // 공중전 라이트닝은 회피 버튼으로 고도를 내린다
         b.item.disabled = !!(p.primaryOnly || p.noItem);
         const ready = p.alive && (p.grenadeCooldown <= 0 || !!WEAPONS[p.item]?.hold); // 연사 아이템(게틀링)은 늘 이름으로
         const text = p.primaryOnly ? '없음' : ready ? WEAPONS[p.item ?? 'grenade'].name : `${Math.ceil(p.grenadeCooldown)}초`;

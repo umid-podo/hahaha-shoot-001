@@ -1,6 +1,6 @@
 import {
   ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS, CHARACTERS,
-  MAX_SPEED as MAX_SPEED_BASE, SKY, TANK, SHIP, DRIVE, RULES, WEAPONS,
+  MAX_SPEED as MAX_SPEED_BASE, SKY, SKY_ALT, TANK, SHIP, DRIVE, RULES, WEAPONS,
 } from './config.js';
 import { SLOTS, SKY_GUNSHIP, characterOf, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers, between, widen } from './state.js';
 import { applyMap } from './maps.js';
@@ -466,6 +466,11 @@ function spawnWave(match, inputs, index) {
       p.y = CHUTE_FROM_Y;
       p.carX = x;
     }
+    // 하늘: 모두 같은 시작 고도에서. 적 건쉽은 과냉각(보조무기)과 유도 없는 미사일 3연발(아이템)도 쓴다
+    if (sky) {
+      p.z = SKY_ALT.start; p.vz = 0;
+      if (!deathstar) Object.assign(p, { primaryOnly: false, secondary: 'overcool', secondaries: ['overcool'], item: 'gsmissile3' });
+    }
     // 존슨 요원은 일반 사격 대신 조준선 저격을 story.js가 쏜다(updateJohnsonSniper)
     if (johnson) { p.scripted = true; story.sniper = null; }
     // 쓰러질 때 하는 한마디(기획서의 요원마다 대사)
@@ -546,7 +551,7 @@ function setupSky(match, { heal = true } = {}) {
   list.forEach((p, i) => {
     if (!p.flier) return;
     Object.assign(p, {
-      plane: false, slot: 'primary', weapon: p.primary, shield: null, z: 0, vz: 0, hurt: 0, dash: null, evade: null,
+      plane: false, slot: 'primary', weapon: p.primary, shield: null, z: SKY_ALT.start, vz: 0, hurt: 0, dash: null, evade: null,
       ...(heal ? { hp: p.maxHp, alive: true } : {}),
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,
@@ -571,14 +576,14 @@ function setupSky(match, { heal = true } = {}) {
       plane: false, flier: true, noItem: false, primaryOnly: false, drone: false, jetpack: null, scale: gs.scale ?? 1,
       primary: gs.loadout.primary, weapon: gs.loadout.primary, secondaries: [...gs.loadout.secondaries], secondary: gs.loadout.secondaries[0],
       item: gs.item, slot: 'primary', radius: gs.radius, speed: gs.speed, maxHp: gs.maxHp, hp, alive: heal ? true : p.alive && hp > 0,
-      shield: null, z: 0, vz: 0, hurt: 0, dash: null, evade: null,
+      shield: null, z: SKY_ALT.start, vz: 0, hurt: 0, dash: null, evade: null,
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity, battery: 0,
     });
   });
   list.forEach((p, i) => !p.flier && Object.assign(p, {
     plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', secondaries: ['overcool'], item: 'missile', slot: 'primary', shield: null,
-    flier: false, noItem: false, z: 0, vz: 0, radius: Math.min(p.radius, 46),
+    flier: false, noItem: false, z: SKY_ALT.start, vz: 0, radius: Math.min(p.radius, 46),
     primaryOnly: !!p.ai, drone: false, jetpack: null, scale: 1,
     speed: MAX_SPEED_BASE * SKY.planeSpeed, hurt: 0, dash: null, evade: null,
     // 이어하기(heal: false)는 저장한 체력·쓰러짐을 그대로 둔다
@@ -609,7 +614,7 @@ function setupRoad(match, { heal = true } = {}) {
     delete p.ground;
     p.hp = Math.min(p.hp, p.maxHp); // 공중전에서만 탄 강습 건쉽(체력 3000)에서 내리면 원래 체력 한도로
     Object.assign(p, {
-      plane: false, item: p.flier ? p.item : 'grenade', slot: 'primary', hurt: 0, dash: null, evade: null,
+      plane: false, item: p.flier ? p.item : 'grenade', slot: 'primary', ...(p.flier ? {} : { z: 0, vz: 0 }), hurt: 0, dash: null, evade: null,
       ...(heal ? { hp: p.maxHp, alive: true } : {}),
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,
@@ -645,7 +650,7 @@ function setupBridge(match, { heal = true } = {}) {
     delete p.ground;
     p.hp = Math.min(p.hp, p.maxHp); // 공중전에서만 탄 강습 건쉽(체력 3000)에서 내리면 원래 체력 한도로
     Object.assign(p, {
-      plane: false, item: p.flier ? p.item : 'grenade', slot: 'primary', hurt: 0, dash: null, evade: null,
+      plane: false, item: p.flier ? p.item : 'grenade', slot: 'primary', ...(p.flier ? {} : { z: 0, vz: 0 }), hurt: 0, dash: null, evade: null,
       ...(heal ? { hp: p.maxHp, alive: true } : {}),
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth, carX: xs[i],
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,

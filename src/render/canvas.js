@@ -3324,9 +3324,8 @@ export function createRenderer(canvas, wrap, assets) {
 
   /** 회피 남은 횟수 점(오른쪽 끝이 (x, y)). 다 쓰면 다시 채워질 때까지 회색 점 */
   function drawEvadePips(p, x, y) {
-    if (p.plane) return;
-    // 강습 건쉽: 회피 대신 지금 고도
-    if (p.flier) {
+    // 강습 건쉽·공중전 라이트닝: 회피 대신 지금 고도
+    if (p.flier || p.plane) {
       ctx.save();
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
       ctx.font = 'bold 13px system-ui, sans-serif';

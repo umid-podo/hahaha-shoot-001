@@ -1027,7 +1027,8 @@ export function createWorld3D(canvas, wrap, assets) {
         model.visible = true;
         const lift = aircraft === 'deathstar' ? 260 : PLANE_Y;
         const behind = aircraft === 'deathstar' ? -260 : 0; // 거대해서 화면 위쪽 뒤에 떠 있게
-        model.position.set(p.x, lift + (p.alive ? 0 : -60) + (reducedMotion ? 0 : Math.sin(time * 2 + p.x) * 4), p.y + behind);
+        // 공중전 고도(z)만큼 오르내린다
+        model.position.set(p.x, lift + (p.z ?? 0) + (p.alive ? 0 : -60) + (reducedMotion ? 0 : Math.sin(time * 2 + p.x) * 4), p.y + behind);
         // 데스스타는 옆모습(긴 선체가 가로)으로, 비행기·건쉽은 바라보는 쪽으로
         model.rotation.set(0, aircraft === 'deathstar' ? 0 : -p.aim, p.alive ? 0 : 0.6);
         if (model.userData.rotor) model.userData.rotor.rotation.y = time * 30;
@@ -1559,7 +1560,7 @@ export function createWorld3D(canvas, wrap, assets) {
       m.scale.set(1.2, 0.8, 0.8);
       return m;
     }
-    const rockets = { rpg: '#4E6B3A', missile: '#C9CED6', gsmissile: '#B8BEC8', gsrockets: '#8E96A2', dsmissile: '#3FAE4A', dualrpg: '#7A4A2A', jet: '#D9443A', tank: '#2A2E35', ship: '#2A2E35', turret: '#2A2E35' };
+    const rockets = { rpg: '#4E6B3A', missile: '#C9CED6', gsmissile3: '#D56A26', gsmissile: '#B8BEC8', gsrockets: '#8E96A2', dsmissile: '#3FAE4A', dualrpg: '#7A4A2A', jet: '#D9443A', tank: '#2A2E35', ship: '#2A2E35', turret: '#2A2E35' };
     if (rockets[b.weapon]) return makeRocket(rockets[b.weapon]);
     // 레이저는 빛 덩어리, 석궁은 화살, 나머지는 진짜 총알 모양(구리 탄두·놋쇠 몸통, 뒤로 옅은 빛줄기)
     if (b.weapon === 'laser') {
@@ -2015,7 +2016,7 @@ export function createWorld3D(canvas, wrap, assets) {
     const stage = match.story?.stage;
     let h = p.plane ? PLANE_Y + 26 : EYE;
     if (stage === 'road' && !p.plane) h += CAR_ROOF;
-    if (!p.plane) h += p.z ?? 0; // 점프·고지대 높이
+    h += p.z ?? 0; // 점프·고지대 높이(라이트닝은 공중전 고도)
     if (p.drone || p.jetpack) h += 24;
     const moving = Math.hypot(p.x - p.previousX, p.y - (p.previousY ?? p.y)) > 0.5;
     const bob = reducedMotion || p.plane ? 0 : moving ? Math.sin(time * 11) * 3 : 0;
@@ -2328,7 +2329,7 @@ export function createWorld3D(canvas, wrap, assets) {
           muzzleFx(lastMatch, e);
         }
         const h = lastMatch ? heightOf(lastMatch, e.x, e.y) : GUN_Y;
-        if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, energy: e.energy, h: currentStage === 'sky' ? PLANE_Y : currentStage === 'road' ? CAR_ROOF : e.z ?? 0 });
+        if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, energy: e.energy, h: currentStage === 'sky' ? PLANE_Y + (e.z ?? 0) : currentStage === 'road' ? CAR_ROOF : e.z ?? 0 });
         if (e.type === 'field') addEffect(e.kind === 'fire' ? 'fire' : 'field', { x: e.x, y: e.y, radius: e.radius, spread: e.spread, life: e.life, h: e.h ?? 0 });
         // 강습 건쉽 유도미사일이 공중에 멈춰 적을 조준: 붉은 고리가 번쩍
         if (e.type === 'missile-lock') { addEffect('ring', { x: e.x, y: e.y, h: e.h, color: '#FF3B30' }); label('조준!', e.x, e.y, e.h + 60, '#FF5A4A', 0.6, 26); }
@@ -2517,7 +2518,7 @@ export function createWorld3D(canvas, wrap, assets) {
             if (p.entering && p.entering.t < 0) continue;
             const a = actors.get(p.id);
             if (!a || !(a.sprite.visible || a.model?.visible)) continue;
-            const top = a.model?.visible ? (p.flier ? (p.z ?? 0) + GUNSHIP_LIFT + 160 : p.characterId === 'deathstar' ? 360 : PLANE_Y + 70) : a.sprite.position.y + a.sprite.scale.y * (1 - footOf(a.image ?? p.characterId)) * 0.92;
+            const top = a.model?.visible ? (p.flier ? (p.z ?? 0) + GUNSHIP_LIFT + 160 : p.characterId === 'deathstar' ? 360 : PLANE_Y + 70 + (p.z ?? 0)) : a.sprite.position.y + a.sprite.scale.y * (1 - footOf(a.image ?? p.characterId)) * 0.92;
             const s = project(cam, v.rect, p.x, top + 16, p.y);
             if (!s) continue;
             const dist = cam.position.distanceTo(tmp.set(p.x, top, p.y));

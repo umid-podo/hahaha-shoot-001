@@ -5,7 +5,7 @@ import { createMatch, createInputs } from '../src/game/state.js';
 import { step } from '../src/game/update.js';
 import { createAI, updateAI } from '../src/game/ai.js';
 import { createModStore, VEHICLE_SHOP, SHOP_BY_ID } from '../src/game/mods.js';
-import { TICK, WEAPONS, CHARACTERS, FLIGHT, MAX_HP } from '../src/game/config.js';
+import { TICK, WEAPONS, CHARACTERS, FLIGHT, MAX_HP, SKY_ALT } from '../src/game/config.js';
 
 const GUNSHIP = CHARACTERS.find((c) => c.id === 'assault-gunship');
 
@@ -229,7 +229,7 @@ test('미사일 5연발은 공중에서 정확히 3바퀴 돈 뒤 유도된다',
   assert.ok(r.z > 0, '공중에서');
 });
 
-test('공중전(하늘): 강습 건쉽은 라이트닝 대신 건쉽 그대로 싸운다(무기 그대로, 다른 비행기와 같은 높이)', async () => {
+test('공중전(하늘): 강습 건쉽은 라이트닝 대신 건쉽 그대로 싸운다(무기 그대로, 공중전 고도 범위 안에서 오르내림)', async () => {
   const { createStoryMatch } = await import('../src/game/story.js');
   const pick = { characterId: 'assault-gunship', weapon: 'rifle' };
   const match = createStoryMatch(pick, undefined, 3, { wave: 8, hp: 3000, skip: true });
@@ -244,7 +244,7 @@ test('공중전(하늘): 강습 건쉽은 라이트닝 대신 건쉽 그대로 �
   match.phase = 'playing';
   inputs.P1.jumpHeld = true;
   for (let i = 0; i < 120; i++) { for (const p of match.players) inputs[p.id] ??= createInputs([p])[p.id]; step(match, inputs); }
-  assert.equal(P1.z, 0, '하늘에서는 고도를 바꾸지 않음');
+  assert.equal(P1.z, SKY_ALT.max, '하늘에서도 고도를 올림(공중전 최고 고도까지)');
   // 다른 주인공(라이트닝)은 그대로
   const coop = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 3, { wave: 8, hp: 500, skip: true });
   assert.equal(coop.players[0].plane, true);

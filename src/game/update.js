@@ -1,6 +1,7 @@
 import {
   ARENA_WIDTH, ARENA_HEIGHT, MIN_X, MAX_X, MIN_Y, MAX_Y, BULLET_RADIUS, ZONE, JUMP, COVER_HEIGHT,
   MUZZLE_OFFSET, TICK, WEAPONS, RULES, SLOT_ORDER, secondaryIndex, secondarySlot, FLIGHT, JET, TANK, SHIP, COVER, EVADE, PAD, VERTICAL_AIM, PITCH, SHOT_HEIGHT,
+  SKY_ALT, BODY_RADIUS,
 } from './config.js';
 import { segmentCircleTime, segmentRectTime } from './collision.js';
 import { highAt, groundAt, structureHit, lineBlocked } from './terrain.js';
@@ -76,7 +77,8 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
   const life = weapon.flame ? weapon.flame.life : weapon.life ?? RULES.bulletLife;
   // 위아래 자동 조준: 높이가 크게 다른 상대를 겨누면 탄이 그 높이로 기울어 날아간다(던진 무기는 포물선이라 빼고)
   // AI(위아래 시선이 없음)는 예전처럼 높이가 크게 다른 상대 쪽으로 기울여 쏜다
-  const vz = weapon.thrown ? 0 : pitch ? Math.sin(pitch) * speed : player.ai ? verticalAim(match, player, aim, speed) : 0;
+  // 공중전(하늘)에서는 사람도 시선을 위아래로 돌리지 않았으면 조준 방향의 적 높이로 자동으로 기울여 쏜다(고도가 달라도 맞힐 수 있게)
+  const vz = weapon.thrown ? 0 : pitch ? Math.sin(pitch) * speed : player.ai || match?.story?.stage === 'sky' ? verticalAim(match, player, aim, speed) : 0;
   const projectile = {
     id: match.nextProjectileId++, ownerId: player.id, team: player.team, weapon: weapon.id,
     x, y, previousX: x, previousY: y,
@@ -130,9 +132,10 @@ function verticalAim(match, player, aim, speed) {
     best = q; bestD = d;
   }
   if (!best) return 0;
-  // 나는 사람(강습 건쉽)은 바닥이 아니라 떠 있는 높이로 겨눈다
-  const from = player.flier ? player.z ?? 0 : groundAt(match, player.x, player.y, player.z ?? 0);
-  const to = best.flier ? best.z ?? 0 : groundAt(match, best.x, best.y, best.z ?? 0);
+  // 나는 사람(강습 건쉽·공중전의 비행기)은 바닥이 아니라 떠 있는 높이로 겨눈다
+  const sky = match.story?.stage === 'sky';
+  const from = player.flier || sky ? player.z ?? 0 : groundAt(match, player.x, player.y, player.z ?? 0);
+  const to = best.flier || sky ? best.z ?? 0 : groundAt(match, best.x, best.y, best.z ?? 0);
   const dz = to - from;
   if (Math.abs(dz) < VERTICAL_AIM.minDz) return 0;
   return dz / (bestD / speed);
@@ -618,9 +621,26 @@ function throwGrenade(match, p, events) {
     p.gatlingSpin = 0.2;
     spawnProjectile(match, p, p.aim, item.id, { offset: p.gatlingSide * (p.flier ? 150 : 12) });
   } else spawnProjectile(match, p, p.aim, item.id);
+  // 연발 아이템(적 건쉽 미사일 3연발): 남은 발은 burstGap마다 이어서 쏜다(updateItemBurst)
+  if (item.burst > 1) { p.itemBurst = item.burst - 1; p.itemBurstTimer = item.burstGap ?? 0.15; }
   const ws = weaponStats(match, p.id, item.id);
   if (ws) ws.shots++;
   events.push({ type: 'fire', playerId: p.id, weapon: item.id });
+}
+
+/** 연발 아이템의 남은 발: burstGap마다 지금 조준 방향으로 한 발씩 */
+function updateItemBurst(match, p, dt, events) {
+  if (!(p.itemBurst > 0)) return;
+  p.itemBurstTimer -= dt;
+  if (p.itemBurstTimer > 0) return;
+  const item = WEAPONS[p.item];
+  if (!item || !p.alive) { p.itemBurst = 0; return; }
+  spawnProjectile(match, p, p.aim, item.id);
+  const ws = weaponStats(match, p.id, item.id);
+  if (ws) ws.shots++;
+  events.push({ type: 'fire', playerId: p.id, weapon: item.id });
+  p.itemBurst--;
+  p.itemBurstTimer += item.burstGap ?? 0.15;
 }
 
 function fire(match, p, events) {
@@ -1084,17 +1104,19 @@ export function updateJump(match, p, jump, dt, events, held = false) {
 export function updateFlight(match, p, dir, dt) {
   p.z ??= FLIGHT.hoverAlt; p.vz ??= 0;
   const ground = groundAt(match, p.x, p.y, p.z);
+  if (!p.alive && match.story?.stage === 'sky') { p.vz = 0; return; } // 공중전에서 격추되면 그 자리에서 터진다
   if (!p.alive) {
     p.vz -= JUMP.gravity * dt;
     p.z = Math.max(ground, p.z + p.vz * dt);
     if (p.z <= ground) p.vz = 0;
     return;
   }
-  // 공중전(하늘): 건쉽·적 비행기가 모두 같은 높이에서 싸운다(고도를 바꾸지 않음)
-  if (match.story?.stage === 'sky') { p.z = 0; p.vz = 0; return; }
-  const min = ground + FLIGHT.minAlt;
-  const max = Math.min(FLIGHT.maxAlt, Number.isFinite(match.ceiling) ? match.ceiling - 260 : Infinity);
-  const want = Math.max(-1, Math.min(1, dir)) * FLIGHT.climb;
+  // 공중전(하늘): 라이트닝·건쉽 모두 SKY_ALT 범위 안에서 고도를 바꾼다(바닥이 없다). 데스스타는 정해진 높이에 떠 있다
+  const sky = match.story?.stage === 'sky';
+  if (sky && p.characterId === 'deathstar') { p.z = SKY_ALT.start; p.vz = 0; return; }
+  const min = sky ? SKY_ALT.min : ground + FLIGHT.minAlt;
+  const max = sky ? SKY_ALT.max : Math.min(FLIGHT.maxAlt, Number.isFinite(match.ceiling) ? match.ceiling - 260 : Infinity);
+  const want = Math.max(-1, Math.min(1, dir)) * (sky ? SKY_ALT.climb : FLIGHT.climb);
   const step = FLIGHT.accel * dt;
   p.vz += Math.max(-step, Math.min(step, want - p.vz));
   p.z += p.vz * dt;
@@ -1197,7 +1219,8 @@ export function step(match, inputs, dt = TICK) {
     if (stuck) p.evade = null;
     if (p.evade) updateEvade(match, p, dt);
     else if (!p.rooted && !stuck) move(match, p, input.moveAxis, input.moveY ?? 0, dt);
-    if (p.flier) {
+    // 공중전(하늘)에서는 라이트닝·적 건쉽도 강습 건쉽처럼 고도를 오르내린다
+    if (p.flier || match.story?.stage === 'sky') {
       // 고도: 점프키(누르고 있는 동안) 위로, 회피키(누르고 있는 동안) 아래로. AI는 flyDir로
       const up = input.jump || input.jumpHeld || input.touchJump, down = input.descendHeld || input.touchDescend;
       updateFlight(match, p, stuck ? 0 : input.flyDir ?? ((up ? 1 : 0) - (down ? 1 : 0)), dt);
@@ -1216,6 +1239,7 @@ export function step(match, inputs, dt = TICK) {
     if (p.scripted) { input.item = false; p.wasAiming = false; continue; }
     // 강습 건쉽 미사일 5연발: 늘 계속 쏜다(발사키는 유도미사일용)
     autoFire(match, p, dt, events);
+    updateItemBurst(match, p, dt, events);
     // 누르고 있는 동안 연사하는 아이템(강습 건쉽 게틀링): 쿨타임(interval)마다 계속 쏜다
     const holdItem = WEAPONS[p.item ?? 'grenade']?.hold;
     if (input.item || (holdItem && (input.itemHeld || input.touchItem || input.padItem))) {
@@ -1277,7 +1301,9 @@ export function step(match, inputs, dt = TICK) {
       // 높이 차이(닿는 순간 탄 높이 기준): 탄보다 너무 높이 뛰었거나(점프로 피함) 너무 아래면 지나간다
       if (b.z !== undefined) {
         const dz = (p.z ?? 0) - (b.previousZ + ((b.z ?? 0) - b.previousZ) * t);
-        if (dz > JUMP.hitAbove || dz < -JUMP.hitBelow) continue;
+        // 공중전의 커다란 비행체(건쉽·데스스타)는 몸 크기만큼 위아래로도 크다
+        const tall = sky ? Math.max(0, p.radius - BODY_RADIUS) : 0;
+        if (dz > JUMP.hitAbove + tall || dz < -JUMP.hitBelow - tall) continue;
       }
       // 꿰뚫는 검기: 구조물보다 앞에 있는 적은 모두 벤다(멈추지 않음)
       if (b.pierce) { contacts.push({ t, projectile: b, victim: p, pass: true }); continue; }
@@ -1370,7 +1396,7 @@ export function step(match, inputs, dt = TICK) {
   // 하늘(공중전)의 건쉽은 건 카타 없이 그 자리에서 터진다.
   const downedAgent = downed.find((p) => p.team === 'isb');
   if (match.story?.stage === 'sky') {
-    for (const p of downed.filter((q) => q.team === 'isb' && !q.boss)) events.push({ type: 'explode', x: p.x, y: p.y, radius: 140 });
+    for (const p of downed.filter((q) => q.team === 'isb' && !q.boss)) events.push({ type: 'explode', x: p.x, y: p.y, z: p.z ?? 0, radius: 140 });
   } else if (match.story && earthUp && downedAgent) {
     // 스토리 설정에서 건 카타를 껐으면 바로 처치 컷씬
     if (kataOn(match)) startGunKata(match, downedAgent, { kind: 'killcam', waveEnd: !isbUp }, events);
