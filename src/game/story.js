@@ -105,7 +105,8 @@ export const waveLabel = (i) => `${STAGES[WAVES[i].stage].name} ${WAVES[i].title
  * 웨이브를 깰 때마다 랭크 1레벨(1승리), reward웨이브마다(기본 1: 웨이브마다) 1코인(main.js가 바로 저장하므로 중간에 그만둬도 남음).
  */
 export const ENDLESS = {
-  wave: 1, count: 3, reward: 1,
+  // count: 웨이브마다 오는 요원 수 기본값(연속 플레이 설정에서 minCount~maxCount명으로 바꿀 수 있다)
+  wave: 1, count: 3, minCount: 1, maxCount: 10, reward: 1,
   // 웨이브마다 요원이 강해진다(깬 웨이브 수 n만큼): 체력 ×(1 + hp·n), 피해 ×(1 + damage·n, 최대 damageMax배),
   // 이동 속도·탄속 ×(1 + speed·n, 최대 speedMax배). normalAt웨이브부터 적어도 보통, hardAt웨이브부터 어려움 난이도
   grow: { hp: 0.12, damage: 0.06, damageMax: 3, speed: 0.02, speedMax: 1.5, normalAt: 3, hardAt: 6 },
@@ -124,16 +125,32 @@ export const ENDLESS_MAPS = [
 ];
 export const endlessMapOf = (id) => ENDLESS_MAPS.find((m) => m.id === id) ?? ENDLESS_MAPS[0];
 
-/** 연속 플레이에서 깬 웨이브 수 n일 때 요원 강화 배율 { hp, damage, speed, difficulty(최소 난이도 또는 null) } */
+/**
+ * 연속 플레이 난이도(연속 플레이 설정에서 고름). ai: 요원 AI 난이도(null이면 스토리 설정 그대로), hp·damage: 요원 체력·피해 배율,
+ * grow: 웨이브마다 강해지는 정도 배율, ramp: 웨이브가 쌓이면 AI 난이도를 보통·어려움으로 올리는지
+ */
+export const ENDLESS_DIFFICULTY = {
+  easy: { name: '쉬움', info: '요원 AI 쉬움 · 체력·피해 70% · 천천히 강해짐', ai: 'easy', hp: 0.7, damage: 0.7, grow: 0.5, ramp: false },
+  normal: { name: '보통', info: '기본 · 웨이브가 쌓이면 보통 → 어려움', ai: null, hp: 1, damage: 1, grow: 1, ramp: true },
+  hard: { name: '어려움', info: '처음부터 AI 어려움 · 체력·피해 130% · 빨리 강해짐', ai: 'hard', hp: 1.3, damage: 1.3, grow: 1.5, ramp: true },
+};
+export const ENDLESS_DIFFICULTY_IDS = Object.keys(ENDLESS_DIFFICULTY);
+export const endlessDifficultyOf = (id) => (ENDLESS_DIFFICULTY[id] ? id : 'normal');
+/** 연속 플레이 요원 수를 범위 안의 정수로(잘못된 값이면 기본값) */
+export const endlessCountOf = (n) => (Number.isFinite(Number(n)) && n !== null && n !== ''
+  ? Math.min(ENDLESS.maxCount, Math.max(ENDLESS.minCount, Math.round(Number(n)))) : ENDLESS.count);
+/** 연속 플레이에서 깬 웨이브 수 n일 때 요원 강화 배율 { hp, damage, speed, difficulty(최소 난이도 또는 null) }. level: 연속 플레이 난이도 */
 /** 코인 보상 안내: '웨이브마다 1코인'(reward가 1) 또는 'N웨이브마다 1코인' */
 export const endlessRewardText = () => (ENDLESS.reward === 1 ? '웨이브마다 1코인' : `${ENDLESS.reward}웨이브마다 1코인`);
-export function endlessBoost(n) {
+export function endlessBoost(n, level = 'normal') {
   const g = ENDLESS.grow;
+  const d = ENDLESS_DIFFICULTY[endlessDifficultyOf(level)];
+  const k = n * d.grow;
   return {
-    hp: 1 + g.hp * n,
-    damage: Math.min(g.damageMax, 1 + g.damage * n),
-    speed: Math.min(g.speedMax, 1 + g.speed * n),
-    difficulty: n >= g.hardAt ? 'hard' : n >= g.normalAt ? 'normal' : null,
+    hp: (1 + g.hp * k) * d.hp,
+    damage: Math.min(g.damageMax, 1 + g.damage * k) * d.damage,
+    speed: Math.min(g.speedMax, 1 + g.speed * k),
+    difficulty: d.ai === 'hard' ? 'hard' : !d.ramp ? null : n >= g.hardAt ? 'hard' : n >= g.normalAt ? 'normal' : null,
   };
 }
 /** 일반 요원이 들고 오는 보조무기(무작위 하나). 수류탄도 던진다 */
@@ -309,7 +326,7 @@ export function normalizeAllyPicks(list) {
  * allies: 데려갈 AI 동료 — 수(0~MAX_ALLIES, 캐릭터는 자동) 또는 직접 고른 [{ characterId, weapon }] 목록.
  * 동료는 체력 가득으로 시작하고 주무기만 쓰며(보조무기·수류탄 없음) AI(match.story.allyBrains)가 조작한다.
  */
-export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null, allies = 0, { endless = false, endlessMap = 'fortress' } = {}) {
+export function createStoryMatch(playerPick, settings = defaultStory(), seed = Date.now(), resume = null, partnerPick = null, allies = 0, { endless = false, endlessMap = 'fortress', endlessDifficulty = 'normal', endlessCount = ENDLESS.count } = {}) {
   const picks = [playerPick, ...(partnerPick ? [partnerPick] : [])];
   const team = Array.isArray(allies)
     ? normalizeAllyPicks(allies).slice(0, allyCount(allies.length))
@@ -353,10 +370,12 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
     else if (pickMap.stage === 'bridge') setupBridge(match, { heal: false });
     else widen(match, pickMap.id);
     match.story.endlessMap = pickMap.id;
-    // 연속 플레이: 옥상에서 헬리콥터가 요원 ENDLESS.count명씩 끝없이 데려온다. cleared: 깬 웨이브 수, rewards: 받은 보상 수
-    match.story.endless = { cleared: 0, rewards: 0 };
+    // 연속 플레이: 헬리콥터가 요원 count명씩 끝없이 데려온다. cleared: 깬 웨이브 수, rewards: 받은 보상 수, difficulty: 연속 플레이 난이도
+    const level = endlessDifficultyOf(endlessDifficulty);
+    const count = endlessCountOf(endlessCount);
+    match.story.endless = { cleared: 0, rewards: 0, difficulty: level, count };
     Object.assign(match.story, { wave: ENDLESS.wave, phase: 'clear', timer: CLEAR_TIME / 2, started: false });
-    match.story.banner = banner(`연속 플레이 모드 · ${pickMap.name}`, `요원이 ${ENDLESS.count}명씩 끝없이 온다 · 웨이브마다 랭크 +1레벨 · ${endlessRewardText()}`);
+    match.story.banner = banner(`연속 플레이 모드 · ${pickMap.name}`, `난이도 ${ENDLESS_DIFFICULTY[level].name} · 요원 ${count}명씩 · 웨이브마다 체력 완전 회복 · ${endlessRewardText()}`);
     return match;
   }
   if (start === 0) {
@@ -410,11 +429,11 @@ function spawnWave(match, inputs, index) {
     : ['sky', 'car', 'chute'].includes(wave.from) ? ARENA_WIDTH / 2 : story.carrier?.x ?? ARENA_WIDTH / 2;
   const sky = wave.from === 'sky', deathstar = wave.boss === 'deathstar';
   // AI 동료 수만큼 쉬움 돌격소총 요원이 웨이브 끝에 덧붙는다(보스전 제외)
-  const total = (story.endless ? ENDLESS.count : wave.count) + extraAgents(index, story.allies);
+  const total = (story.endless ? story.endless.count ?? ENDLESS.count : wave.count) + extraAgents(index, story.allies);
   const spread = total > 4 ? Math.min(DROP_SPREAD, (MAX_X - MIN_X) / (total - 1)) : DROP_SPREAD;
-  const base = story.endless ? ENDLESS.count : wave.count;
-  // 연속 플레이: 깬 웨이브 수만큼 요원이 강해진다
-  const boost = story.endless ? endlessBoost(story.endless.cleared) : null;
+  const base = story.endless ? story.endless.count ?? ENDLESS.count : wave.count;
+  // 연속 플레이: 깬 웨이브 수만큼 요원이 강해진다(연속 플레이 난이도에 따라)
+  const boost = story.endless ? endlessBoost(story.endless.cleared, story.endless.difficulty) : null;
   for (let i = 0; i < total; i++) {
     const extra = i >= base;
     const spec = extra ? EXTRA_AGENT : wave.agents?.[i] ?? {};
@@ -479,7 +498,9 @@ function spawnWave(match, inputs, index) {
     inputs[id] = createInput(p);
     addStats(match, p);
     let difficulty = extra ? EXTRA_AGENT.difficulty : cfg.difficulty === 'mixed' ? spec.difficulty ?? 'normal' : cfg.difficulty;
-    // 연속 플레이: 웨이브가 쌓이면 적어도 보통, 더 쌓이면 어려움
+    // 연속 플레이 난이도 쉬움·어려움은 요원 AI 난이도를 그것으로 정하고, 보통은 웨이브가 쌓이면 적어도 보통, 더 쌓이면 어려움
+    const level = story.endless ? ENDLESS_DIFFICULTY[endlessDifficultyOf(story.endless.difficulty)] : null;
+    if (level?.ai) difficulty = level.ai;
     const rankOf = { easy: 0, normal: 1, hard: 2 };
     if (boost?.difficulty && rankOf[boost.difficulty] > (rankOf[difficulty] ?? 1)) difficulty = boost.difficulty;
     if (spec.kata) p.kataGoal = spec.kata;
@@ -489,9 +510,11 @@ function spawnWave(match, inputs, index) {
 }
 
 /** 웨이브를 깨면 서 있는 지구방위팀(주인공·AI 동료)의 체력을 가득 채운다(쓰러진 동료는 스테이지를 깰 때 일어난다) */
-function healHeroes(match, events) {
+function healHeroes(match, events, { revive = false } = {}) {
   for (const p of heroes(match)) {
-    if (!p.alive || p.hp >= p.maxHp) continue;
+    if (!p.alive && !revive) continue;
+    if (p.alive && p.hp >= p.maxHp) continue;
+    if (!p.alive) Object.assign(p, { alive: true, hurt: 0, shock: 0, freeze: 0, blind: 0 });
     p.hp = p.maxHp;
     events.push({ type: 'heal', playerId: p.id });
   }
@@ -1001,7 +1024,8 @@ export function updateStory(match, inputs, dt, events) {
   const next = story.endless ? ENDLESS.wave : story.wave + 1;
   switch (story.phase) {
     case 'fight':
-      if (enemies(match).every((p) => !p.alive) && (story.endless || next < WAVES.length)) healHeroes(match, events);
+      // 웨이브를 깨면 체력 회복(연속 플레이는 쓰러진 2인 협동 동료·AI 동료도 일으켜 모두 가득)
+      if (enemies(match).every((p) => !p.alive) && (story.endless || next < WAVES.length)) healHeroes(match, events, { revive: !!story.endless });
       if (story.endless && enemies(match).every((p) => !p.alive)) {
         const e = story.endless;
         e.cleared++;
@@ -1058,7 +1082,7 @@ export function updateStory(match, inputs, dt, events) {
       }
       story.phase = 'drop';
       story.wave = next;
-      story.banner = story.endless ? banner(endlessLabel(story), `요원 ${ENDLESS.count + extraAgents(next, story.allies)}명 · 체력 ${Math.round(story.settings.waves[next].hp * endlessBoost(story.endless.cleared).hp)}`
+      story.banner = story.endless ? banner(endlessLabel(story), `요원 ${(story.endless.count ?? ENDLESS.count) + extraAgents(next, story.allies)}명 · 체력 ${Math.round(story.settings.waves[next].hp * endlessBoost(story.endless.cleared, story.endless.difficulty).hp)}`
         + (story.endless.cleared ? ` · 강화 +${story.endless.cleared}` : ''))
         : banner(WAVES[next].title, waveInfo(next, story.settings));
       spawnWave(match, inputs, next);

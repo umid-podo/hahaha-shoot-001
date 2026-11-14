@@ -399,6 +399,8 @@ button.choice img.weapon-icon { width: 56px; height: 42px; object-fit: contain; 
 .choices.story-start { grid-template-columns: repeat(3, 1fr); margin-bottom: 10px; }
 .endless-maps { display: block; margin-bottom: 10px; padding: 8px; border-radius: 10px; background: rgba(95, 239, 255, 0.08); }
 .endless-maps .choices { grid-template-columns: repeat(3, 1fr); }
+.endless-maps .choices.endless-counts { grid-template-columns: repeat(5, 1fr); }
+.endless-maps .field-label { margin-top: 8px; }
 /* 동료마다 캐릭터·주무기 고르는 칸 */
 .ally-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px; margin-bottom: 10px; text-align: left; }
 .ally-picks[hidden] { display: none; }

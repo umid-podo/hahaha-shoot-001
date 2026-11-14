@@ -80,3 +80,60 @@ test('웨이브를 깨면 서 있는 주인공의 체력이 가득 찬다(일반
     assert.equal(hero.hp, hero.maxHp);
   }
 });
+
+test('연속 플레이 설정: 요원 수(1~10)와 난이도(쉬움·보통·어려움)를 고른다', async () => {
+  const { ENDLESS_DIFFICULTY, endlessCountOf } = await import('../src/game/story.js');
+  const { createAI } = await import('../src/game/ai.js');
+  assert.equal(endlessCountOf(0), 1);
+  assert.equal(endlessCountOf(99), 10);
+  assert.equal(endlessCountOf('x'), ENDLESS.count);
+  assert.equal(endlessCountOf(undefined), ENDLESS.count);
+  const spawned = (opts) => {
+    const settings = { ...defaultStory(), gunkata: false };
+    const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, settings, 7, null, null, 0, { endless: true, ...opts });
+    match.phase = 'playing';
+    const inputs = createInputs(match.players);
+    for (let i = 0; i < 60 * 20 && !match.players.some((p) => p.team === 'isb'); i++) step(match, inputs);
+    return match;
+  };
+  for (const n of [1, 6, 10]) {
+    const match = spawned({ endlessCount: n });
+    assert.equal(match.players.filter((p) => p.team === 'isb').length, n, `${n}명`);
+  }
+  const easy = spawned({ endlessDifficulty: 'easy' });
+  const hard = spawned({ endlessDifficulty: 'hard' });
+  const normal = spawned({ endlessDifficulty: 'normal' });
+  const hp = (m) => m.players.find((p) => p.team === 'isb').maxHp;
+  assert.ok(hp(easy) < hp(normal) && hp(normal) < hp(hard), `체력 ${hp(easy)} < ${hp(normal)} < ${hp(hard)}`);
+  const levelOf = (m) => m.story.brains[0].diff.name;
+  assert.equal(levelOf(easy), '쉬움');
+  assert.equal(levelOf(hard), '어려움');
+  assert.equal(easy.story.endless.difficulty, 'easy');
+  // 쉬움은 웨이브가 쌓여도 AI 난이도를 올리지 않고, 천천히 강해진다
+  assert.equal(endlessBoost(10, 'easy').difficulty, null);
+  assert.equal(endlessBoost(0, 'hard').difficulty, 'hard');
+  assert.ok(endlessBoost(5, 'easy').hp < endlessBoost(5, 'normal').hp && endlessBoost(5, 'normal').hp < endlessBoost(5, 'hard').hp);
+  assert.ok(ENDLESS_DIFFICULTY.easy && createAI);
+});
+
+test('연속 플레이: 웨이브를 깨면 쓰러진 AI 동료도 일어나고 모두 체력이 가득 찬다', () => {
+  const settings = { ...defaultStory(), gunkata: false };
+  const match = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, settings, 3, null, null, 1, { endless: true });
+  match.phase = 'playing';
+  const inputs = createInputs(match.players);
+  const [hero, ally] = match.players;
+  let healed = false;
+  for (let i = 0; i < 60 * 60 && !healed; i++) {
+    for (const p of match.players) inputs[p.id] ??= createInput(p);
+    const agents = match.players.filter((p) => p.team === 'isb' && p.alive && !p.entering);
+    if (match.story.phase === 'fight' && match.phase === 'playing' && agents.length) {
+      hero.hp = 50;
+      ally.hp = 0; ally.alive = false;
+      for (const p of agents) p.hp = 0;
+    }
+    for (const e of step(match, inputs)) if (e.type === 'heal' && e.playerId === ally.id) healed = true;
+  }
+  assert.ok(healed);
+  assert.ok(ally.alive && ally.hp === ally.maxHp, '동료가 일어남');
+  assert.equal(hero.hp, hero.maxHp);
+});
