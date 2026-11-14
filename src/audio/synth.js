@@ -292,43 +292,62 @@ function realShot(p, delay = 0) {
 }
 
 /**
- * 크고 묵직한 '철컥!' 한 번: 짧게 미끄러지는 '철' + 강철끼리 세게 맞물리는 '컥!'(낮은 공진음 여러 겹) + 가슴을 치는 저음 '턱'.
- * volume으로 세기, pitch로 높낮이(낮을수록 묵직).
+ * 실제 탄창 교환 소리 재료. 장난감 같은 순음 대신, 소음을 좁은 대역(높은 Q)으로 걸러 금속·강화 플라스틱 부품의
+ * 공진(울림)을 만들고, 미끄러지는 소리는 아주 짧은 마찰 알갱이를 불규칙하게 이어 붙인다.
  */
-function bigClack(t, { volume = 1, pitch = 1 } = {}) {
-  metalSlide(t, 0.045, 1.4 * volume);                                         // 철
-  metalClick(t + 0.04, { pitch: 0.72 * pitch, volume: 2.4 * volume, ring: 0.11 }); // 컥!
-  metalClick(t + 0.046, { pitch: 1.1 * pitch, volume: 1.4 * volume, ring: 0.05 });
-  noiseHit(t + 0.04, [{ type: 'lowpass', freq: 520 }], GAIN * 6 * volume, 0.001, 0.09, 0.25); // 묵직한 턱
-  const osc = ac.createOscillator();
-  const g = ac.createGain();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(190 * pitch, t + 0.04);
-  osc.frequency.exponentialRampToValueAtTime(70, t + 0.16);
-  g.gain.setValueAtTime(GAIN * 3.2 * volume, t + 0.04);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-  osc.connect(g).connect(realBus());
-  osc.start(t + 0.04);
-  osc.stop(t + 0.2);
+/** 공진 타격: modes = [[주파수, Q, 세기, 여운초]…] + 넓은 대역의 짧은 충격 + 몸통 저음 */
+function partHit(t, { modes, click = 1, thump = 0, thumpFreq = 420, volume = 1, wet = 0.15 }) {
+  if (click) noiseHit(t, [{ type: 'highpass', freq: 1200 }], GAIN * 4 * click * volume, 0.0004, 0.01, wet);
+  for (const [f, q, amp, decay] of modes) {
+    noiseHit(t, [{ type: 'bandpass', freq: f * (0.97 + Math.random() * 0.06), q }], GAIN * 7 * amp * volume * Math.sqrt(q), 0.0006, decay, wet);
+  }
+  if (thump) noiseHit(t, [{ type: 'lowpass', freq: thumpFreq }], GAIN * 6 * thump * volume, 0.001, 0.05, wet);
+}
+/** 마찰: 탄창이 탄창 구멍 안을 긁고 지나가거나 장전 손잡이가 미끄러질 때의 '스윽'(불규칙한 알갱이) */
+function scrape(t, duration, { freq = 1800, to = freq, q = 3, volume = 1 } = {}) {
+  let x = 0;
+  while (x < duration) {
+    const k = x / duration;
+    const f = freq * Math.pow(to / freq, k);
+    noiseHit(t + x, [{ type: 'bandpass', freq: f, q }], GAIN * 2.2 * volume * (0.5 + Math.random()) * Math.sin(Math.PI * (0.15 + k * 0.85)), 0.0008, 0.006 + Math.random() * 0.008);
+    x += 0.003 + Math.random() * 0.006;
+  }
+}
+/** 탄창 속 탄들이 흔들려 '자르륵' */
+function rattle(t, count, volume = 1) {
+  for (let i = 0; i < count; i++) {
+    partHit(t + Math.random() * 0.07, { modes: [[3400 + Math.random() * 2400, 18, 0.25, 0.025]], click: 0.3, volume: volume * (0.4 + Math.random() * 0.6) });
+  }
 }
 
-/** 장전 시작: 탄창 멈치를 눌러 빈 탄창을 크게 '철컥!' 빼고, 떨어져 '툭' */
+/** 장전 시작(실제 소리): 탄창 멈치 '딸깍' → 빈 탄창이 탄창 구멍에서 '스윽' 빠짐 → 바닥에 떨어져 '퉁, 자르륵' 한 번 튐 */
 function reloadOut() {
   if (!ctx || muted) return;
   const t = T0;
-  bigClack(t, { volume: 1, pitch: 1.05 });
-  metalSlide(t + 0.16, 0.1, 0.8);
-  noiseHit(t + 0.3, [{ type: 'lowpass', freq: 700 }], GAIN * 2.4, 0.002, 0.06); // 탄창이 떨어져 툭
-  metalClick(t + 0.31, { pitch: 0.7, volume: 0.45, ring: 0.04 });
+  partHit(t, { modes: [[3100, 14, 0.5, 0.02], [5200, 16, 0.3, 0.015]], click: 1.2, volume: 1.3 });      // 멈치 딸깍
+  scrape(t + 0.02, 0.1, { freq: 1500, to: 2200, q: 3, volume: 1.2 });                                    // 스윽
+  partHit(t + 0.12, { modes: [[1900, 10, 0.4, 0.03]], click: 0.5, volume: 0.7 });                        // 빠져나옴
+  partHit(t + 0.5, { modes: [[620, 6, 0.6, 0.06], [1450, 9, 0.5, 0.05], [2700, 12, 0.3, 0.04]], click: 0.8, thump: 1.6, thumpFreq: 260, volume: 1.5, wet: 0.3 }); // 바닥에 퉁
+  rattle(t + 0.5, 6, 0.9);
+  partHit(t + 0.64, { modes: [[700, 6, 0.3, 0.05], [1600, 9, 0.25, 0.04]], click: 0.3, thump: 0.5, thumpFreq: 260, volume: 0.7, wet: 0.3 }); // 한 번 튐
+  rattle(t + 0.64, 3, 0.5);
 }
 
-/** 장전 끝: 새 탄창을 꽂는 '철컥!' → 노리쇠를 당겼다 놓는 '철컥!' (크게 두 번) */
+/**
+ * 장전 끝(실제 소리): 새 탄창을 '스윽' 밀어 넣고 손바닥으로 쳐서 '착!' 걸림 → 장전 손잡이를 '촤악' 당겼다
+ * 놓으면 노리쇠가 앞으로 '철컥!' 닫힘(가장 큰 소리)
+ */
 function reloadIn() {
   if (!ctx || muted) return;
   const t = T0;
-  bigClack(t, { volume: 1.1, pitch: 0.95 });        // 탄창 삽입: 철컥!
-  metalSlide(t + 0.2, 0.08, 1.1);                   // 노리쇠 뒤로 스르륵
-  bigClack(t + 0.26, { volume: 1.25, pitch: 0.85 }); // 놓으면 앞으로: 철컥!
+  scrape(t, 0.08, { freq: 1300, to: 2000, q: 3, volume: 1.1 });                                                         // 밀어 넣기
+  partHit(t + 0.08, { modes: [[1250, 8, 0.7, 0.05], [2300, 10, 0.6, 0.04], [3700, 12, 0.4, 0.03]], click: 1.3, thump: 1.4, thumpFreq: 380, volume: 1.2, wet: 0.2 }); // 착!
+  partHit(t + 0.095, { modes: [[4300, 16, 0.4, 0.015]], click: 0.6, volume: 0.9 });                                    // 멈치 걸림
+  scrape(t + 0.36, 0.09, { freq: 1600, to: 3600, q: 4, volume: 1.3 });                                                  // 손잡이 당김(촤악)
+  noiseHit(t + 0.36, [{ type: 'bandpass', freq: 950, q: 22 }], GAIN * 3, 0.03, 0.08);                                    // 노리쇠 스프링 '잉'
+  partHit(t + 0.45, { modes: [[2600, 12, 0.4, 0.02]], click: 0.6, volume: 0.8 });                                       // 뒤 끝에 닿음
+  partHit(t + 0.52, { modes: [[880, 6, 0.9, 0.07], [1700, 9, 0.8, 0.06], [2900, 10, 0.6, 0.05], [4600, 12, 0.35, 0.03]], click: 1.8, thump: 1.6, thumpFreq: 320, volume: 1.4, wet: 0.3 }); // 철컥!
+  partHit(t + 0.535, { modes: [[2050, 14, 0.4, 0.04]], click: 0.4, volume: 0.8 });                                      // 노리쇠 잠김
 }
 
 /** 무기 교체: 총을 꺼내며 '철컥' */
@@ -596,8 +615,7 @@ export function playEvents(events) {
     else if (e.type === 'fire' && e.weapon === 'dagger') { if (!playRecorded('knife-swing')) gunshot(SHOT.dagger); }
     else if (e.type === 'fire' && REAL[e.weapon] && playRecorded(`shot-${e.weapon}`)) { /* 녹음본 재생 */ }
     else if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
-    // 장전: 탄창 빼는 소리 → 끼우는 소리(철컥)
-    // 탄창 갈아 끼우기: 크게 '철컥!'(빼기) … '철컥! 철컥!'(꽂고 노리쇠). 투척용 단검은 탄창이 없어 소리 없이 돌린다
+    // 탄창 갈아 끼우기(실제 소리): 빼기(딸깍·스윽·퉁) … 꽂기(스윽·착!)·노리쇠(촤악·철컥!). 투척용 단검은 탄창이 없어 소리 없이 돌린다
     if ((e.type === 'reload' || e.type === 'reloaded') && !NO_CLACK.has(e.weapon)) {
       const key = e.type === 'reload' ? 'reload-out' : 'reload-in';
       // 녹음 전(첫 몇 초)에는 간단한 철컥 소리로
