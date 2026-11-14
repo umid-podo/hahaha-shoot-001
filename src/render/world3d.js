@@ -1588,6 +1588,8 @@ export function createWorld3D(canvas, wrap, assets) {
     return base + (b.z ?? 0); // 쏜 사람 발 높이만큼(고지대·점프 중)
   }
   const smokeFrom = new Map();
+  /** 짙은 연기를 남기는 미사일(강습 건쉽 미사일 5연발·유도미사일): 날아가는 길과 터진 자리 둘레에 짙은 연기 */
+  const HEAVY_SMOKE = new Set(['gsrockets', 'gsmissile']);
   function placeShots(match, reducedMotion) {
     const stage = match.story?.stage;
     const live = new Set();
@@ -1612,13 +1614,14 @@ export function createWorld3D(canvas, wrap, assets) {
         m.userData.wave.scale.set(1, 1 + (reducedMotion ? 0 : Math.sin(age * 30) * 0.08), 1 + age * 0.25);
       }
       if (m.userData.spinner) m.userData.spinner.rotation.z = reducedMotion ? 0 : performance.now() / 1000 * 40;
-      // 로켓 연기(윌슨 요원의 쌍 RPG는 진하게)
+      // 로켓 연기(윌슨 요원의 쌍 RPG는 진하게, 강습 건쉽 미사일은 아주 짙고 오래 남게)
       if (!reducedMotion && (b.splash && !b.thrown)) {
         const last = smokeFrom.get(b.id);
-        const step = b.weapon === 'dualrpg' ? 26 : b.pattern ? 30 : 50; // 원을 그리는 미사일은 촘촘히(나선 연기)
+        const heavy = HEAVY_SMOKE.has(b.weapon);
+        const step = heavy ? 18 : b.weapon === 'dualrpg' ? 26 : b.pattern ? 30 : 50; // 원을 그리는 미사일은 촘촘히(나선 연기)
         if (!last || Math.hypot(b.x - last.x, b.y - last.y) >= step) {
           smokeFrom.set(b.id, { x: b.x, y: b.y });
-          addEffect('smoke', { x: b.x - Math.cos(yaw) * 20, y: b.y - Math.sin(yaw) * 20, h, dense: b.weapon === 'dualrpg' });
+          addEffect('smoke', { x: b.x - Math.cos(yaw) * 20, y: b.y - Math.sin(yaw) * 20, h, dense: b.weapon === 'dualrpg', heavy });
         }
       }
     }
@@ -1747,6 +1750,15 @@ export function createWorld3D(canvas, wrap, assets) {
         light.intensity = 4 * (1 - k);
       } });
       for (let i = 0; i < 5; i++) addEffect('smoke', { x: e.x + (i - 2) * r * 0.2, y: e.y + ((i * 37) % 5 - 2) * r * 0.15, h: (e.h ?? stageH) + 30, big: true });
+      // 강습 건쉽 미사일: 터진 자리 둘레로 짙은 연기가 퍼져 나가며 오래 남는다(가운데 덩어리 + 둘레 고리)
+      if (e.heavy) {
+        const base = (e.h ?? stageH) + 30;
+        for (let i = 0; i < 3; i++) addEffect('smoke', { x: e.x + (Math.random() - 0.5) * r * 0.3, y: e.y + (Math.random() - 0.5) * r * 0.3, h: base + i * 18, big: true, heavy: true });
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4, d = r * (0.5 + Math.random() * 0.5);
+          addEffect('smoke', { x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d, h: base + (Math.random() - 0.3) * 40, big: true, heavy: true, drift: { x: Math.cos(a) * 40, y: Math.sin(a) * 40 } });
+        }
+      }
       return;
     }
     if (kind === 'field') {
@@ -1810,14 +1822,17 @@ export function createWorld3D(canvas, wrap, assets) {
       return;
     }
     if (kind === 'smoke') {
-      const m = new THREE.Mesh(GEO.unitSphere, new THREE.MeshStandardMaterial({ color: e.dense ? '#9A9EA8' : '#7A7E88', transparent: true, opacity: 0.5, roughness: 1, depthWrite: false }));
+      // heavy: 강습 건쉽 미사일의 짙은 연기(어둡고 크고 오래 남음), drift: 초당 옆으로 퍼지는 빠르기
+      const m = new THREE.Mesh(GEO.unitSphere, new THREE.MeshStandardMaterial({ color: e.heavy ? '#4E525A' : e.dense ? '#9A9EA8' : '#7A7E88', transparent: true, opacity: 0.5, roughness: 1, depthWrite: false }));
       m.position.set(e.x, e.h ?? stageH + GUN_Y, e.y);
       scene.add(m);
-      const size = e.big ? 50 : e.dense ? 16 : 12;
-      effects.push({ obj: m, age: 0, life: e.big ? 1.4 : 1.1, update(k, dt) {
-        m.scale.setScalar(size * (0.6 + k * 1.8));
-        m.material.opacity = (e.dense ? 0.6 : 0.45) * (1 - k);
-        m.position.y += dt * 20;
+      const size = e.heavy ? (e.big ? 56 : 18) : e.big ? 50 : e.dense ? 16 : 12;
+      const peak = e.heavy ? 0.75 : e.dense ? 0.6 : 0.45;
+      effects.push({ obj: m, age: 0, life: e.heavy ? (e.big ? 2.4 : 1.6) : e.big ? 1.4 : 1.1, update(k, dt) {
+        m.scale.setScalar(size * (0.6 + k * (e.heavy ? 2.2 : 1.8)));
+        m.material.opacity = peak * (1 - k) ** (e.heavy ? 0.7 : 1);
+        m.position.y += dt * (e.heavy ? 14 : 20);
+        if (e.drift) { m.position.x += e.drift.x * dt * (1 - k); m.position.z += e.drift.y * dt * (1 - k); }
       } });
       return;
     }
@@ -2329,7 +2344,7 @@ export function createWorld3D(canvas, wrap, assets) {
           muzzleFx(lastMatch, e);
         }
         const h = lastMatch ? heightOf(lastMatch, e.x, e.y) : GUN_Y;
-        if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, energy: e.energy, h: currentStage === 'sky' ? PLANE_Y + (e.z ?? 0) : currentStage === 'road' ? CAR_ROOF : e.z ?? 0 });
+        if (e.type === 'explode') addEffect('explode', { x: e.x, y: e.y, radius: e.radius, energy: e.energy, heavy: HEAVY_SMOKE.has(e.weapon), h: currentStage === 'sky' ? PLANE_Y + (e.z ?? 0) : currentStage === 'road' ? CAR_ROOF : e.z ?? 0 });
         if (e.type === 'field') addEffect(e.kind === 'fire' ? 'fire' : 'field', { x: e.x, y: e.y, radius: e.radius, spread: e.spread, life: e.life, h: e.h ?? 0 });
         // 강습 건쉽 유도미사일이 공중에 멈춰 적을 조준: 붉은 고리가 번쩍
         if (e.type === 'missile-lock') { addEffect('ring', { x: e.x, y: e.y, h: e.h, color: '#FF3B30' }); label('조준!', e.x, e.y, e.h + 60, '#FF5A4A', 0.6, 26); }
