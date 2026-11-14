@@ -886,6 +886,82 @@ export function makeAssaultGunship() {
     lights.push(l);
     out.add(pod);
   }
-  out.userData = { fans, lights };
+  // ── 무장·장비 ──
+  const olive = mat('#4E5A3A', { metal: 0.3, rough: 0.6 });
+  const red = mat('#C8352A', { metal: 0.3, rough: 0.5 });
+  const steel = mat('#8E96A2', { metal: 0.85, rough: 0.3 });
+  const glow = mat('#FFB050', { emissive: '#FF7A1A' });
+  const tube = (r, len, material, seg = 12) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), material); m.rotation.z = Math.PI / 2; return m; };
+  const gatlings = [];
+  for (const s of [-1, 1]) {
+    // 날개 아래 미사일 발사기 4개: 받침 레일에 나란히 매단 발사관(앞에 붉은 탄두)
+    out.add(at(box(110, 8, 120, dark), 6, 70, s * 250));
+    for (let i = 0; i < 4; i++) {
+      const z = s * (205 + i * 30);
+      const launcher = tube(9, 90, dark);
+      launcher.position.set(6, 54, z);
+      out.add(launcher);
+      const warhead = new THREE.Mesh(new THREE.ConeGeometry(7, 16, 10), red);
+      warhead.rotation.z = -Math.PI / 2;
+      warhead.position.set(58, 54, z);
+      out.add(warhead);
+      out.add(at(box(6, 10, 6, dark), 6, 63, z));
+    }
+    // 날개 끝 개틀링건: 몸통 + 6개 총열 묶음(돈다)
+    const gun = new THREE.Group();
+    gun.position.set(10, 44, s * 336);
+    gun.add(at(box(46, 26, 26, dark), -6, 0, 0));
+    gun.add(at(box(14, 34, 10, steel), -14, 18, 0)); // 날개에 거는 받침
+    const barrels = new THREE.Group();
+    barrels.position.x = 40;
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      const bar = tube(2.6, 70, steel, 8);
+      bar.position.set(0, Math.cos(a) * 7, Math.sin(a) * 7);
+      barrels.add(bar);
+    }
+    const front = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, 4, 14), dark);
+    front.rotation.z = Math.PI / 2;
+    front.position.x = 28;
+    barrels.add(front);
+    gun.add(barrels);
+    out.add(gun);
+    gatlings.push(barrels);
+  }
+  // 바닥 랜딩기어: 앞 하나·뒤 둘(다리 + 충격흡수 통 + 바퀴)
+  const tire = mat('#141518', { rough: 0.9 });
+  for (const [x, z] of [[46, 0], [-50, -30], [-50, 30]]) {
+    out.add(at(box(8, 54, 8, steel), x, -10, z));
+    out.add(at(box(14, 18, 14, dark), x, 10, z));
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(12, 12, 10, 14), tire);
+    wheel.rotation.x = Math.PI / 2;
+    wheel.position.set(x, -40, z);
+    out.add(wheel);
+  }
+  // 뒤 엔진부: 몸통 뒤 엔진 상자와 붉게 빛나는 배기구 둘
+  out.add(at(box(50, 54, 70, armor), -96, 80, 0));
+  for (const z of [-20, 20]) {
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(14, 18, 24, 14), dark);
+    nozzle.rotation.z = Math.PI / 2;
+    nozzle.position.set(-128, 80, z);
+    out.add(nozzle);
+    const fire = new THREE.Mesh(new THREE.CircleGeometry(11, 14), glow);
+    fire.rotation.y = -Math.PI / 2;
+    fire.position.set(-141, 80, z);
+    out.add(fire);
+  }
+  // 지붕 위 RPG 2개: 받침 위 올리브색 발사관 + 앞에 탄두
+  for (const z of [-34, 34]) {
+    out.add(at(box(20, 14, 12, dark), -10, roofY + 20, z));
+    const rpg = tube(8, 110, olive);
+    rpg.position.set(-4, roofY + 34, z);
+    out.add(rpg);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(11, 24, 10), olive);
+    head.rotation.z = -Math.PI / 2;
+    head.position.set(62, roofY + 34, z);
+    out.add(head);
+    out.add(at(box(8, 12, 4, steel), 20, roofY + 46, z)); // 조준경
+  }
+  out.userData = { fans, lights, gatlings };
   return out;
 }

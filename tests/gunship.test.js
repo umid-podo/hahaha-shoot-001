@@ -227,3 +227,25 @@ test('미사일 5연발은 공중에서 정확히 3바퀴 돈 뒤 유도된다',
   assert.ok(Math.abs(total / (Math.PI * 2) - 3) < 0.15, `${(total / (Math.PI * 2)).toFixed(2)}바퀴`);
   assert.ok(r.z > 0, '공중에서');
 });
+
+test('공중전(하늘): 강습 건쉽은 라이트닝 대신 건쉽 그대로 싸운다(무기 그대로, 다른 비행기와 같은 높이)', async () => {
+  const { createStoryMatch } = await import('../src/game/story.js');
+  const pick = { characterId: 'assault-gunship', weapon: 'rifle' };
+  const match = createStoryMatch(pick, undefined, 3, { wave: 8, hp: 3000, skip: true });
+  assert.equal(match.story.stage, 'sky');
+  const [P1] = match.players;
+  assert.equal(P1.plane, false, '라이트닝을 타지 않음');
+  assert.ok(P1.flier);
+  assert.equal(P1.primary, 'gsrockets');
+  assert.deepEqual(P1.secondaries, ['gsmissile']);
+  assert.equal(P1.z, 0);
+  const inputs = createInputs(match.players);
+  match.phase = 'playing';
+  inputs.P1.jumpHeld = true;
+  for (let i = 0; i < 120; i++) { for (const p of match.players) inputs[p.id] ??= createInputs([p])[p.id]; step(match, inputs); }
+  assert.equal(P1.z, 0, '하늘에서는 고도를 바꾸지 않음');
+  // 다른 주인공(라이트닝)은 그대로
+  const coop = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 3, { wave: 8, hp: 500, skip: true });
+  assert.equal(coop.players[0].plane, true);
+  assert.equal(coop.players[0].primary, 'lightning');
+});

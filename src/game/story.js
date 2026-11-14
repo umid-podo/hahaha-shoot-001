@@ -538,15 +538,26 @@ function setupSky(match, { heal = true } = {}) {
   match.jetTimer = Infinity;
   const list = heroes(match);
   const xs = heroXs(list.length);
+  // 강습 건쉽은 라이트닝 대신 그대로 건쉽을 타고 싸운다(자기 무기 그대로, 하늘 높이는 다른 비행기와 같게)
+  list.forEach((p, i) => {
+    if (!p.flier) return;
+    Object.assign(p, {
+      plane: false, slot: 'primary', weapon: p.primary, shield: null, z: 0, vz: 0, hurt: 0, dash: null, evade: null,
+      ...(heal ? { hp: p.maxHp, alive: true } : {}),
+      x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
+      cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,
+    });
+  });
   // 땅에서 쓰던 무기·모습은 4스테이지(도로)에서 되돌리려고 남겨 둔다
   for (const p of list) {
+    if (p.flier) continue;
     p.ground ??= {
       primary: p.primary, secondary: p.secondary, secondaries: p.secondaries, weapon: p.primary, item: p.item, primaryOnly: p.primaryOnly,
       flier: p.flier, noItem: p.noItem, radius: p.radius,
       drone: p.drone, jetpack: p.jetpack, scale: p.scale, speed: p.speed,
     };
   }
-  list.forEach((p, i) => Object.assign(p, {
+  list.forEach((p, i) => !p.flier && Object.assign(p, {
     plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', secondaries: ['overcool'], item: 'missile', slot: 'primary', shield: null,
     flier: false, noItem: false, z: 0, vz: 0, radius: Math.min(p.radius, 46),
     primaryOnly: !!p.ai, drone: false, jetpack: null, scale: 1,
