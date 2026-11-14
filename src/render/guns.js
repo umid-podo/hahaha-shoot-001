@@ -561,7 +561,7 @@ function sidePlates(g, points, t, material, z) {
 /**
  * 에너지 돌격소총(전설): 흰 윗몸통 앞쪽 옆면에 길게 빛나는 푸른 띠, 그 아래 검은 총열 덮개, 총구는 검은 덮개에 위(가늠쇠)·아래 두 총열.
  * 가운데 검은 육각 받침에 푸른 육각 고리, 그 위 작은 가늠자. 뒤는 흰 개머리판을 검은 테가 감싸고 손잡이와 이어진 큰 구멍(엄지 구멍 개머리판),
- * 개머리판 위 뒤쪽에 짧은 푸른 띠.
+ * 개머리판 위 뒤쪽에 짧은 푸른 띠. 위에 검은 망원 조준경(앞뒤 렌즈가 푸르게 빛남).
  */
 function energyRifleModel() {
   const g = new THREE.Group();
@@ -582,10 +582,19 @@ function energyRifleModel() {
   g.add(slab([[33.4, 4.2], [35.2, 4.2], [35, 6.6], [34, 6.6]], 0.7, E_BLACK(), { bevel: 0.05 })); // 가늠쇠
   // 가운데 육각 문양 · 그 위 가늠자
   hexEmblem(g, -1.5, 1.8, 2.9, 3.8);
-  // 가늠자(개조 스코프를 달면 숨김)
+  // 망원 조준경(개조 스코프를 달면 숨김): 받침 두 개 · 몸통 · 앞 큰 렌즈통 · 뒤 접안부 · 위 조절 손잡이 · 푸른 렌즈
   const sight = sub(g);
-  sight.add(slab([[-3.4, 4.1], [0.2, 4.1], [-0.4, 6.2], [-2.8, 6.2]], 1.6, E_BLACK(), { bevel: 0.1 }));
-  sight.add(box(0.5, 1.2, 0.5, E_BLACK(), -1.6, 6.6));
+  for (const x of [-5, 2]) sight.add(slab([[x - 1.4, 4.1], [x + 1.4, 4.1], [x + 1, 6.9], [x - 1, 6.9]], 1.8, E_BLACK(), { bevel: 0.1 }));
+  sight.add(tube(1.2, 1.2, -9, 5, E_BLACK(), { y: 8.0, seg: 18 }));
+  sight.add(tube(1.3, 2.0, 5, 8.4, E_BLACK(), { y: 8.0, seg: 18 }));
+  sight.add(tube(1.7, 1.4, -11.4, -9, E_BLACK(), { y: 8.0, seg: 18 }));
+  sight.add(box(1.6, 1.0, 1.6, E_BLACK(), -1.5, 9.4));
+  for (const [x, r, face] of [[8.45, 1.75, 1], [-11.45, 1.4, -1]]) {
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(r, 20), E_BORE());
+    lens.rotation.y = face * Math.PI / 2;
+    lens.position.set(x, 8.0, 0);
+    sight.add(lens);
+  }
   // 손잡이
   g.add(slab([[-5, -0.6], [-9.8, -0.6], [-12.8, -12.2], [-12.2, -14.2], [-9.4, -13.6]], 3.0, E_BLACK(), { bevel: 0.35 }));
   g.add(box(0.35, 1.8, 0.5, E_BLACK(), -4.4, -1.8)); // 방아쇠

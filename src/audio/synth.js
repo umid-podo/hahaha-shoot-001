@@ -291,26 +291,44 @@ function realShot(p, delay = 0) {
   }
 }
 
-/** 장전 시작: 탄창 멈치 '딸깍' → 빈 탄창이 빠지는 '스륵·툭' */
+/**
+ * 크고 묵직한 '철컥!' 한 번: 짧게 미끄러지는 '철' + 강철끼리 세게 맞물리는 '컥!'(낮은 공진음 여러 겹) + 가슴을 치는 저음 '턱'.
+ * volume으로 세기, pitch로 높낮이(낮을수록 묵직).
+ */
+function bigClack(t, { volume = 1, pitch = 1 } = {}) {
+  metalSlide(t, 0.045, 1.4 * volume);                                         // 철
+  metalClick(t + 0.04, { pitch: 0.72 * pitch, volume: 2.4 * volume, ring: 0.11 }); // 컥!
+  metalClick(t + 0.046, { pitch: 1.1 * pitch, volume: 1.4 * volume, ring: 0.05 });
+  noiseHit(t + 0.04, [{ type: 'lowpass', freq: 520 }], GAIN * 6 * volume, 0.001, 0.09, 0.25); // 묵직한 턱
+  const osc = ac.createOscillator();
+  const g = ac.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(190 * pitch, t + 0.04);
+  osc.frequency.exponentialRampToValueAtTime(70, t + 0.16);
+  g.gain.setValueAtTime(GAIN * 3.2 * volume, t + 0.04);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  osc.connect(g).connect(realBus());
+  osc.start(t + 0.04);
+  osc.stop(t + 0.2);
+}
+
+/** 장전 시작: 탄창 멈치를 눌러 빈 탄창을 크게 '철컥!' 빼고, 떨어져 '툭' */
 function reloadOut() {
   if (!ctx || muted) return;
   const t = T0;
-  metalClick(t, { pitch: 1.2, volume: 0.55, ring: 0.03 });
-  metalSlide(t + 0.05, 0.12, 0.7);
-  noiseHit(t + 0.2, [{ type: 'lowpass', freq: 700 }], GAIN * 2, 0.002, 0.06); // 탄창이 떨어져 툭
-  metalClick(t + 0.21, { pitch: 0.7, volume: 0.35, ring: 0.04 });
+  bigClack(t, { volume: 1, pitch: 1.05 });
+  metalSlide(t + 0.16, 0.1, 0.8);
+  noiseHit(t + 0.3, [{ type: 'lowpass', freq: 700 }], GAIN * 2.4, 0.002, 0.06); // 탄창이 떨어져 툭
+  metalClick(t + 0.31, { pitch: 0.7, volume: 0.45, ring: 0.04 });
 }
 
-/** 장전 끝: 새 탄창을 끼우는 '철컥' → 노리쇠(슬라이드)를 당겼다 놓는 '철-컥!' */
+/** 장전 끝: 새 탄창을 꽂는 '철컥!' → 노리쇠를 당겼다 놓는 '철컥!' (크게 두 번) */
 function reloadIn() {
   if (!ctx || muted) return;
   const t = T0;
-  metalSlide(t, 0.06, 0.6);
-  metalClick(t + 0.05, { pitch: 0.85, volume: 1 });           // 탄창 삽입: 철
-  metalClick(t + 0.08, { pitch: 1.05, volume: 0.7 });          //          컥
-  metalSlide(t + 0.24, 0.1, 1);                                // 노리쇠 뒤로 스르륵
-  metalClick(t + 0.33, { pitch: 1, volume: 0.8, ring: 0.06 }); // 끝까지 당김
-  metalClick(t + 0.42, { pitch: 0.9, volume: 1.2, ring: 0.09 }); // 놓으면 앞으로 '컥!'
+  bigClack(t, { volume: 1.1, pitch: 0.95 });        // 탄창 삽입: 철컥!
+  metalSlide(t + 0.2, 0.08, 1.1);                   // 노리쇠 뒤로 스르륵
+  bigClack(t + 0.26, { volume: 1.25, pitch: 0.85 }); // 놓으면 앞으로: 철컥!
 }
 
 /** 무기 교체: 총을 꺼내며 '철컥' */
@@ -379,13 +397,17 @@ function knifeSlash() {
   osc.stop(t + 0.15);
 }
 
+/** 장전 소리 크기(녹음본 재생 배율)와 철컥 소리를 내지 않는 무기(탄창이 없는 것) */
+const RELOAD_VOLUME = 1.8;
+const NO_CLACK = new Set(['throwknives', 'flamethrower']);
+
 /** 녹음해 둘 소리: 이름 → [길이(초), 레시피, 변형 수]. 변형마다 높낮이·세기가 조금씩 다르다. */
 const RECIPES = {
   ...Object.fromEntries(Object.entries(REAL).map(([k, p]) => [
     `shot-${k}`, [p.decay * 1.3 + (p.mech ? p.mech + (p.pump ? 0.4 : 0.1) : 0) + 1.2, () => realShot(p), 3],
   ])),
-  'reload-out': [1.2, reloadOut, 1],
-  'reload-in': [1.6, reloadIn, 1],
+  'reload-out': [1.4, reloadOut, 2],
+  'reload-in': [1.8, reloadIn, 2],
   swap: [0.9, weaponSwap, 1],
   'knife-swing': [0.9, knifeSwing, 2],
   'knife-slash': [0.9, knifeSlash, 2],
@@ -575,8 +597,15 @@ export function playEvents(events) {
     else if (e.type === 'fire' && REAL[e.weapon] && playRecorded(`shot-${e.weapon}`)) { /* 녹음본 재생 */ }
     else if (e.type === 'fire') gunshot(SHOT[e.weapon] ?? SHOT.pistol);
     // 장전: 탄창 빼는 소리 → 끼우는 소리(철컥)
-    if (e.type === 'reload' && !playRecorded('reload-out')) { tone(420, 0.04, 'square'); tone(260, 0.05, 'square', 0.08); }
-    if (e.type === 'reloaded' && !playRecorded('reload-in')) { tone(900, 0.03, 'square'); tone(1300, 0.04, 'square', 0.06); }
+    // 탄창 갈아 끼우기: 크게 '철컥!'(빼기) … '철컥! 철컥!'(꽂고 노리쇠). 투척용 단검은 탄창이 없어 소리 없이 돌린다
+    if ((e.type === 'reload' || e.type === 'reloaded') && !NO_CLACK.has(e.weapon)) {
+      const key = e.type === 'reload' ? 'reload-out' : 'reload-in';
+      // 녹음 전(첫 몇 초)에는 간단한 철컥 소리로
+      if (!playRecorded(key, RELOAD_VOLUME)) {
+        if (e.type === 'reload') { tone(420, 0.05, 'square'); tone(220, 0.07, 'square', 0.05); }
+        else { tone(380, 0.05, 'square'); tone(200, 0.07, 'square', 0.05); tone(420, 0.05, 'square', 0.26); tone(190, 0.08, 'square', 0.31); }
+      }
+    }
     if (e.type === 'overheat') [700, 500, 300].forEach((f, i) => tone(f, 0.08, 'sawtooth', i * 0.07)); // 과열 경고
     if (e.type === 'jet-fire') gunshot(SHOT.jet); // 미사일 발사음
     if (e.type === 'tank-fire') { gunshot({ filter: 400, q: 0.5, decay: 0.5, thump: 130, volume: 1.4 }); tone(70, 0.2, 'square', 0.02); } // 탱크 포성
