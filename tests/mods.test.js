@@ -124,7 +124,7 @@ test('상점 구매: 코인을 내고 파츠 한 벌을 받아 바로 장착, �
 test('상점 전설 무기: 에너지 돌격소총·에너지 쌍권총·에너지 RPG 50코인, 사야 그 주무기를 쓸 수 있고 저장된다', async () => {
   const { LEGEND_SHOP, LEGEND_PRICE, legendFor } = await import('../src/game/mods.js');
   assert.equal(LEGEND_PRICE, 50);
-  assert.deepEqual(LEGEND_SHOP.map((g) => [g.unlocks, g.price, g.grade]), [['energyrifle', 50, 'legendary'], ['energydual', 50, 'legendary'], ['energyrpg', 50, 'legendary']]);
+  assert.deepEqual(LEGEND_SHOP.map((g) => [g.unlocks, g.price, g.grade]), [['energyrifle', 50, 'legendary'], ['energydual', 50, 'legendary'], ['energyrpg', 50, 'legendary'], ['twinkatana', 50, 'legendary']]);
   assert.equal(legendFor('rifle'), null);
   const mem = new Map();
   const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };

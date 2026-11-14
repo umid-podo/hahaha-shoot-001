@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMatch, createInputs } from '../src/game/state.js';
-import { step } from '../src/game/update.js';
+import { step, spawnProjectile } from '../src/game/update.js';
 import { ENDLESS } from '../src/game/story.js';
 import { TICK, WEAPONS, PRIMARY_IDS } from '../src/game/config.js';
 
@@ -68,4 +68,42 @@ test('투척용 쌍수단검: 단검 2개를 빠르게 연달아 던지고(빠�
   assert.equal(P1.ammo.throwknives, 2, '다시 2개');
   // 단검은 멀리까지는 날아가지 않는다(life)
   assert.ok(w.speed * w.life < 4000, `사거리 ${w.speed * w.life}`);
+});
+
+test('쌍 카타나(전설): 투척용 쌍수단검보다 세고 넓은 초승달 검기 2개를 번갈아 날리고, 상점에서 사야 한다', () => {
+  const w = WEAPONS.twinkatana;
+  assert.ok(PRIMARY_IDS.includes('twinkatana') && w.legendary, '전설 주무기');
+  assert.ok(w.damage > WEAPONS.throwknives.damage, '단검보다 피해가 높다');
+  assert.ok(w.wave.radius >= 40, '범위가 넓다');
+  assert.equal(w.burst, 2);
+  const { match, inputs, P1 } = playing('twinkatana');
+  inputs.P1.aiming = true;
+  const ev = run(match, inputs, w.burstGap + 2 * TICK);
+  inputs.P1.aiming = false;
+  assert.equal(fires(ev, 'twinkatana'), 2, '두 번 벤다');
+  const waves = match.projectiles.filter((b) => b.weapon === 'twinkatana');
+  assert.equal(waves.length, 2);
+  assert.ok(waves.every((b) => b.hitRadius === w.wave.radius && b.pierce));
+  assert.notEqual(waves[0].x, waves[1].x, '양손에서 번갈아');
+  run(match, inputs, w.reload + 0.2);
+  assert.equal(P1.ammo.twinkatana, 2, '다시 채움');
+});
+
+test('쌍 카타나 검기: 보통 탄이면 빗나갈 거리도 맞히고, 적을 꿰뚫어 뒤의 적도 한 번씩만 벤다', () => {
+  const { match, inputs, P1, P2 } = playing('twinkatana');
+  // 같은 레일의 둘째 적
+  const P3 = { ...P2, id: 'P3', x: P2.x + 300, previousX: P2.x + 300, hp: 1e6, maxHp: 1e6, alive: true };
+  match.players.push(P3);
+  inputs.P3 = createInputs([P3]).P3;
+  // 적의 몸 가운데에서 옆으로 50 비켜 가로로 날아가는 검기(보통 탄은 몸 반지름+5 안이어야 맞음)
+  const wave = spawnProjectile(match, P1, 0, 'twinkatana');
+  const offset = 50;
+  assert.ok(offset > P2.radius + 5 && offset < P2.radius + WEAPONS.twinkatana.wave.radius);
+  wave.x = wave.previousX = P2.x - 200;
+  wave.y = wave.previousY = P2.y + offset;
+  wave.vx = WEAPONS.twinkatana.speed; wave.vy = 0; delete wave.vz; wave.z = P2.z ?? 0;
+  wave.life = 1;
+  run(match, inputs, 0.6);
+  assert.equal(P2.hp, 1e6 - WEAPONS.twinkatana.damage, '넓은 검기에 맞음(한 번만)');
+  assert.equal(P3.hp, 1e6 - WEAPONS.twinkatana.damage, '꿰뚫고 뒤의 적도');
 });

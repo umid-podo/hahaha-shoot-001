@@ -92,6 +92,8 @@ export function spawnProjectile(match, player, aim, weaponId = player.weapon, { 
     ...(weapon.fire ? { fire: weapon.fire } : {}),
     ...(weapon.flash ? { flash: weapon.flash } : {}),
     ...(weapon.bounces > 0 ? { bounces: weapon.bounces } : {}),
+    // 초승달 검기(쌍 카타나): 명중 판정이 넓고(hitRadius) 적을 꿰뚫는다(hits: 이미 벤 사람)
+    ...(weapon.wave ? { hitRadius: weapon.wave.radius, pierce: true, hits: [] } : {}),
     ...(weapon.flame ? { flame: true, maxLife: life } : {}),
     // connected: 이 탄이 적에게 한 번이라도 피해를 줬는지(명중 수 통계용). group이 있으면 그쪽에 기록한다.
     connected: false, group,
@@ -1260,15 +1262,17 @@ export function step(match, inputs, dt = TICK) {
     // 전투기는 하늘 높이 날기 때문에 탄환은 그 밑으로 지나간다(막지 않음).
     for (const p of match.players) {
       // 단검 돌진 중(무적)인 플레이어는 탄이 그냥 지나간다
-      if (!p.alive || p.team === b.team || invulnerable(p)) continue;
+      if (!p.alive || p.team === b.team || invulnerable(p) || b.hits?.includes(p.id)) continue;
       const t = segmentCircleTime(
-        b.previousX - p.previousX, b.previousY - (p.previousY ?? p.y), b.x - p.x, b.y - p.y, p.radius + BULLET_RADIUS);
+        b.previousX - p.previousX, b.previousY - (p.previousY ?? p.y), b.x - p.x, b.y - p.y, p.radius + (b.hitRadius ?? BULLET_RADIUS));
       if (t === null || (earliest !== null && t >= earliest.t)) continue;
       // 높이 차이(닿는 순간 탄 높이 기준): 탄보다 너무 높이 뛰었거나(점프로 피함) 너무 아래면 지나간다
       if (b.z !== undefined) {
         const dz = (p.z ?? 0) - (b.previousZ + ((b.z ?? 0) - b.previousZ) * t);
         if (dz > JUMP.hitAbove || dz < -JUMP.hitBelow) continue;
       }
+      // 꿰뚫는 검기: 구조물보다 앞에 있는 적은 모두 벤다(멈추지 않음)
+      if (b.pierce) { contacts.push({ t, projectile: b, victim: p, pass: true }); continue; }
       earliest = { t, projectile: b, victim: p };
     }
     if (earliest) contacts.push(earliest);
@@ -1276,7 +1280,13 @@ export function step(match, inputs, dt = TICK) {
   contacts.sort((a, b) => a.t - b.t || a.projectile.id - b.projectile.id);
 
   // 같은 틱에 먼저 맞은 탄으로 엄폐물이 부서져도, 이미 그 엄폐물에 닿은 나머지 탄은 막힌 것으로 처리한다.
-  for (const { t, projectile: b, victim, cover, wall } of contacts) {
+  for (const { t, projectile: b, victim, cover, wall, pass } of contacts) {
+    if (removed.has(b)) continue; // 이미 막힌 탄(꿰뚫는 검기가 구조물에 먼저 닿음)
+    if (pass) {
+      b.hits.push(victim.id);
+      damage(match, victim, b.damage, b, events, { x: b.previousX, y: b.previousY });
+      continue;
+    }
     const x = b.previousX + (b.x - b.previousX) * t;
     const y = b.previousY + (b.y - b.previousY) * t;
     const z = b.previousZ + ((b.z ?? 0) - b.previousZ) * t;

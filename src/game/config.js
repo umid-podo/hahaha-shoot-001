@@ -178,6 +178,7 @@ export const TICK = 1 / 60;
  * flame: 화염방사기. 한 발이 flame.life초만 날아가다 사라지는 불꽃 덩어리이고, 쏠 때마다 ±flame.spread/2도 안에서 흩어진다(짧은 사거리).
  * bounces: 엄폐물·경기장 끝에 닿으면 그만큼 튕겨 나간다(에너지 돌격소총). 튕길 때도 엄폐물은 깎인다.
  * energy: 푸른 에너지 볼트를 쏘는 에너지 무기(탄 모양·총구 빛이 푸르다). alternate: 두 자루를 번갈아 쏜다(에너지 쌍권총).
+ * wave: { radius } 초승달 검기(쌍 카타나). 명중 판정 반지름이 radius로 넓고, 적을 꿰뚫고 지나간다(한 적에게 한 번만 피해).
  * legendary: 전설 무기. 상점에서 사야(50코인) 무기 선택 목록에 나온다.
  * homing: { turnRate } 가장 가까운 적 쪽으로 초당 turnRate(라디안)까지 휘어 날아간다. shock: 폭발에 맞은 적이 감전되어 그 초만큼 움직이지도 쏘지도 못한다.
  * life: 탄 수명(초, 없으면 RULES.bulletLife). range: 던지는 무기가 날아가는 거리(없으면 RULES.throwRange).
@@ -243,6 +244,13 @@ export const WEAPONS = {
   energyrpg: {
     id: 'energyrpg', name: '에너지 RPG', interval: 1.2, damage: 25, speed: 820, burst: 1, trigger: 'release', mag: 1, reload: 1.2,
     splash: { damage: 6, radius: 320 }, homing: { turnRate: 0.75 }, shock: 4, energy: true, legendary: true,
+  },
+  // 쌍 카타나(투척용 쌍수단검의 전설 등급): 양손 카타나를 번갈아 휘둘러 초승달 모양 검기 2개를 날린다.
+  // 검기는 폭이 넓어(wave.radius) 맞히기 쉽고, 피해가 단검보다 높으며 적을 꿰뚫고 지나가 뒤의 적도 벤다(한 적에게는 한 번만).
+  // 두 번 다 휘두르면(mag 2) 칼을 칼집에 '철컥' 끼웠다 다시 뽑으며 reload초 만에 다시 채운다
+  twinkatana: {
+    id: 'twinkatana', name: '쌍 카타나', interval: 0.35, damage: 45, speed: 1150, burst: 2, burstGap: 0.12, mag: 2, reload: 1,
+    life: 0.65, alternate: true, wave: { radius: 60 }, legendary: true,
   },
   sniper: {
     id: 'sniper', name: '저격총', interval: 1, damage: 60, speed: 1600, burst: 1, trigger: 'release', mag: 5, reload: 2.4,
@@ -380,7 +388,7 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
  * 준비 화면에서 고르는 주무기·보조무기(숨겨진 무기 포함, 목록에는 hidden이 아닌 것만 보인다). 경기 중에는 고른 주무기·보조무기 사이만 바꾸고,
  * 수류탄은 아이템 버튼으로 바로 던진다.
  */
-export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'burstrifle', 'gatling', 'ak47', 'throwknives', 'energyrifle', 'energydual', 'energyrpg'];
+export const PRIMARY_IDS = ['rifle', 'pistol', 'dual', 'rpg', 'sniper', 'crossbow', 'flamethrower', 'burstrifle', 'gatling', 'ak47', 'throwknives', 'energyrifle', 'energydual', 'energyrpg', 'twinkatana'];
 /** 상점에서 사야 쓸 수 있는 전설 무기 */
 export const LEGENDARY_IDS = PRIMARY_IDS.filter((id) => WEAPONS[id].legendary);
 export const SECONDARY_IDS = ['smg', 'dagger', 'shotgun', 'grenadelauncher', 'stunlauncher', 'firebomb', 'katana', 'riotshield', 'flaregun'];

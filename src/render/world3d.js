@@ -1463,6 +1463,42 @@ export function createWorld3D(canvas, wrap, assets) {
     g.userData.spinner = spinner;
     return g;
   }
+  /**
+   * 쌍 카타나 검기: 앞으로 볼록한 초승달(가로로 누운 반달 고리). 흰 속날 + 푸르스름한 빛무리.
+   * 폭이 명중 판정(wave.radius)만큼 넓다. 앞(+X) 끝이 탄 위치에 오고 조금씩 커지며 흐려진다(userData.wave)
+   */
+  const WAVE = {
+    core: new THREE.MeshBasicMaterial({ color: '#F4FBFF', transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+    glow: new THREE.MeshBasicMaterial({ color: '#7FD8FF', transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+  };
+  const crescentCache = new Map(); // 검기마다 새로 만들지 않게(지울 때 버리지 않는 공용 모양)
+  function crescentGeo(radius, tube, arc) {
+    const key = `${radius}|${tube}|${arc}`;
+    if (crescentCache.has(key)) return crescentCache.get(key);
+    const geo = new THREE.TorusGeometry(radius, tube, 6, 28, arc);
+    geo.rotateZ(-arc / 2); // 고리 가운데가 +X(앞)
+    geo.rotateX(Math.PI / 2); // 가로로 눕힌다(XZ 평면)
+    geo.translate(-radius, 0, 0); // 앞 끝이 원점(탄 위치)
+    crescentCache.set(key, geo);
+    return geo;
+  }
+  function makeCrescent(b) {
+    const half = b.hitRadius ?? 60;
+    const arc = 2.2; // 초승달이 벌어진 각도(라디안)
+    const radius = half / Math.sin(arc / 2);
+    const g = new THREE.Group();
+    const wave = new THREE.Group();
+    const core = new THREE.Mesh(crescentGeo(radius, 2.2, arc), WAVE.core);
+    core.scale.y = 3; // 위아래로 납작하지 않게 조금 키운다
+    const glow = new THREE.Mesh(crescentGeo(radius, 7, arc), WAVE.glow);
+    glow.scale.y = 1.6;
+    const tail = new THREE.Mesh(crescentGeo(radius * 0.9, 4, arc * 0.85), WAVE.glow);
+    tail.position.x = -16;
+    wave.add(core, glow, tail);
+    g.add(wave);
+    g.userData.wave = wave;
+    return g;
+  }
   /** 날아가는 화염폭탄: 초록 병과 불붙은 심지 */
   function makeFirebombShot() {
     const g = new THREE.Group();
@@ -1508,6 +1544,7 @@ export function createWorld3D(canvas, wrap, assets) {
     if (b.weapon === 'stunlauncher') return makeStunDart();
     if (b.weapon === 'firebomb') return makeFirebombShot();
     if (b.weapon === 'throwknives') return makeThrownKnife();
+    if (b.weapon === 'twinkatana') return makeCrescent(b);
     if (b.weapon === 'flaregun') return makeFlareShot();
     if (b.thrown) {
       return new THREE.Mesh(GEO.grenade, M.mat('#4E6B3A'));
@@ -1564,6 +1601,11 @@ export function createWorld3D(canvas, wrap, assets) {
       else m.rotation.set(0, -yaw, Math.atan2(h - prev, Math.hypot(b.vx, b.vy) / 60) * 0.5);
       m.userData.h = h;
       if (b.flame) updateFlame(m, b);
+      // 검기: 날아갈수록 조금 넓어지고, 위아래로 살짝 일렁인다
+      if (m.userData.wave) {
+        const age = clamp01(1 - b.life / (WEAPONS[b.weapon]?.life ?? 1));
+        m.userData.wave.scale.set(1, 1 + (reducedMotion ? 0 : Math.sin(age * 30) * 0.08), 1 + age * 0.25);
+      }
       if (m.userData.spinner) m.userData.spinner.rotation.z = reducedMotion ? 0 : performance.now() / 1000 * 40;
       // 로켓 연기(윌슨 요원의 쌍 RPG는 진하게)
       if (!reducedMotion && (b.splash && !b.thrown)) {
@@ -2223,7 +2265,7 @@ export function createWorld3D(canvas, wrap, assets) {
   }
   let lastMatch = null;
   let lastScene = null;
-  const NO_FLASH = new Set(['grenade', 'dagger', 'crossbow', 'overcool', 'throwknives']);
+  const NO_FLASH = new Set(['grenade', 'dagger', 'crossbow', 'overcool', 'throwknives', 'twinkatana']);
   /** 쏜 사람의 총구(경기장 좌표)에 불꽃·연기. 1인칭으로 보는 내 화면에서는 불꽃을 숨기고(손에 든 총이 따로 번쩍인다) 연기는 보인다 */
   function muzzleFx(match, e) {
     if (!match || NO_FLASH.has(e.weapon) || match.gunkata || match.cutscene) return;

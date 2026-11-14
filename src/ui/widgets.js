@@ -16,6 +16,7 @@ export function weaponInfo(w) {
     return `전투 시작 ${w.readyAfter}초 뒤부터 · 쏘면 거대한 레이저가 ${aim} ${hurt} · 쿨타임 ${w.interval}초`;
   }
   if (w.flame) return `가까이에 불꽃을 뿜음(사거리 짧음) · ${w.interval}초마다 ${w.damage} · 연료 ${w.mag}`;
+  if (w.wave) return `초승달 검기 ${w.burst}개를 번갈아 날림 · 한 발 ${w.damage} · 범위가 넓고 적을 꿰뚫음 · ${w.mag}번 휘두르면 ${w.reload}초 장전`;
   if (w.energy && w.alternate) return `푸른 에너지 볼트를 엄청난 연사로 · 한 발 ${w.damage} · ${w.mag > 0 ? `${w.mag}발` : '탄약 무한'} · 탄속 매우 빠름`;
   if (w.energy) return `푸른 에너지 볼트 · ${w.interval}초마다 ${w.damage} · 탄속 매우 빠름 · 엄폐물·벽에 ${w.bounces}번 튕김`;
   if (w.slash) return `조준 후 떼면 앞을 가로로 크게 벰 · ${w.slash.arc}도 부채꼴, 거리 ${w.slash.range} 안의 적 모두 ${w.damage} · 쿨타임 ${w.interval}초`;
@@ -40,6 +41,7 @@ const WEAPON_ICON = {
   energyrifle: 'assets/weapons/energy-rifle.jpg',
   energydual: 'assets/weapons/energy-dual.jpg',
   energyrpg: 'assets/weapons/energy-rpg.svg',
+  twinkatana: 'assets/weapons/twin-katana.svg',
   grenadelauncher: 'assets/weapons/grenade-launcher.svg',
   stunlauncher: 'assets/weapons/stun-launcher.svg',
 };

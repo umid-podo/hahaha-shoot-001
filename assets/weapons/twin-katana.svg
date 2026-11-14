@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <!-- 쌍 카타나(전설): X자로 엇갈린 두 자루 카타나와 앞으로 날아가는 초승달 검기 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3A1F6E"/><stop offset="1" stop-color="#170C33"/></linearGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="0.55" stop-color="#DDE2E8"/><stop offset="1" stop-color="#8E97A3"/></linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="300" height="300" fill="url(#bg)"/>
+  <!-- 초승달 검기 -->
+  <g filter="url(#glow)">
+    <path d="M70 46 Q190 84 236 160 Q206 104 70 70 Z" fill="#9FE4FF" opacity="0.55"/>
+    <path d="M76 52 Q188 86 230 152 Q196 100 76 64 Z" fill="#F4FBFF"/>
+  </g>
+  <!-- 카타나 두 자루 -->
+  <g id="katana" transform="translate(150 170) rotate(-40)">
+    <path d="M-12 -4 Q60 -10 128 -2 L136 2 Q66 2 -12 4 Z" fill="url(#blade)" stroke="#5D6570" stroke-width="1"/>
+    <path d="M0 -1.5 Q60 -6 124 -1" fill="none" stroke="#A9B1BC" stroke-width="1.5"/>
+    <ellipse cx="-14" cy="0" rx="4" ry="13" fill="#2A2420" stroke="#C9A24A" stroke-width="1.5"/>
+    <rect x="-66" y="-5" width="50" height="10" rx="3" fill="#151417"/>
+    <g fill="#5A3E8C"><path d="M-62 -5 l6 10 h4 l-6 -10z"/><path d="M-50 -5 l6 10 h4 l-6 -10z"/><path d="M-38 -5 l6 10 h4 l-6 -10z"/><path d="M-26 -5 l6 10 h4 l-6 -10z"/></g>
+    <rect x="-70" y="-5.5" width="5" height="11" rx="1.5" fill="#C9A24A"/>
+  </g>
+  <use href="#katana" transform="translate(300 0) scale(-1 1)"/>
+</svg>
