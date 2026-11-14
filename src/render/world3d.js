@@ -1246,7 +1246,7 @@ export function createWorld3D(canvas, wrap, assets) {
     const road = match.story?.stage === 'road' ? CAR_ROOF : 0;
     const pitch = p.pitch ?? 0, flat = Math.cos(pitch);
     const fx = Math.cos(p.aim), fz = Math.sin(p.aim), rx = -fz, rz = fx;
-    const reach = WEAPONS[p.primary]?.converge ?? 4000;
+    const reach = 4000;
     // 조준점: 건쉽 가운데(캐논 높이)에서 조준 방향으로
     const sh = GUN_Y + (p.z ?? 0);
     const end = aimEnd(match, p, p.x + fx * 60 * flat, p.y + fz * 60 * flat, sh, pitch, reach);
@@ -1516,7 +1516,7 @@ export function createWorld3D(canvas, wrap, assets) {
     const trail = bulletColor(b);
     if (b.weapon === 'shotgun' || b.weapon === 'flak') return makeBullet({ kind: 'pellet', trail, trailLen: 40 });
     if (b.weapon === 'sniper' || b.weapon === 'jsniper') return makeBullet({ trail, scale: 1.25, trailLen: 120 });
-    if (b.weapon === 'lightning' || b.weapon === 'gunship' || b.weapon === 'gscannon') return makeBullet({ trail, scale: 1.5, trailLen: 90 });
+    if (b.weapon === 'lightning' || b.weapon === 'gunship') return makeBullet({ trail, scale: 1.5, trailLen: 90 });
     return makeBullet({ trail });
   }
   /** 탄의 높이: 보통은 총 높이, 던진 수류탄은 포물선, 전투기·포탑 폭탄은 쏜 높이에서 목표 바닥으로 */

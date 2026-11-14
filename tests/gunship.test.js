@@ -41,21 +41,20 @@ test('상점에서 100코인으로 사면 캐릭터 선택에 나온다(사기 �
   assert.ok(store.ownsCharacter(CHARACTERS.find((c) => c.id === 'earth-arrow')), '일반 캐릭터는 언제나');
 });
 
-test('강습 건쉽: 체력이 월등히 높고 양쪽 캐논(주무기)·유도미사일 50·미사일 15×5(보조무기), 수류탄 없음', () => {
+test('강습 건쉽: 체력이 월등히 높고 주무기는 계속 쏘는 미사일 5연발(발당 10), 보조무기는 유도미사일 50, 수류탄 없음', () => {
   const others = CHARACTERS.filter((c) => !c.hidden).map((c) => c.maxHp);
-  assert.ok(WEAPONS.gscannon.autoFire, '양쪽 캐논은 늘 계속 쏜다');
   assert.ok(GUNSHIP.maxHp >= 2 * Math.max(...others) && GUNSHIP.maxHp >= 6 * MAX_HP, `체력 ${GUNSHIP.maxHp}`);
   const { P1 } = playing({ weapon: 'rpg', secondaries: ['katana'] });
   assert.equal(P1.hp, GUNSHIP.maxHp);
-  assert.equal(P1.primary, 'gscannon', '고른 무기와 상관없이 캐논');
-  assert.deepEqual(P1.secondaries, ['gsmissile', 'gsrockets']);
+  assert.equal(P1.primary, 'gsrockets', '고른 무기와 상관없이 미사일 5연발');
+  assert.deepEqual(P1.secondaries, ['gsmissile']);
   assert.ok(P1.flier && P1.noItem);
-  assert.equal(WEAPONS.gscannon.arrows, 2, '양쪽에서 나란히');
-  assert.equal(WEAPONS.gsmissile.damage, 50);
-  assert.ok(WEAPONS.gsmissile.homing?.turnRate > 0, '유도');
-  assert.equal(WEAPONS.gsrockets.damage, 15, '미사일 한 발 15');
+  assert.ok(WEAPONS.gsrockets.autoFire, '늘 계속 쏜다');
+  assert.equal(WEAPONS.gsrockets.damage, 10, '미사일 한 발 10');
+  assert.equal(WEAPONS.gsrockets.splash.damage, 10);
   assert.equal(WEAPONS.gsrockets.burst, 5, '5발');
-  assert.ok(!('gsgrenade' in WEAPONS), '유탄 발사는 미사일 5연발로 바뀜');
+  assert.equal(WEAPONS.gsmissile.damage, 50);
+  assert.ok(!('gscannon' in WEAPONS) && !('gsgrenade' in WEAPONS), '양쪽 캐논·유탄은 없음');
 });
 
 test('비행: 점프키로 오르고 회피키로 내리며, 손을 떼면 그 높이에 떠 있다(호버링). 바닥·천장 사이에서만', () => {
@@ -93,27 +92,23 @@ test('비행: 점프키로 오르고 회피키로 내리며, 손을 떼면 그 �
   assert.equal(P1.z, 500 + FLIGHT.minAlt);
 });
 
-test('비행: 고기동 — 걷는 사람보다 빠르게 날고, 시선(위아래·양옆)으로 겨눈 쪽으로 캐논을 쏜다', () => {
+test('비행: 고기동 — 걷는 사람보다 빠르게 날고, 미사일 5연발은 위에서 아래의 적에게도 유도돼 맞는다', () => {
   const { match, inputs, P1, P2 } = playing();
   match.highs = []; match.covers = [];
   assert.ok(P1.speed > P2.speed, '더 빠름');
-  // 위에서 아래의 적을 겨눠 쏜다
   P1.x = P1.previousX = 800; P1.y = P1.previousY = 900; P1.z = 600;
   P2.x = P2.previousX = 800; P2.y = P2.previousY = 300; P2.z = 0;
   inputs.P1.aim = -Math.PI / 2;
-  inputs.P1.pitch = Math.atan2(0 + 90 - (600 + 84), 600);
-  inputs.P1.aiming = true;
-  run(match, inputs, 1);
-  assert.ok(P2.hp < P2.maxHp, `캐논 명중 ${P2.maxHp - P2.hp}`);
-  const shots = match.projectiles.filter((b) => b.weapon === 'gscannon');
-  assert.ok(shots.length === 0 || shots.every((b) => b.vz < 0), '아래로 날아감');
+  inputs.P1.pitch = -0.6;
+  run(match, inputs, 3);
+  assert.ok(match.stats.P1.weapons.gsrockets.damage >= 10, `명중 ${match.stats.P1.weapons.gsrockets.damage}`);
 });
 
-test('유도미사일·미사일 5연발: 보조무기 칸에서 쏜다(유도미사일은 적 쪽으로 휘어 50, 5연발은 15씩 5발)', () => {
+test('유도미사일: 보조무기 칸에서 쏜다(적 쪽으로 휘어 50)', () => {
   const { match, inputs, P1, P2 } = playing();
   match.highs = []; match.covers = [];
   P1.x = P1.previousX = 800; P1.y = P1.previousY = 900; P1.z = 120;
-  P2.x = P2.previousX = 1100; P2.y = P2.previousY = 300; P2.z = 0; P2.hp = P2.maxHp = 5000;
+  P2.x = P2.previousX = 1100; P2.y = P2.previousY = 300; P2.z = 0;
   inputs.P1.select = 'secondary';
   run(match, inputs, 0.5);
   assert.equal(P1.weapon, 'gsmissile');
@@ -122,20 +117,13 @@ test('유도미사일·미사일 5연발: 보조무기 칸에서 쏜다(유도�
   inputs.P1.aiming = true;
   const ev = run(match, inputs, 0.05);
   inputs.P1.aiming = false;
-  run(match, inputs, 2);
+  run(match, inputs, 2.5);
   assert.ok(ev.some((e) => e.type === 'fire' && e.weapon === 'gsmissile'));
   assert.ok(match.stats.P1.weapons.gsmissile.damage >= 50, `미사일 ${match.stats.P1.weapons.gsmissile.damage}`);
+  // 보조무기 칸은 유도미사일 하나뿐
   inputs.P1.select = 'secondary2';
   run(match, inputs, 0.5);
-  assert.equal(P1.weapon, 'gsrockets');
-  inputs.P1.aim = Math.atan2(P2.y - P1.y, P2.x - P1.x); // 적 쪽으로 겨눈다(약한 유도)
-  inputs.P1.aiming = true;
-  const first = step(match, inputs);
-  inputs.P1.aiming = false;
-  const fired = [...first, ...run(match, inputs, 2)].filter((e) => e.type === 'fire' && e.weapon === 'gsrockets').length;
-  assert.equal(fired, 5, '미사일 5발');
-  const dealt = match.stats.P1.weapons.gsrockets.damage;
-  assert.ok(dealt >= 15 && dealt <= 75 && dealt % 15 === 0, `15씩 명중 ${dealt}`);
+  assert.equal(P1.weapon, 'gsmissile');
 });
 
 test('AI도 하늘에 떠 있는 건쉽을 겨눠 맞힌다', () => {
@@ -148,22 +136,25 @@ test('AI도 하늘에 떠 있는 건쉽을 겨눠 맞힌다', () => {
   assert.ok(P1.hp < P1.maxHp, `맞음 ${P1.maxHp - P1.hp}`);
 });
 
-test('양쪽 캐논은 발사키를 누르지 않아도, 보조무기를 들고 있어도 계속 쏜다', () => {
+test('미사일 5연발은 발사키를 누르지 않아도, 유도미사일을 들고 있어도 interval초마다 5발씩 계속 쏜다(발당 10)', () => {
   const { match, inputs, P1 } = playing();
   match.highs = []; match.covers = [];
-  const ev = run(match, inputs, 1);
-  const shots = ev.filter((e) => e.type === 'fire' && e.weapon === 'gscannon').length;
-  assert.ok(Math.abs(shots - 1 / WEAPONS.gscannon.interval) <= 1, `1초에 ${shots}번`);
+  const count = (ev) => ev.filter((e) => e.type === 'fire' && e.weapon === 'gsrockets').length;
+  const w = WEAPONS.gsrockets;
+  const ev = run(match, inputs, w.interval * 3 - TICK);
+  assert.equal(count(ev), 15, `${w.interval * 3}초에 5발씩 3번`);
+  assert.ok(match.projectiles.filter((b) => b.weapon === 'gsrockets').every((b) => b.damage === 10));
   inputs.P1.select = 'secondary';
   run(match, inputs, 0.5);
   assert.equal(P1.weapon, 'gsmissile');
-  const more = run(match, inputs, 1).filter((e) => e.type === 'fire' && e.weapon === 'gscannon').length;
-  assert.ok(more >= 6, '보조무기를 들어도 캐논은 계속');
-  // 쓰러지면 멈춘다
-  P1.hp = 0;
-  run(match, inputs, TICK);
-  const after = run(match, inputs, 0.5).filter((e) => e.type === 'fire' && e.weapon === 'gscannon').length;
-  assert.equal(after, 0);
+  assert.ok(count(run(match, inputs, w.interval * 2)) >= 10, '보조무기를 들어도 계속');
+  // 발사키는 유도미사일용(5연발이 더 나가지 않음)
+  inputs.P1.select = 'primary';
+  run(match, inputs, 0.5);
+  inputs.P1.aiming = true;
+  const held = count(run(match, inputs, w.interval));
+  inputs.P1.aiming = false;
+  assert.ok(held <= 5, `발사키를 눌러도 더 빨라지지 않음 ${held}`);
 });
 
 test('미사일 5연발: 5발이 흩어져 나가 저마다 빠르게 원을 그리며 돈 뒤 적에게 유도된다', () => {
@@ -171,12 +162,9 @@ test('미사일 5연발: 5발이 흩어져 나가 저마다 빠르게 원을 그
   match.highs = []; match.covers = [];
   P1.x = P1.previousX = 800; P1.y = P1.previousY = 900; P1.z = 300;
   P2.x = P2.previousX = 800; P2.y = P2.previousY = -400; P2.z = 0;
-  inputs.P1.select = 'secondary2';
-  run(match, inputs, 0.5);
   inputs.P1.aim = -Math.PI / 2;
-  inputs.P1.aiming = true; step(match, inputs); inputs.P1.aiming = false;
-  run(match, inputs, 0.4);
-  const rockets = match.projectiles.filter((b) => b.weapon === 'gsrockets');
+  run(match, inputs, 0.4); // 계속 쏘는 첫 5발
+  const rockets = match.projectiles.filter((b) => b.weapon === 'gsrockets').slice(0, 5);
   assert.equal(rockets.length, 5, '5발');
   // 흩어짐: 처음 나간 방향이 서로 다르고(부채꼴), 도는 방향은 번갈아
   assert.ok(new Set(rockets.map((b) => b.pattern.dir)).size === 2, '도는 방향 번갈아');
@@ -193,7 +181,7 @@ test('미사일 5연발: 5발이 흩어져 나가 저마다 빠르게 원을 그
   // 그 뒤 적에게 유도돼 맞는다
   run(match, inputs, 3);
   assert.ok(rockets.every((b) => b.pattern.phase === 'home' || !match.projectiles.includes(b)));
-  assert.ok(match.stats.P1.weapons.gsrockets.damage >= 15 * 3, `여러 발 명중 ${match.stats.P1.weapons.gsrockets.damage}`);
+  assert.ok(match.stats.P1.weapons.gsrockets.damage >= 10 * 3, `여러 발 명중 ${match.stats.P1.weapons.gsrockets.damage}`);
 });
 
 test('유도미사일: 공중에서 빠르게 원을 그리다가 잠시 멈춰 적을 조준한 뒤 적에게 날아간다', () => {
