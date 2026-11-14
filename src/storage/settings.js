@@ -1,4 +1,4 @@
-import { defaultStory, normalizeStory, normalizeStorySave, normalizeAllyPicks, STAGE_ORDER } from '../game/story.js';
+import { defaultStory, normalizeStory, normalizeStorySave, normalizeAllyPicks, STAGE_ORDER, ENDLESS, endlessDifficultyOf, endlessCountOf } from '../game/story.js';
 import { accountKey } from '../game/mods.js';
 import { ACCOUNTS, normalizeRank, defaultRank } from '../game/rank.js';
 
@@ -112,6 +112,8 @@ export function defaultSingle() {
     storyStart: 'rooftop',
     // endlessMap: 연속 플레이 스테이지(story.js ENDLESS_MAPS의 id)
     endlessMap: 'fortress',
+    // endlessDifficulty: 연속 플레이 난이도('easy'·'normal'·'hard', story.js ENDLESS_DIFFICULTY), endlessCount: 웨이브마다 오는 요원 수
+    endlessDifficulty: 'normal', endlessCount: ENDLESS.count,
     aiWeapon: 'pistol', aiSecondary: 'smg', difficulty: 'normal', aiHp: 500, aiBulletSpeed: 100, aiRadius: 30,
     aiDamage: { primary: null, secondary: null, grenade: null },
   };
@@ -126,6 +128,8 @@ export function loadSingle() {
     if (![0, 1, 2, 3].includes(single.storyAllies)) single.storyAllies = 0;
     single.storyAllyPicks = normalizeAllyPicks(single.storyAllyPicks);
     if (!STAGE_ORDER.includes(single.storyStart) && single.storyStart !== 'endless') single.storyStart = 'rooftop';
+    single.endlessDifficulty = endlessDifficultyOf(single.endlessDifficulty);
+    single.endlessCount = endlessCountOf(single.endlessCount);
     return single;
   } catch {
     return defaults;

@@ -140,7 +140,7 @@ function startMatch() {
   const endless = storyMode() && !resumeFrom && single.storyStart === 'endless';
   storyClean = storyMode() && !startAt && !endless && (resumeFrom ? resumeFrom.clean === true : true);
   match = mode === 'training' ? createTrainingMatch(loadout.P1)
-    : storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies(), { endless, endlessMap: single.endlessMap })
+    : storyMode() ? createStoryMatch(resumeFrom?.pick ?? loadout.P1, story, Date.now(), resumeFrom ?? startAt, storyPartner(), storyAllies(), { endless, endlessMap: single.endlessMap, endlessDifficulty: single.endlessDifficulty, endlessCount: single.endlessCount })
     // 2인 대결은 준비 화면에서 고른 경기장(넓은 옥상·고공 요새)
     : createMatch(mode === 'single' ? singleLoadout() : loadout, Date.now(), { wide: true, map: mode === 'versus' ? settings.versusMap ?? 'wide' : 'wide' });
   inputs = createInputs(match.players);

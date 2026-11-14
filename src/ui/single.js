@@ -1,7 +1,10 @@
 import { WEAPONS, PRIMARY_IDS, SECONDARY_IDS, MAX_HP, CHARACTERS } from '../game/config.js';
 import { DIFFICULTY, DIFFICULTY_IDS } from '../game/ai.js';
 import { defaultSingle } from '../storage/settings.js';
-import { MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart, ENDLESS, ENDLESS_MAPS, endlessMapOf, endlessRewardText } from '../game/story.js';
+import {
+  MAX_ALLIES, ALLY_IDS, allyWeaponOf, normalizeAllyPicks, STAGES, STAGE_ORDER, waveLabel, stageStart, ENDLESS, ENDLESS_MAPS, endlessMapOf, endlessRewardText,
+  ENDLESS_DIFFICULTY, ENDLESS_DIFFICULTY_IDS, endlessDifficultyOf, endlessCountOf,
+} from '../game/story.js';
 import { weaponLabel, weaponInfo, choiceButton, weaponButtons } from './widgets.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -235,7 +238,7 @@ export function createSingleSetup(onChange) {
       const label = document.createElement('span');
       label.textContent = '♾️ 연속 플레이 모드';
       const info = document.createElement('small');
-      info.textContent = `스테이지를 골라서 · 요원 ${ENDLESS.count}명씩 무한 웨이브 · 웨이브마다 랭크 1레벨 · ${endlessRewardText()}(중간에 그만둬도 보상 유지)`;
+      info.textContent = `스테이지·난이도·요원 수를 골라서 무한 웨이브 · 웨이브마다 체력 완전 회복 · 랭크 1레벨 · ${endlessRewardText()}(중간에 그만둬도 보상 유지)`;
       const btn = choiceButton([label, info], single.storyStart === 'endless', () => {
         single.storyStart = 'endless';
         syncEndlessMaps();
@@ -270,7 +273,44 @@ export function createSingleSetup(onChange) {
         onChange(single);
       });
     }));
-    maps.replaceChildren(title, buttons);
+    // 연속 플레이 난이도
+    single.endlessDifficulty = endlessDifficultyOf(single.endlessDifficulty);
+    const levelTitle = document.createElement('div');
+    levelTitle.className = 'field-label';
+    levelTitle.textContent = '♾️ 연속 플레이 난이도';
+    const levels = document.createElement('div');
+    levels.className = 'choices';
+    levels.setAttribute('role', 'group');
+    levels.setAttribute('aria-label', '연속 플레이 난이도');
+    levels.append(...ENDLESS_DIFFICULTY_IDS.map((id) => {
+      const name = document.createElement('span');
+      name.textContent = ENDLESS_DIFFICULTY[id].name;
+      const info = document.createElement('small');
+      info.textContent = ENDLESS_DIFFICULTY[id].info;
+      return choiceButton([name, info], single.endlessDifficulty === id, () => {
+        single.endlessDifficulty = id;
+        onChange(single);
+      });
+    }));
+    // 웨이브마다 오는 요원 수
+    single.endlessCount = endlessCountOf(single.endlessCount);
+    const countTitle = document.createElement('div');
+    countTitle.className = 'field-label';
+    countTitle.textContent = `♾️ 웨이브마다 오는 요원 수 (${ENDLESS.minCount}~${ENDLESS.maxCount}명, 지금 ${single.endlessCount}명)`;
+    const counts = document.createElement('div');
+    counts.className = 'choices endless-counts';
+    counts.setAttribute('role', 'group');
+    counts.setAttribute('aria-label', '웨이브마다 오는 요원 수');
+    for (let n = ENDLESS.minCount; n <= ENDLESS.maxCount; n++) {
+      const label = document.createElement('span');
+      label.textContent = `${n}명`;
+      counts.append(choiceButton([label], single.endlessCount === n, () => {
+        single.endlessCount = n;
+        onChange(single);
+        countTitle.textContent = `♾️ 웨이브마다 오는 요원 수 (${ENDLESS.minCount}~${ENDLESS.maxCount}명, 지금 ${n}명)`;
+      }));
+    }
+    maps.replaceChildren(title, buttons, levelTitle, levels, countTitle, counts);
     syncEndlessMaps();
   }
 
