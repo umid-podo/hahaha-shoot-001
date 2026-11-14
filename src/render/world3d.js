@@ -914,7 +914,7 @@ export function createWorld3D(canvas, wrap, assets) {
   function setModel(a, kind) {
     if (a.modelKind === kind) return a.model;
     if (a.model) scene.remove(a.model);
-    a.model = kind === 'lightning' ? M.makeLightning() : kind === 'gunship' ? M.makeHelicopter('gunship', 0.8)
+    a.model = kind === 'lightning' ? M.makeLightning() : kind === 'gunship' ? M.makeIsbGunship()
       : kind === 'assault' ? M.makeAssaultGunship()
       : kind === 'deathstar' ? M.makeDeathstar() : null;
     if (kind === 'deathstar') a.model.scale.setScalar(DS_SCALE);
@@ -1031,6 +1031,9 @@ export function createWorld3D(canvas, wrap, assets) {
         // 데스스타는 옆모습(긴 선체가 가로)으로, 비행기·건쉽은 바라보는 쪽으로
         model.rotation.set(0, aircraft === 'deathstar' ? 0 : -p.aim, p.alive ? 0 : 0.6);
         if (model.userData.rotor) model.userData.rotor.rotation.y = time * 30;
+        // ISB 원반 포격정: 반응로 고리와 고리 엔진 날개살이 돈다
+        if (model.userData.reactor) model.userData.reactor.rotation.y = reducedMotion ? 0 : time * 2;
+        if (model.userData.fans && aircraft === 'gunship') for (const f of model.userData.fans) f.rotation.x = reducedMotion ? 0 : time * 30;
         if (model.userData.props) for (const pr of model.userData.props) pr.rotation.x = time * 40;
         if (model.userData.boost) model.userData.boost.visible = p.boost > 0;
         a.ring.visible = false;

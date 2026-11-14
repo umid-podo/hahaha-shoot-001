@@ -268,7 +268,7 @@ export function createRenderer(canvas, wrap, assets) {
       if (p.plane) drawLightning(p.x + shake, p.y, p.aim + Math.PI / 2 + tilt, 0.95, time, reducedMotion, p.boost > 0);
       // 데스스타는 화면 위 끝에 잘리지 않게 판정 중심보다 조금 아래, 0.85배로 그린다
       else if (p.characterId === 'deathstar') drawDeathstar(p.x + shake, p.y + DS_DRAW_DY, DS_DRAW_SCALE, time, reducedMotion);
-      else drawCarrier({ kind: 'gunship', x: p.x + shake, y: p.y, angle: p.aim + Math.PI + tilt, state: 'hover', scale: 0.5, enemy: true }, time, reducedMotion);
+      else drawIsbGunship(p.x + shake, p.y, p.aim + Math.PI / 2 + tilt, 0.55, time, reducedMotion);
       ctx.restore();
     } else {
       ctx.save();
@@ -696,6 +696,71 @@ export function createRenderer(canvas, wrap, assets) {
    * 가운데 짧은 동체(조종석)와 엔진이 달린 꼬리 붐 두 개, 긴 주날개, 두 붐을 잇는 꼬리 날개. 은색 몸체에 파란 무늬.
    * boost(과냉각 중)이면 엔진 뒤로 파란 불꽃.
    */
+  /**
+   * 위에서 본 공중전 적 건쉽 'ISB 원반 포격정'(이 게임용 디자인). 기수는 angle 방향(0이면 위쪽).
+   * 흑연색 원반 + 주황 테두리·V자 줄, 가운데 주황빛 반응로 고리(돈다), 앞 조종석과 볼 포탑 둘(쌍 포신), 양옆 고리 엔진.
+   */
+  function drawIsbGunship(x, y, angle, scale, time, reducedMotion) {
+    const hull = '#4A4F58', dark = '#24272D', plate = '#6B717C', orange = '#D56A26';
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3 / scale;
+    ctx.lineJoin = 'round';
+    // 그림자
+    ctx.fillStyle = 'rgba(20,30,60,0.18)';
+    ctx.beginPath(); ctx.ellipse(22, 30, 150, 120, 0, 0, Math.PI * 2); ctx.fill();
+    // 양옆 고리 엔진(기둥 + 세운 고리)
+    for (const s of [-1, 1]) {
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.roundRect(s > 0 ? 120 : -184, -8, 64, 18, 5); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = plate;
+      ctx.beginPath(); ctx.roundRect(s * 186 - 14, -36, 28, 70, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#FF8A2A';
+      ctx.beginPath(); ctx.ellipse(s * 186, 44, 8, 12, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // 앞 볼 포탑(쌍 포신) + 조종석 쐐기
+    ctx.fillStyle = dark;
+    for (const s of [-1, 1]) for (const d of [-6, 6]) { ctx.beginPath(); ctx.roundRect(s * 40 + d - 2, -190, 4, 50, 2); ctx.fill(); }
+    ctx.fillStyle = plate;
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * 40, -130, 20, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(-24, -80); ctx.lineTo(-14, -150); ctx.lineTo(0, -166); ctx.lineTo(14, -150); ctx.lineTo(24, -80); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#FF3B30';
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.roundRect(s * 8 - 3, -150, 6, 16, 2); ctx.fill(); }
+    // 원반 선체
+    ctx.fillStyle = hull;
+    ctx.beginPath(); ctx.ellipse(0, 0, 138, 120, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = orange;
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.ellipse(0, 0, 128, 110, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 12;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-78, -66); ctx.lineTo(-24, -24); ctx.moveTo(78, -66); ctx.lineTo(24, -24); ctx.stroke();
+    // 반응로: 어두운 우물 + 도는 주황 고리와 살
+    ctx.fillStyle = dark;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3 / scale;
+    ctx.beginPath(); ctx.arc(0, 6, 42, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#FF8A2A';
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.arc(0, 6, 30, 0, Math.PI * 2); ctx.stroke();
+    ctx.save();
+    ctx.translate(0, 6);
+    ctx.rotate(reducedMotion ? 0 : time * 2);
+    ctx.strokeStyle = plate;
+    ctx.lineWidth = 5;
+    for (let k = 0; k < 3; k++) { ctx.rotate(Math.PI / 3); ctx.beginPath(); ctx.moveTo(-30, 0); ctx.lineTo(30, 0); ctx.stroke(); }
+    ctx.restore();
+    // 가장자리 붉은 표시등(깜빡임)
+    if (reducedMotion || Math.floor(time * 2) % 2 === 0) {
+      ctx.fillStyle = '#FF3B30';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * 120, 10, 7, 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.restore();
+  }
+
   function drawLightning(x, y, angle, scale, time, reducedMotion, boost = false) {
     const silver = '#C9CED6', blue = '#2F6FD6', dark = '#6B7380';
     ctx.save();

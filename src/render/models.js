@@ -164,6 +164,97 @@ export function makeHelicopter(kind = 'heli', scale = 1) {
   return g;
 }
 
+/**
+ * 공중전(하늘) 적 건쉽 'ISB 원반 포격정'(이 게임용 디자인): 납작한 렌즈형 원반 선체(흑연색 + ISB 주황 줄), 가운데 주황빛 반응로 고리(돈다),
+ * 원반 앞 아래에 매단 각진 조종석과 양옆 볼 포탑(쌍 포신), 양옆 날개 끝 고리 엔진, 아래 로켓 랙, 붉은 표시등. 앞은 +X
+ */
+export function makeIsbGunship() {
+  const g = new THREE.Group();
+  const hull = mat('#4A4F58', { metal: 0.55, rough: 0.45 });
+  const dark = mat('#24272D', { metal: 0.6, rough: 0.4 });
+  const plate = mat('#6B717C', { metal: 0.5, rough: 0.5 });
+  const orange = mat('#D56A26', { metal: 0.3, rough: 0.5 });
+  const glow = mat('#FF8A2A', { emissive: '#FF6A10' });
+  const red = mat('#FF3B30', { emissive: '#FF2A1A' });
+  // 원반 선체: 위아래 두 겹의 납작한 원뿔(렌즈), 가로로 조금 긴 타원
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(40, 120, 22, 28), hull);
+  top.position.y = 11;
+  const bottom = new THREE.Mesh(new THREE.CylinderGeometry(120, 70, 16, 28), dark);
+  bottom.position.y = -8;
+  const disc = new THREE.Group();
+  disc.add(top, bottom);
+  disc.add(at(cyl(121, 121, 3, orange, 28), 0, 1, 0)); // 가장자리 주황 띠
+  disc.scale.set(1, 1, 1.15);
+  g.add(disc);
+  // 위 판: 앞쪽이 잘린 V자 주황 줄 두 개 + 회색 장갑판
+  for (const s of [-1, 1]) {
+    g.add(at(box(110, 3, 12, orange), -10, 19, s * 46).rotateY(s * 0.5));
+    g.add(at(box(46, 4, 36, plate), -40, 17, s * 78).rotateY(s * 0.25));
+  }
+  // 가운데 반응로: 어두운 우물 + 주황빛 고리(돈다) + 가로살 셋
+  g.add(at(cyl(34, 34, 6, dark, 24), 0, 23, 0));
+  const reactor = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(26, 4, 8, 28), glow);
+  ring.rotation.x = Math.PI / 2;
+  reactor.add(ring);
+  for (let k = 0; k < 3; k++) reactor.add(box(52, 3, 5, plate).rotateY((k * Math.PI) / 3));
+  reactor.position.y = 27;
+  g.add(reactor);
+  // 앞 아래 조종석: 원반 앞에 매단 각진 쐐기(붉은 창 둘)
+  const nose = new THREE.Shape();
+  nose.moveTo(0, -22); nose.lineTo(70, -12); nose.lineTo(84, 0); nose.lineTo(70, 12); nose.lineTo(0, 22); nose.closePath();
+  const cockpit = new THREE.Mesh(new THREE.ExtrudeGeometry(nose, { depth: 30, bevelEnabled: true, bevelSize: 3, bevelThickness: 3, bevelSegments: 1 }), plate);
+  cockpit.rotation.x = Math.PI / 2;
+  g.add(at(cockpit, 60, -4, 0));
+  g.add(at(box(40, 34, 30, dark), 70, -18, 0));
+  for (const s of [-1, 1]) g.add(at(box(22, 4, 6, red), 118, -12, s * 9).rotateY(-s * 0.4));
+  // 조종석 양옆 볼 포탑(쌍 포신)
+  for (const s of [-1, 1]) {
+    const turret = new THREE.Group();
+    turret.add(sphere(17, plate));
+    turret.add(at(box(12, 8, 30, dark), 0, 0, 0));
+    for (const dz of [-5, 5]) {
+      const barrel = cyl(2.2, 2.2, 46, dark, 8);
+      barrel.rotation.z = Math.PI / 2;
+      turret.add(at(barrel, 30, 0, dz));
+    }
+    turret.position.set(100, -28, s * 34);
+    g.add(turret);
+  }
+  // 날개 끝 고리 엔진: 짧은 기둥 끝에 세운 고리(안에 날개살) + 뒤로 주황 배기
+  const fans = [];
+  for (const s of [-1, 1]) {
+    g.add(at(box(30, 8, 40, dark), -10, 0, s * 148));
+    const engine = new THREE.Group();
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(24, 4, 8, 20), plate);
+    hoop.rotation.y = Math.PI / 2;
+    engine.add(hoop);
+    const fan = new THREE.Group();
+    for (let k = 0; k < 4; k++) fan.add(box(2, 44, 5, dark).rotateX((k * Math.PI) / 4));
+    engine.add(fan);
+    fans.push(fan);
+    engine.add(at(cyl(8, 8, 30, dark, 10).rotateZ(Math.PI / 2), -10, 0, 0));
+    engine.add(at(new THREE.Mesh(new THREE.ConeGeometry(7, 18, 10), glow).rotateZ(Math.PI / 2), -32, 0, 0));
+    engine.position.set(-10, 0, s * 176);
+    g.add(engine);
+    // 원반 가장자리 붉은 표시등
+    g.add(at(sphere(5, red, 8, 6), -20, 4, s * 136));
+  }
+  // 아래 로켓 랙: 두 줄로 매단 짧은 로켓
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 3; k++) {
+      const pod = cyl(5, 5, 34, dark, 8);
+      pod.rotation.z = Math.PI / 2;
+      g.add(at(pod, -10 + k * 4, -22, s * (52 + k * 13)));
+      g.add(at(sphere(5, orange, 8, 6), 8 + k * 4, -22, s * (52 + k * 13)));
+    }
+  }
+  g.add(at(sphere(6, mat('#FFFFFF', { emissive: '#FFFFFF' }), 8, 6), -120, 6, 0)); // 꼬리 흰빛
+  g.userData.reactor = reactor;
+  g.userData.fans = fans;
+  return g;
+}
+
 /** 전투기(경기장 위를 가로질러 날아감): 날렵한 회색 동체, 삼각 날개, 꼬리. 앞은 +X */
 export function makeJet() {
   const g = new THREE.Group();
