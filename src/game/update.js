@@ -647,10 +647,7 @@ function fire(match, p, events) {
     // 아킴보 석궁: 같은 방향으로 나란히
     const n = Math.max(1, Math.round(weapon.arrows));
     for (let i = 0; i < n; i++) {
-      const offset = (i - (n - 1) / 2) * weapon.arrowGap;
-      // converge: 양옆에서 쏜 탄이 앞쪽 converge 거리(조준점)에서 만나게 안쪽으로 조금 꺾는다(강습 건쉽 캐논)
-      const angle = weapon.converge ? p.aim - Math.atan2(offset, convergeAt(match, p, weapon.converge)) : p.aim;
-      spawnProjectile(match, p, angle, weapon.id, { offset, group });
+      spawnProjectile(match, p, p.aim, weapon.id, { offset: (i - (n - 1) / 2) * weapon.arrowGap, group });
     }
   } else if (weapon.flame) {
     // 화염방사기: 조준 방향 둘레로 흩어지는 불꽃
@@ -669,43 +666,27 @@ function fire(match, p, events) {
 }
 
 /**
- * 양쪽 캐논이 모이는 거리: 조준 방향 12도 안에 적이 있으면 그 적까지의 거리(가로), 없으면 기본 거리(fallback).
- */
-export function convergeAt(match, p, fallback) {
-  let best = Infinity;
-  for (const q of match.players) {
-    if (!q.alive || q.team === p.team || q.entering) continue;
-    const d = Math.hypot(q.x - p.x, q.y - p.y);
-    const a = Math.atan2(q.y - p.y, q.x - p.x);
-    if (d >= 150 && Math.abs(Math.atan2(Math.sin(a - p.aim), Math.cos(a - p.aim))) <= 0.21) best = Math.min(best, d);
-  }
-  if (Number.isFinite(best)) return Math.min(fallback, best);
-  // 조준 방향(위아래 포함)으로 처음 닿는 구조물·바닥까지(조준선이 닿는 곳)
-  const pitch = clampPitch(p.pitch ?? 0), flat = Math.cos(pitch);
-  const h0 = (p.z ?? 0) + SHOT_HEIGHT;
-  const wall = structureHit(match, p.x, p.y, h0, p.x + Math.cos(p.aim) * fallback * flat, p.y + Math.sin(p.aim) * fallback * flat,
-    h0 + Math.sin(pitch) * fallback, { floor: match.story?.stage !== 'sky' });
-  return wall ? Math.max(150, wall.t * fallback * flat) : fallback * flat;
-}
-
-/**
- * 계속 쏘는 무기(강습 건쉽 양쪽 캐논, autoFire): 발사키와 든 무기에 상관없이 interval마다 조준 방향(조준점에서 모이게)으로 쏜다.
+ * 계속 쏘는 무기(강습 건쉽 미사일 5연발, autoFire): 발사키와 든 무기에 상관없이 interval초마다 한 차례(burst발을 burstGap 간격으로) 쏜다.
+ * 비행 무늬(pattern)가 있으면 흩어져 원을 그리다 유도되는 미사일로.
  */
 function autoFire(match, p, dt, events) {
   const w = WEAPONS[p.primary];
   if (!w?.autoFire) return;
   p.autoCooldown = (p.autoCooldown ?? 0) - dt;
-  if (p.autoCooldown > EPS) return;
-  p.autoCooldown = Math.max(0, p.autoCooldown) + w.interval * fireRate(p);
+  if (p.autoCooldown <= EPS && !(p.autoBurst > 0)) {
+    p.autoCooldown = Math.max(0, p.autoCooldown) + w.interval * fireRate(p);
+    p.autoBurst = Math.max(1, Math.round(w.burst ?? 1));
+    p.autoBurstTimer = 0;
+  }
+  if (!(p.autoBurst > 0)) return;
+  p.autoBurstTimer -= dt;
+  if (p.autoBurstTimer > EPS) return;
+  p.autoBurstTimer += w.burstGap ?? 0;
+  p.autoBurst--;
   const ws = weaponStats(match, p.id, w.id);
   if (ws) ws.shots++;
-  const group = { connected: false };
-  const n = Math.max(1, Math.round(w.arrows ?? 1));
-  const at = convergeAt(match, p, w.converge ?? 4000);
-  for (let i = 0; i < n; i++) {
-    const offset = (i - (n - 1) / 2) * (w.arrowGap ?? 0);
-    spawnProjectile(match, p, p.aim - Math.atan2(offset, at), w.id, { offset, group });
-  }
+  if (w.pattern) spawnPatterned(match, p, w);
+  else spawnProjectile(match, p, p.aim, w.id);
   events.push({ type: 'fire', playerId: p.id, weapon: w.id });
 }
 
@@ -1221,7 +1202,7 @@ export function step(match, inputs, dt = TICK) {
     }
     // 스토리가 대신 쏘는 적(존슨 요원의 조준선 저격)은 움직이기만 한다
     if (p.scripted) { input.item = false; p.wasAiming = false; continue; }
-    // 강습 건쉽 양쪽 캐논: 늘 계속 쏜다(발사키는 든 보조무기용)
+    // 강습 건쉽 미사일 5연발: 늘 계속 쏜다(발사키는 유도미사일용)
     autoFire(match, p, dt, events);
     if (input.item) {
       input.item = false;

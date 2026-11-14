@@ -301,10 +301,6 @@ export const WEAPONS = {
     splash: { damage: 50, radius: 240 },
   },
   // ── 강습 건쉽(상점 100코인 캐릭터) 전용 무기 ──
-  // 양쪽 캐논(주무기): 양옆 엔진 포드 아래 캐논에서 2발이 나란히(arrowGap 간격) 연사
-  // converge: 두 캐논 탄이 조준점(조준 방향의 적·구조물, 없으면 이 거리 앞)에서 만나도록 안쪽으로 모아 쏜다.
-  // autoFire: 발사키와 상관없이 살아 있는 동안 계속 쏜다(다른 무기를 들고 있어도)
-  gscannon: { id: 'gscannon', name: '양쪽 캐논', interval: 0.14, damage: 14, speed: 1300, burst: 1, arrows: 2, arrowGap: 300, converge: 4000, autoFire: true },
   /**
    * 유도미사일(보조무기): 한 발 50. pattern 'loiter': 쏘면 공중으로 솟으며 orbit초 동안 빠르게 원을 그리고(초당 omega 라디안),
    * hover초 동안 공중에 멈춰 가장 가까운 적을 조준한 뒤, 그 적에게 dash배 빠르기로 날아간다(그 뒤로도 위아래까지 약하게 유도).
@@ -316,13 +312,14 @@ export const WEAPONS = {
     pattern: { kind: 'loiter', orbit: 0.55, omega: 11, rise: 260, hover: 0.4, dash: 1.4 },
   },
   /**
-   * 미사일 5연발(보조무기): 조준한 뒤 떼면 작은 미사일 5발을 연달아 쏜다. 각각 15(맞히면 직격 15, 빗나가면 터져 근처에 15).
+   * 미사일 5연발(주무기): 작은 미사일 5발을 연달아 쏜다. 각각 10(맞히면 직격 10, 빗나가면 터져 근처에 10).
+   * autoFire: 발사키와 상관없이 살아 있는 동안 interval초마다 5발씩 계속 쏜다(다른 무기를 들고 있어도).
    * pattern 'swarm': 5발이 spread도 부채꼴로 흩어져 나가 orbit초 동안 저마다 빠르게 원을 그리며 돈 뒤(omega, 방향은 번갈아),
-   * 가장 가까운 적에게 세게 유도되어(위아래 포함) 날아간다. 쿨타임 6초
+   * 가장 가까운 적에게 세게 유도되어(위아래 포함) 날아간다.
    */
   gsrockets: {
-    id: 'gsrockets', name: '미사일 5연발', interval: 6, damage: 15, speed: 750, burst: 5, burstGap: 0.08, trigger: 'release', ownCooldown: true,
-    splash: { damage: 15, radius: 90 }, homing: { turnRate: 6, vertical: true }, life: 4,
+    id: 'gsrockets', name: '미사일 5연발', interval: 1, damage: 10, speed: 750, burst: 5, burstGap: 0.08, autoFire: true,
+    splash: { damage: 10, radius: 90 }, homing: { turnRate: 6, vertical: true }, life: 4,
     pattern: { kind: 'swarm', spread: 100, orbit: 0.6, omega: 12, rise: 120 },
   },
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
@@ -448,12 +445,12 @@ export const CHARACTERS = [
   },
   /**
    * 강습 건쉽: 상점(총기 개조 → 상점 → 탈것)에서 100코인에 사면 캐릭터 선택에 나온다(shop). 체력이 매우 높고,
-   * 주무기는 양쪽 캐논, 보조무기는 유도미사일·미사일 5연발로 고정(loadout, 수류탄 없음). flier: 스테이지 위를 날아다니며
+   * 주무기는 계속 쏘는 미사일 5연발, 보조무기는 유도미사일로 고정(loadout, 수류탄 없음). flier: 스테이지 위를 날아다니며
    * 고도를 올리고 내린다(점프키 위로, 회피키 아래로). 1인칭 대신 뒤에서 보는 3인칭 화면.
    */
   {
     id: 'assault-gunship', name: '강습 건쉽', hidden: true, shop: 'vehicle-gunship', flier: true, noItem: true,
-    loadout: { primary: 'gscannon', secondaries: ['gsmissile', 'gsrockets'] },
+    loadout: { primary: 'gsrockets', secondaries: ['gsmissile'] },
     maxHp: 3000, radius: 80, speed: MAX_SPEED * 1.2, image: 'assets/characters/assault-gunship.svg',
   },
   // 숨겨진 캐릭터: 온이름 버튼을 빠르게 3번 누르면 나타난다. 모습은 온이름 + 몸에 빨간 '제작자'. 즉사기 전용.
