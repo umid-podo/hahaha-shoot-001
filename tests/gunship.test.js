@@ -41,7 +41,7 @@ test('상점에서 100코인으로 사면 캐릭터 선택에 나온다(사기 �
   assert.ok(store.ownsCharacter(CHARACTERS.find((c) => c.id === 'earth-arrow')), '일반 캐릭터는 언제나');
 });
 
-test('강습 건쉽: 체력이 월등히 높고 주무기는 계속 쏘는 미사일 5연발(발당 10), 보조무기는 유도미사일 50, 수류탄 없음', () => {
+test('강습 건쉽: 체력이 월등히 높고 주무기는 계속 쏘는 미사일 5연발(발당 7), 보조무기는 유도미사일 50, 수류탄 없음', () => {
   const others = CHARACTERS.filter((c) => !c.hidden).map((c) => c.maxHp);
   assert.ok(GUNSHIP.maxHp >= 2 * Math.max(...others) && GUNSHIP.maxHp >= 6 * MAX_HP, `체력 ${GUNSHIP.maxHp}`);
   const { P1 } = playing({ weapon: 'rpg', secondaries: ['katana'] });
@@ -50,8 +50,9 @@ test('강습 건쉽: 체력이 월등히 높고 주무기는 계속 쏘는 미�
   assert.deepEqual(P1.secondaries, ['gsmissile']);
   assert.ok(P1.flier && P1.noItem);
   assert.ok(WEAPONS.gsrockets.autoFire, '늘 계속 쏜다');
-  assert.equal(WEAPONS.gsrockets.damage, 10, '미사일 한 발 10');
-  assert.equal(WEAPONS.gsrockets.splash.damage, 10);
+  assert.equal(WEAPONS.gsrockets.damage, 7, '미사일 한 발 7');
+  assert.equal(WEAPONS.gsrockets.splash.damage, 7);
+  assert.equal(WEAPONS.gsrockets.pattern.turns, 3, '공중에서 3바퀴');
   assert.equal(WEAPONS.gsrockets.burst, 5, '5발');
   assert.equal(WEAPONS.gsmissile.damage, 50);
   assert.ok(!('gscannon' in WEAPONS) && !('gsgrenade' in WEAPONS), '양쪽 캐논·유탄은 없음');
@@ -101,7 +102,7 @@ test('비행: 고기동 — 걷는 사람보다 빠르게 날고, 미사일 5연
   inputs.P1.aim = -Math.PI / 2;
   inputs.P1.pitch = -0.6;
   run(match, inputs, 3);
-  assert.ok(match.stats.P1.weapons.gsrockets.damage >= 10, `명중 ${match.stats.P1.weapons.gsrockets.damage}`);
+  assert.ok(match.stats.P1.weapons.gsrockets.damage >= 7, `명중 ${match.stats.P1.weapons.gsrockets.damage}`);
 });
 
 test('유도미사일: 보조무기 칸에서 쏜다(적 쪽으로 휘어 50)', () => {
@@ -136,14 +137,14 @@ test('AI도 하늘에 떠 있는 건쉽을 겨눠 맞힌다', () => {
   assert.ok(P1.hp < P1.maxHp, `맞음 ${P1.maxHp - P1.hp}`);
 });
 
-test('미사일 5연발은 발사키를 누르지 않아도, 유도미사일을 들고 있어도 interval초마다 5발씩 계속 쏜다(발당 10)', () => {
+test('미사일 5연발은 발사키를 누르지 않아도, 유도미사일을 들고 있어도 interval초마다 5발씩 계속 쏜다(발당 7)', () => {
   const { match, inputs, P1 } = playing();
   match.highs = []; match.covers = [];
   const count = (ev) => ev.filter((e) => e.type === 'fire' && e.weapon === 'gsrockets').length;
   const w = WEAPONS.gsrockets;
   const ev = run(match, inputs, w.interval * 3 - TICK);
   assert.equal(count(ev), 15, `${w.interval * 3}초에 5발씩 3번`);
-  assert.ok(match.projectiles.filter((b) => b.weapon === 'gsrockets').every((b) => b.damage === 10));
+  assert.ok(match.projectiles.filter((b) => b.weapon === 'gsrockets').every((b) => b.damage === 7));
   inputs.P1.select = 'secondary';
   run(match, inputs, 0.5);
   assert.equal(P1.weapon, 'gsmissile');
@@ -181,7 +182,7 @@ test('미사일 5연발: 5발이 흩어져 나가 저마다 빠르게 원을 그
   // 그 뒤 적에게 유도돼 맞는다
   run(match, inputs, 3);
   assert.ok(rockets.every((b) => b.pattern.phase === 'home' || !match.projectiles.includes(b)));
-  assert.ok(match.stats.P1.weapons.gsrockets.damage >= 10 * 3, `여러 발 명중 ${match.stats.P1.weapons.gsrockets.damage}`);
+  assert.ok(match.stats.P1.weapons.gsrockets.damage >= 7 * 3, `여러 발 명중 ${match.stats.P1.weapons.gsrockets.damage}`);
 });
 
 test('유도미사일: 공중에서 빠르게 원을 그리다가 잠시 멈춰 적을 조준한 뒤 적에게 날아간다', () => {
@@ -207,4 +208,22 @@ test('유도미사일: 공중에서 빠르게 원을 그리다가 잠시 멈춰 
   assert.equal(lockEvents.length, 1, '조준');
   assert.ok(hovered >= WEAPONS.gsmissile.pattern.hover - 2 * TICK, `잠시 멈춤 ${hovered.toFixed(2)}초`);
   assert.ok(match.stats.P1.weapons.gsmissile.damage >= 50, '적에게 날아가 명중');
+});
+
+test('미사일 5연발은 공중에서 정확히 3바퀴 돈 뒤 유도된다', () => {
+  const { match, inputs, P1 } = playing();
+  match.highs = []; match.covers = [];
+  P1.z = 400;
+  run(match, inputs, TICK);
+  const r = match.projectiles.find((b) => b.weapon === 'gsrockets');
+  let total = 0, last = Math.atan2(r.vy, r.vx), ticks = 0;
+  while (r.pattern.phase === 'orbit' && ticks++ < 600) {
+    step(match, inputs);
+    const h = Math.atan2(r.vy, r.vx);
+    total += Math.abs(Math.atan2(Math.sin(h - last), Math.cos(h - last)));
+    last = h;
+  }
+  assert.equal(r.pattern.phase, 'home');
+  assert.ok(Math.abs(total / (Math.PI * 2) - 3) < 0.15, `${(total / (Math.PI * 2)).toFixed(2)}바퀴`);
+  assert.ok(r.z > 0, '공중에서');
 });

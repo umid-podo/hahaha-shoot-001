@@ -734,7 +734,9 @@ function flyPattern(match, b, dt, events) {
     const heading = Math.atan2(b.vy, b.vx) + st.dir * st.omega * dt;
     b.vx = Math.cos(heading) * speed; b.vy = Math.sin(heading) * speed;
     b.vz = (b.vz ?? 0) * Math.max(0, 1 - 3 * dt); // 솟는 힘은 점점 줄어든다
-    if (st.t < pt.orbit) return;
+    st.turned = (st.turned ?? 0) + st.omega * dt;
+    // turns가 있으면 그 바퀴 수만큼 다 돌아야, 없으면 orbit초가 지나야 다음 단계
+    if (pt.turns ? st.turned < pt.turns * Math.PI * 2 : st.t < pt.orbit) return;
     st.t = 0;
     if (pt.kind === 'loiter') {
       // 공중에 멈춰 조준

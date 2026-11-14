@@ -312,15 +312,15 @@ export const WEAPONS = {
     pattern: { kind: 'loiter', orbit: 0.55, omega: 11, rise: 260, hover: 0.4, dash: 1.4 },
   },
   /**
-   * 미사일 5연발(주무기): 작은 미사일 5발을 연달아 쏜다. 각각 10(맞히면 직격 10, 빗나가면 터져 근처에 10).
+   * 미사일 5연발(주무기): 작은 미사일 5발을 연달아 쏜다. 각각 7(맞히면 직격 7, 빗나가면 터져 근처에 7).
    * autoFire: 발사키와 상관없이 살아 있는 동안 interval초마다 5발씩 계속 쏜다(다른 무기를 들고 있어도).
-   * pattern 'swarm': 5발이 spread도 부채꼴로 흩어져 나가 orbit초 동안 저마다 빠르게 원을 그리며 돈 뒤(omega, 방향은 번갈아),
+   * pattern 'swarm': 5발이 spread도 부채꼴로 흩어져 나가 공중에서 저마다 빠르게 원을 turns바퀴 그리며 돈 뒤(omega, 방향은 번갈아),
    * 가장 가까운 적에게 세게 유도되어(위아래 포함) 날아간다.
    */
   gsrockets: {
-    id: 'gsrockets', name: '미사일 5연발', interval: 1, damage: 10, speed: 750, burst: 5, burstGap: 0.08, autoFire: true,
-    splash: { damage: 10, radius: 90 }, homing: { turnRate: 6, vertical: true }, life: 4,
-    pattern: { kind: 'swarm', spread: 100, orbit: 0.6, omega: 12, rise: 120 },
+    id: 'gsrockets', name: '미사일 5연발', interval: 1, damage: 7, speed: 750, burst: 5, burstGap: 0.08, autoFire: true,
+    splash: { damage: 7, radius: 90 }, homing: { turnRate: 6, vertical: true }, life: 5.5,
+    pattern: { kind: 'swarm', spread: 100, turns: 3, omega: 12, rise: 160 },
   },
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
   // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)
