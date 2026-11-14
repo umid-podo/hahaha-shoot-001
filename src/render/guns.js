@@ -559,81 +559,55 @@ function sidePlates(g, points, t, material, z) {
 }
 
 /**
- * 에너지 돌격소총(사용자가 준 디자인): 흰 윗몸통·검은 아랫판, 몸통에서 총구까지 이어지는 연두색 빛 띠, 위아래 두 겹 앞 덮개
- * (위 흰 덮개·아래 검은 덮개, 끝이 하늘색으로 빛남), 위에 검은 망원 조준경, 손잡이 앞 하늘색 빛 고리, 가운데가 뚫린 흰 뼈대 개머리판과 검은 받침.
+ * 에너지 돌격소총(전설): 흰 윗몸통 앞쪽 옆면에 길게 빛나는 푸른 띠, 그 아래 검은 총열 덮개, 총구는 검은 덮개에 위(가늠쇠)·아래 두 총열.
+ * 가운데 검은 육각 받침에 푸른 육각 고리, 그 위 작은 가늠자. 뒤는 흰 개머리판을 검은 테가 감싸고 손잡이와 이어진 큰 구멍(엄지 구멍 개머리판),
+ * 개머리판 위 뒤쪽에 짧은 푸른 띠. 위에 검은 망원 조준경(앞뒤 렌즈가 푸르게 빛남).
  */
-// 그림에서 뽑은 색: 살짝 차가운 흰 외장, 남색 도는 검정, 연두 빛 띠(가운데는 거의 흰빛), 옅은 청록 빛 고리, 하늘색 렌즈
-const R_WHITE = () => role(mat('#E0E0E6', { metal: 0.1, rough: 0.35 }), 'furniture');
-const R_BLACK = () => role(mat('#1C2430', { metal: 0.3, rough: 0.45 }), 'metal');
-const R_DARK = () => role(mat('#15222D', { metal: 0.35, rough: 0.4 }), 'metal');
-const R_CHANNEL = () => role(mat('#23413C', { metal: 0.3, rough: 0.4 }), 'metal');
-const E_LIME = () => mat('#38D034', { metal: 0, rough: 0.35, emissive: '#22C020', intensity: 0.75 });
-const R_CORE = () => mat('#DDFDD8', { metal: 0, rough: 0.3, emissive: '#B8FFB0', intensity: 0.9 });
-const R_CYAN = () => mat('#A8EEE4', { metal: 0, rough: 0.3, emissive: '#5ED8D0', intensity: 1.3 });
-const E_GREY = () => role(mat('#9AA0A8', { metal: 0.2, rough: 0.4 }), 'furniture');
 function energyRifleModel() {
   const g = new THREE.Group();
-  // ── 몸통: 흰 윗몸통(뒤가 조금 낮다) · 검은 아랫판 ──
-  g.add(slab([[-10, 0], [14, 0], [15, 1.2], [15, 5.0], [-6, 5.6], [-10, 4.6]], 3.8, R_WHITE(), { bevel: 0.3 }));
-  g.add(slab([[-10, 0.2], [16, 0.2], [16, -2.6], [12, -4.2], [-10, -4.2]], 3.4, R_BLACK(), { bevel: 0.3 }));
-  g.add(box(26, 0.4, 3.9, R_BLACK(), 2.5, 0.2)); // 윗몸통과 아랫판 사이 검은 줄
-  for (const x of [-4, 6]) for (const z of [1, -1]) g.add(box(0.35, 4.4, 0.1, R_BLACK(), x, 2.8, z * 1.95)); // 판 이음선
-  // ── 앞 덮개 두 겹: 위 흰 덮개(앞으로 길게) · 아래 검은 덮개(조금 짧게) ──
-  g.add(slab([[14, 1.6], [38, 1.6], [39.4, 2.6], [39.4, 4.4], [37.6, 5.2], [14, 5.0]], 3.4, R_WHITE(), { bevel: 0.3 }));
-  g.add(slab([[14, 1.1], [36, 1.1], [36.6, 0.2], [36.6, -2.6], [35.4, -3.2], [14, -3.2]], 3.0, R_BLACK(), { bevel: 0.3 }));
-  g.add(box(22, 0.5, 3.1, E_GREY(), 25, 1.35)); // 두 덮개 사이 틈(회색 테)
-  g.add(slab([[18, -3.0], [31, -3.0], [29.4, -5.0], [19.6, -5.0]], 2.6, R_DARK(), { bevel: 0.3 })); // 아래 손받침
-  // 끝: 위 덮개 끝면과 아래 총구가 하늘색으로 빛남
-  g.add(box(0.4, 2.4, 3.0, R_CYAN(), 39.6, 3.4));
-  g.add(tube(1.2, 1.2, 36.4, 40.6, R_BLACK(), { y: -1.0, seg: 16 }));
-  g.add(tube(1.25, 1.25, 39.6, 40.4, R_CYAN(), { y: -1.0, seg: 16 })); // 총구 하늘색 고리
-  g.add(tube(0.75, 0.75, 40.5, 40.7, E_BORE(), { y: -1.0, seg: 14 }));
-  // ── 연두색 빛 띠: 몸통 가운데에서 앞 덮개 끝까지(양옆) + 하늘색 짧은 띠 ──
-  for (const z of [1, -1]) {
-    g.add(box(31, 1.7, 0.1, R_CHANNEL(), 22.5, 3.3, z * 1.93)); // 빛 띠가 들어간 짙은 청록 홈
-    g.add(box(31, 1.3, 0.12, E_LIME(), 22.5, 3.3, z * 1.99));
-    g.add(box(30, 0.3, 0.12, R_CORE(), 22.5, 3.3, z * 2.03)); // 빛 띠 가운데 흰빛
-    g.add(box(22, 0.35, 0.12, E_LIME(), 26, 2.2, z * 1.76));
-    g.add(box(4, 0.6, 0.12, E_LIME(), 1.5, 1.4, z * 1.96));
-  }
-  g.add(box(22, 0.35, 1.2, E_LIME(), 26, 5.15)); // 윗면 빛 줄
-  // ── 망원 조준경(개조 스코프를 달면 숨김): 받침 · 몸통 · 앞 큰 렌즈통 · 뒤 접안부 · 위 손잡이 ──
+  // 흰 윗몸통(앞이 조금 높고, 앞 끝은 비스듬히)
+  g.add(slab([[-9, -0.6], [31, -0.6], [33, 1.2], [33, 4.0], [30, 5.4], [7, 5.4], [4, 4.2], [-9, 4.2]], 3.6, E_WHITE(), { bevel: 0.3 }));
+  g.add(box(25, 0.6, 2.2, E_BLACK(), 18.5, 5.6)); // 윗면 검은 띠
+  // 옆면 푸른 빛 띠(양쪽)와 그 둘레 검은 테
+  sidePlates(g, chamfer(6.8, 0.7, 29.2, 4.3, 1.5), 0.2, E_BLACK(), 1.86);
+  sidePlates(g, chamfer(7.5, 1.2, 28.5, 3.8, 1.2), 0.3, E_GLOW(), 2.0);
+  // 검은 총열 덮개(아래) · 그 아래 짙은 회색 받침
+  g.add(slab([[2, -0.6], [31, -0.6], [31, -2.6], [28, -4.4], [6, -4.4], [2, -2.8]], 3.2, E_BLACK(), { bevel: 0.3 }));
+  g.add(slab([[6, -4.2], [27, -4.2], [25, -6.6], [9, -6.6]], 2.6, E_DARK(), { bevel: 0.35 }));
+  // 총구: 검은 덮개 + 위 총열(가늠쇠) · 아래 굵은 총열(안쪽이 푸르게 빛남)
+  g.add(slab([[32, -1.4], [35.5, -1.4], [35.5, 4.4], [32, 4.4]], 3.0, E_BLACK(), { bevel: 0.3 }));
+  g.add(tube(0.8, 0.8, 35, 38.2, E_BLACK(), { y: 3.1, seg: 14 }));
+  g.add(tube(1.25, 1.25, 35, 37.6, E_BLACK(), { y: 0.3, seg: 16 }));
+  g.add(tube(0.7, 0.7, 37.5, 37.7, E_BORE(), { y: 0.3, seg: 14 }));
+  g.add(slab([[33.4, 4.2], [35.2, 4.2], [35, 6.6], [34, 6.6]], 0.7, E_BLACK(), { bevel: 0.05 })); // 가늠쇠
+  // 가운데 육각 문양 · 그 위 가늠자
+  hexEmblem(g, -1.5, 1.8, 2.9, 3.8);
+  // 망원 조준경(개조 스코프를 달면 숨김): 받침 두 개 · 몸통 · 앞 큰 렌즈통 · 뒤 접안부 · 위 조절 손잡이 · 푸른 렌즈
   const sight = sub(g);
-  sight.add(box(6.5, 1.6, 2.0, R_BLACK(), -1.5, 6.2));
-  sight.add(tube(1.3, 1.3, -8, 5, R_BLACK(), { y: 8.4, seg: 18 }));
-  sight.add(tube(1.4, 2.2, 5, 8.6, R_BLACK(), { y: 8.4, seg: 18 }));
-  sight.add(tube(1.9, 1.5, -10.6, -8, R_BLACK(), { y: 8.4, seg: 18 }));
-  const lens = new THREE.Mesh(new THREE.CircleGeometry(1.9, 20), mat('#7ABFD8', { metal: 0.6, rough: 0.1, emissive: '#3E8FB0', intensity: 0.5 }));
-  lens.rotation.y = Math.PI / 2;
-  lens.position.set(8.65, 8.4, 0);
-  sight.add(lens);
-  sight.add(tube(0.6, 0.6, -0.8, 0.8, R_BLACK(), { y: 10.2, seg: 12 }).rotateZ(Math.PI / 2));
-  sight.add(box(1.6, 0.8, 1.6, R_BLACK(), 0, 10.3));
-  // ── 손잡이 · 방아쇠울 · 짧은 검은 탄창 · 하늘색 빛 고리 ──
-  g.add(slab([[-6, -4], [-10, -4], [-12.8, -13.6], [-12.0, -15.0], [-8.8, -14.4]], 3.0, R_BLACK(), { bevel: 0.35 }));
-  g.add(box(6.2, 0.45, 1.3, R_BLACK(), -3.2, -6.2));
-  g.add(box(0.5, 2.2, 1.3, R_BLACK(), -0.2, -5.1));
-  g.add(box(0.35, 1.8, 0.5, R_BLACK(), -4.4, -5.0)); // 방아쇠
-  const mag = magazine(g, [slab([[1, -4], [6, -4], [6.6, -9.6], [1.8, -10.2]], 2.6, R_BLACK(), { bevel: 0.25 })], [0.08, -1], [4, -10]);
-  for (const z of [1, -1]) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.32, 8, 24), R_CYAN());
-    ring.position.set(9, -1.9, z * 1.75);
-    g.add(ring);
-    const core = new THREE.Mesh(new THREE.CircleGeometry(1.2, 18), R_BLACK());
-    core.position.set(9, -1.9, z * 1.74);
-    if (z < 0) core.rotation.y = Math.PI;
-    g.add(core);
+  for (const x of [-5, 2]) sight.add(slab([[x - 1.4, 4.1], [x + 1.4, 4.1], [x + 1, 6.9], [x - 1, 6.9]], 1.8, E_BLACK(), { bevel: 0.1 }));
+  sight.add(tube(1.2, 1.2, -9, 5, E_BLACK(), { y: 8.0, seg: 18 }));
+  sight.add(tube(1.3, 2.0, 5, 8.4, E_BLACK(), { y: 8.0, seg: 18 }));
+  sight.add(tube(1.7, 1.4, -11.4, -9, E_BLACK(), { y: 8.0, seg: 18 }));
+  sight.add(box(1.6, 1.0, 1.6, E_BLACK(), -1.5, 9.4));
+  for (const [x, r, face] of [[8.45, 1.75, 1], [-11.45, 1.4, -1]]) {
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(r, 20), E_BORE());
+    lens.rotation.y = face * Math.PI / 2;
+    lens.position.set(x, 8.0, 0);
+    sight.add(lens);
   }
-  // ── 개머리판(개조 개머리판을 달면 숨김): 가운데가 크게 뚫린 흰 뼈대 · 아래 회색 테 · 뒤 검은 받침 ──
+  // 손잡이
+  g.add(slab([[-5, -0.6], [-9.8, -0.6], [-12.8, -12.2], [-12.2, -14.2], [-9.4, -13.6]], 3.0, E_BLACK(), { bevel: 0.35 }));
+  g.add(box(0.35, 1.8, 0.5, E_BLACK(), -4.4, -1.8)); // 방아쇠
+  // 개머리판(개조 개머리판을 달면 숨김): 흰 윗판 · 뒤쪽 짧은 푸른 띠 · 손잡이 뒤로 이어진 검은 테(가운데 큰 구멍)
   const stock = sub(g);
-  stock.add(slab([[-10, 4.6], [-10, -1.0], [-13.6, -8.4], [-33, -10.6], [-34, -10.6], [-34, 4.4], [-14, 5.0]], 3.2, R_WHITE(), {
-    bevel: 0.3, holes: [[[-13.4, 2.6], [-15.4, -6.0], [-31.4, -8.0], [-31.4, 2.4]]],
+  stock.add(slab([[-9, 4.2], [-9, -0.6], [-31, -0.6], [-32, 1.2], [-30.5, 3.4], [-12, 4.2]], 3.4, E_WHITE(), { bevel: 0.3 }));
+  sidePlates(stock, chamfer(-26.5, 1.0, -21.5, 2.6, 0.7), 0.3, E_GLOW(), 1.85);
+  stock.add(slab([[-10.2, -0.6], [-32, -0.6], [-32.2, -8.4], [-29, -11.8], [-13.4, -14.0], [-12.4, -11.6]], 3.0, E_BLACK(), {
+    bevel: 0.35, holes: [[[-12.4, -3.0], [-15.0, -10.8], [-28.4, -9.2], [-28.8, -3.0]]],
   }));
-  stock.add(slab([[-14.2, -7.8], [-33, -10.0], [-33, -10.8], [-14.6, -8.6]], 3.4, E_GREY(), { bevel: 0.1 }));
-  stock.add(box(1.4, 16, 3.6, R_BLACK(), -34.8, -3.1)); // 검은 받침
   g.userData = {
-    muzzle: [40.8, -1.0, 0], grip: { x: -8.4, y: -9.0, tilt: 0.28, w: 3.0, d: 3.6 }, support: { x: 24, y: -4.0, r: 3.0 }, mag,
-    mods: { size: 1, bore: 1.2, scope: [-1.5, 5.6], sight, stock, stockAt: [-10, 1.8], stockFit: { len: 22, top: 4.6, bottom: -10.6 } },
+    muzzle: [38.4, 0.3, 0], grip: { x: -7.7, y: -7.4, tilt: 0.32, w: 3.0, d: 3.6 }, support: { x: 17, y: -2.6, r: 3.0 },
+    mods: { size: 1, bore: 1.15, scope: [-2, 4.2], sight, stock, stockAt: [-9.4, 1.6], stockFit: { len: 20, top: 2.6, bottom: -9.6 } },
   };
   return g;
 }
