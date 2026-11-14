@@ -1,19 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-  <!-- 스토리 모드 3스테이지 적 건쉽(위에서 본 모습). 결과 화면 카드용. -->
-  <g stroke="#30353E" stroke-width="5" stroke-linejoin="round">
-    <rect x="94" y="96" width="14" height="92" rx="6" fill="#323C2E"/>
-    <rect x="76" y="176" width="50" height="14" rx="5" fill="#323C2E"/>
-    <rect x="30" y="90" width="140" height="22" rx="6" fill="#323C2E"/>
-    <rect x="26" y="78" width="26" height="40" rx="9" fill="#2A2E35"/>
-    <rect x="148" y="78" width="26" height="40" rx="9" fill="#2A2E35"/>
-    <ellipse cx="100" cy="92" rx="34" ry="60" fill="#4B5A44"/>
-    <ellipse cx="100" cy="52" rx="22" ry="22" fill="#9FD3F2"/>
-    <rect x="96" y="8" width="8" height="28" rx="3" fill="#2A2E35"/>
+  <!-- 스토리 모드 3스테이지 적 건쉽 'ISB 원반 포격정'(이 게임용 디자인, 위에서 본 모습, 기수가 위). 결과 화면 카드용. -->
+  <g stroke="#30353E" stroke-width="4" stroke-linejoin="round">
+    <!-- 날개 끝 고리 엔진 -->
+    <rect x="8" y="96" width="32" height="10" rx="3" fill="#24272D"/>
+    <rect x="160" y="96" width="32" height="10" rx="3" fill="#24272D"/>
+    <rect x="4" y="84" width="14" height="34" rx="6" fill="#6B717C"/>
+    <rect x="182" y="84" width="14" height="34" rx="6" fill="#6B717C"/>
+    <!-- 앞 조종석과 볼 포탑 -->
+    <path d="M86 50 L92 18 L100 10 L108 18 L114 50 Z" fill="#6B717C"/>
+    <circle cx="80" cy="34" r="10" fill="#6B717C"/>
+    <circle cx="120" cy="34" r="10" fill="#6B717C"/>
+    <!-- 원반 선체 -->
+    <ellipse cx="100" cy="104" rx="70" ry="62" fill="#4A4F58"/>
   </g>
-  <text x="100" y="104" font-family="system-ui, sans-serif" font-weight="700" font-size="18" text-anchor="middle" fill="#D56A26">ISB</text>
-  <g fill="#30353E" opacity="0.85">
-    <rect x="10" y="88" width="180" height="8" rx="4" transform="rotate(25 100 92)"/>
-    <rect x="10" y="88" width="180" height="8" rx="4" transform="rotate(115 100 92)"/>
+  <ellipse cx="100" cy="104" rx="66" ry="58" fill="none" stroke="#D56A26" stroke-width="4"/>
+  <path d="M60 70 L88 92 M140 70 L112 92" stroke="#D56A26" stroke-width="7" stroke-linecap="round"/>
+  <g stroke="#24272D" stroke-width="3" stroke-linecap="round">
+    <path d="M77 14 L77 2 M83 14 L83 2 M117 14 L117 2 M123 14 L123 2"/>
   </g>
-  <circle cx="100" cy="92" r="9" fill="#C9CDD2" stroke="#30353E" stroke-width="4"/>
+  <circle cx="100" cy="108" r="22" fill="#24272D"/>
+  <circle cx="100" cy="108" r="16" fill="none" stroke="#FF8A2A" stroke-width="5"/>
+  <path d="M100 92 L100 124 M86 100 L114 116 M86 116 L114 100" stroke="#6B717C" stroke-width="3"/>
+  <circle cx="34" cy="104" r="4" fill="#FF3B30"/>
+  <circle cx="166" cy="104" r="4" fill="#FF3B30"/>
+  <text x="100" y="152" font-family="system-ui, sans-serif" font-weight="700" font-size="16" text-anchor="middle" fill="#D56A26">ISB</text>
 </svg>

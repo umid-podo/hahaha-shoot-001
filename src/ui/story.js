@@ -35,7 +35,7 @@ function waveNote(wave) {
     return `${from} · ${w.name}(${w.interval}초마다 빨간 조준선을 따라 ${w.volley.count}발, 체력 절반 아래면 ${w.volley.rage}발) · 보조무기·수류탄 없음`;
   }
   if (wave.boss === 'deathstar') return `${from} · 거대 비행선 · ${WEAPONS.flak.name}(부채꼴 ${WEAPONS.flak.pellets}발)`;
-  if (wave.stage === 'sky') return `${from} · ${WEAPONS.gunship.name}(${WEAPONS.gunship.burst}점사)`;
+  if (wave.stage === 'sky') return `${from} · ${WEAPONS.gunship.name}(${WEAPONS.gunship.burst}점사) · 과냉각 · ${WEAPONS.gsmissile3.name}(유도 없음) · 고도를 바꿔 가며 싸움`;
   const levels = wave.agents?.some((a) => a.difficulty)
     ? ` · 기획 난이도 ${wave.agents.map((a) => DIFFICULTY_NAME[a.difficulty ?? 'normal']).join('·')}` : '';
   const kataGoal = wave.agents?.find((a) => a.kata)?.kata;

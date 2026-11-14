@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- 라이트닝(지구방위팀 전용기)을 위에서 본 모습: 은빛 동체, 뒤로 젖힌 날개, 파란 조종석, 엔진 불꽃 -->
+  <g transform="rotate(-45 60 60)">
+    <path d="M60 10 L66 30 L66 52 L104 76 L104 84 L66 72 L65 92 L78 102 L78 108 L60 103 L42 108 L42 102 L55 92 L54 72 L16 84 L16 76 L54 52 L54 30 Z" fill="#D7DEE6" stroke="#55606D" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M60 18 L63 30 L63 44 L57 44 L57 30 Z" fill="#3FA9F5" stroke="#1F5F8F" stroke-width="1.5"/>
+    <path d="M24 79 L54 64 L54 69 Z M96 79 L66 64 L66 69 Z" fill="#2E7BD6"/>
+    <ellipse cx="60" cy="112" rx="5" ry="6" fill="#FFB040"/>
+  </g>
+</svg>

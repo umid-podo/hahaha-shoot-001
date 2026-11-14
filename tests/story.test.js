@@ -10,7 +10,7 @@ import {
   LAST_WORDS, DEATHSTAR_NAME, JOHNSON_NAME, DRIVE_Y, driveLength, LIGHTNING_TIME, DEATHSTAR_CUTSCENE_TIME, MAX_ALLIES, allyPicks, extraAgents, normalizeAllyPicks, STAIRS_TIME, ROOF_STAIRS, CORRIDOR_STAIRS, checkpoint, normalizeStorySave, waveLabel, currentWave, COOP_SLOT, AGENT_WEAPON_CHOICES,
 } from '../src/game/story.js';
 import { glowingKey, GOAL, KATA_KEYS, DRONE_MOVES } from '../src/game/gunkata.js';
-import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER, SHIP, DRIVE, KATA, COVERS, MAX_SPEED } from '../src/game/config.js';
+import { TICK, RAIL_Y, WEAPONS, SECONDARY_IDS, TURRET, COVER, SHIP, DRIVE, KATA, COVERS, MAX_SPEED, SKY_ALT } from '../src/game/config.js';
 const WARN_TIME = KATA.warn, DAMAGE = KATA.damage;
 
 function story(settings, seed = 7) {
@@ -309,7 +309,7 @@ test('내려오는 중인 요원은 맞지 않고 움직이지 않으며, AI도 
 
 test('스토리 밸런스: 웨이브별 체력·난이도·피해·탄속·이동 속도·히트박스, 보스 보조무기', () => {
   const settings = defaultStory();
-  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 10000, 300, 250, 200, 800, 200, 250, 200, 900]);
+  assert.deepEqual(settings.waves.map((w) => w.hp), [500, 300, 200, 800, 500, 300, 200, 600, 250, 300, 350, 3000, 300, 250, 200, 800, 200, 250, 200, 900]);
   assert.deepEqual(settings.waves.map((w) => w.difficulty), Array(20).fill('normal'), '일반 요원은 모두 보통');
   settings.waves[0] = { ...settings.waves[0], hp: 1234, difficulty: 'hard', damage: 200, bulletSpeed: 150, speed: 50, radius: 45 };
   settings.waves[3].secondary = 'shotgun';
@@ -1215,7 +1215,9 @@ test('공중전: 적은 건쉽, 아이템은 미사일(유도 없음), 보조무
   for (const g of gunships) {
     assert.equal(g.characterId, 'gunship');
     assert.equal(g.primary, 'gunship');
-    assert.ok(g.primaryOnly);
+    assert.ok(!g.primaryOnly, '적 건쉽도 과냉각·미사일 3연발을 쓴다');
+    assert.deepEqual(g.secondaries, ['overcool']);
+    assert.equal(g.item, 'gsmissile3');
   }
   // 미사일: 아이템 버튼으로 쏘는 탄(유도 없음)
   for (const g of gunships) g.hp = 99999;
@@ -1683,11 +1685,11 @@ test('건 카타 끄기: 요원은 바로 처치 컷씬, 보스는 바로 엔딩
   assert.equal(defaultStory().gunkata, true);
 });
 
-test('데스스타 체력 10000(예전 기본값 3000으로 저장돼 있어도 10000), 내 기본값을 바탕으로 저장값을 덮음', () => {
-  assert.equal(defaultStory().waves[11].hp, 10000);
+test('데스스타 체력 3000(예전 기본값 10000으로 저장돼 있어도 3000), 내 기본값을 바탕으로 저장값을 덮음', () => {
+  assert.equal(defaultStory().waves[11].hp, 3000);
   const old = defaultStory();
-  old.waves[11].hp = 3000;
-  assert.equal(normalizeStory(old).waves[11].hp, 10000);
+  old.waves[11].hp = 10000;
+  assert.equal(normalizeStory(old).waves[11].hp, 3000);
   const changed = defaultStory();
   changed.waves[11].hp = 5000;
   assert.equal(normalizeStory(changed).waves[11].hp, 5000);
@@ -1700,7 +1702,7 @@ test('데스스타 체력 10000(예전 기본값 3000으로 저장돼 있어도 
   assert.equal(s.waves[0].hp, 777);
   assert.equal(s.waves[0].difficulty, 'hard');
   const { match } = sky(11);
-  assert.equal(enemies(match)[0].maxHp, 10000);
+  assert.equal(enemies(match)[0].maxHp, 3000);
 });
 
 test('건 카타 수련장: 훈련용 전투 로봇과 끝없이 건 카타, 체력 무한, 연속 성공 기록', async () => {
@@ -1758,4 +1760,118 @@ test('건 카타 시간 조절: 밸런스의 버튼 시간제한·쉬는 시간�
   resetAll();
   assert.equal(KATA.warn, 1.5);
   assert.deepEqual(KATA.gap, [0.55, 0.55]);
+});
+
+test('공중전 기체: 강습 건쉽을 고르면 사지 않아도 하늘에서 라이트닝 대신 건쉽(게틀링 포함)을 타고, 도로에서 원래 캐릭터로 돌아온다', () => {
+  const pick = { characterId: 'earth-arrow', weapon: 'dual', skyCraft: 'assault-gunship' };
+  const match = createStoryMatch(pick, undefined, 5, { wave: 11, hp: 2500 }, null, 1);
+  runOut(match, {}, ['countdown']);
+  const inputs = createInputs(match.players);
+  match.jetTimer = Infinity;
+  untilFight(match, inputs);
+  const [P1, A1] = match.players;
+  assert.ok(P1.flier && !P1.plane, '건쉽을 탐');
+  assert.equal(P1.characterId, 'earth-arrow', '캐릭터는 그대로(공중전에서만 건쉽)');
+  assert.equal(P1.maxHp, 3000);
+  assert.equal(P1.hp, 2500, '저장한 건쉽 체력으로 이어 함');
+  assert.equal(P1.primary, 'gsrockets');
+  assert.deepEqual(P1.secondaries, ['gsmissile']);
+  assert.equal(P1.item, 'gsgatling');
+  assert.ok(A1.plane && !A1.flier, 'AI 동료는 라이트닝');
+  // 데스스타(체력 3000)를 쓰러뜨리면 도로에서 원래 캐릭터로
+  assert.equal(enemies(match)[0].maxHp, 3000);
+  enemies(match)[0].hp = 0;
+  step(match, inputs);
+  while (match.cutscene && !match.cutscene.switched) step(match, inputs);
+  assert.equal(match.story.stage, 'road');
+  assert.ok(!P1.flier && !P1.plane);
+  assert.equal(P1.primary, 'dual');
+  assert.equal(P1.item, 'grenade');
+  assert.equal(P1.maxHp, 1000);
+  assert.ok(P1.hp <= P1.maxHp);
+});
+
+test('공중전 기체를 고르지 않으면(기본) 라이트닝', () => {
+  const { match } = sky(8);
+  const P1 = match.players[0];
+  assert.ok(P1.plane && !P1.flier);
+});
+
+test('공중전 적 건쉽: 유도 없는 미사일 3연발(아이템)과 과냉각(보조무기)을 쓴다', () => {
+  const { match, inputs } = sky();
+  const g = enemies(match)[0];
+  for (const e of enemies(match)) e.hp = 99999;
+  match.players[0].hp = 99999;
+  // 미사일 3연발: 한 번 누르면 burstGap마다 3발, 유도 없음
+  inputs[g.id].item = true;
+  const ev = [];
+  for (let t = 0; t < 0.6; t += TICK) { inputs[g.id].aiming = false; ev.push(...step(match, inputs)); }
+  assert.equal(ev.filter((e) => e.type === 'fire' && e.weapon === 'gsmissile3' && e.playerId === g.id).length, 3, '3연발');
+  const ms = match.projectiles.filter((b) => b.weapon === 'gsmissile3');
+  assert.ok(ms.length > 0 && ms.every((b) => !b.homing || b.homing.turnRate === g.aimAssist), '유도 기능 없음');
+  assert.ok(WEAPONS.gsmissile3.splash && !WEAPONS.gsmissile3.homing);
+  // 과냉각: 보조무기 칸을 고르면 켜진다
+  inputs[g.id].select = 'secondary';
+  const on = step(match, inputs);
+  assert.ok(on.some((e) => e.type === 'overcool' && e.playerId === g.id));
+  assert.ok(g.boost > 0);
+});
+
+test('공중전 적 건쉽 AI는 쏘는 동안 과냉각을 켜고, 미사일 3연발도 쏜다', () => {
+  const { match, inputs } = sky();
+  for (const e of enemies(match)) e.hp = 99999;
+  match.players[0].hp = 99999;
+  const ev = [];
+  for (let t = 0; t < 20; t += TICK) {
+    for (const brain of match.story.brains) updateAI(brain, match, inputs);
+    ev.push(...step(match, inputs));
+    match.players[0].hp = 99999;
+  }
+  assert.ok(ev.some((e) => e.type === 'overcool' && e.playerId !== 'P1'), '과냉각');
+  assert.ok(ev.some((e) => e.type === 'fire' && e.weapon === 'gsmissile3'), '미사일 3연발');
+});
+
+test('공중전 고도: 라이트닝은 점프키로 오르고 회피키로 내리며(범위 안), 높이가 다르면 수평으로 쏜 탄은 빗나가고 AI 건쉽은 고도를 맞춰 온다', () => {
+  const { match, inputs } = sky();
+  const [P1] = match.players;
+  for (const e of enemies(match)) e.hp = 99999;
+  P1.hp = 99999;
+  assert.equal(P1.z, SKY_ALT.start);
+  inputs.P1.jumpHeld = true;
+  for (let t = 0; t < 3; t += TICK) step(match, inputs);
+  inputs.P1.jumpHeld = false;
+  assert.equal(P1.z, SKY_ALT.max, '최고 고도까지');
+  inputs.P1.descendHeld = true;
+  for (let t = 0; t < 5; t += TICK) step(match, inputs);
+  inputs.P1.descendHeld = false;
+  assert.equal(P1.z, SKY_ALT.min, '최저 고도까지');
+  // AI 건쉽은 상대 높이 근처로 내려온다
+  for (let t = 0; t < 4; t += TICK) {
+    for (const brain of match.story.brains) updateAI(brain, match, inputs);
+    step(match, inputs);
+    P1.hp = 99999;
+  }
+  for (const g of enemies(match)) assert.ok(Math.abs(g.z - P1.z) <= 260, `건쉽 고도 ${g.z} · 내 고도 ${P1.z}`);
+  // 높이 차이가 크면 수평으로 쏜 탄은 지나간다
+  const g = enemies(match)[0];
+  g.z = SKY_ALT.max; P1.z = SKY_ALT.min;
+  const hp = g.hp;
+  const b = spawnProjectile(match, P1, Math.atan2(g.y - P1.y, g.x - P1.x), 'lightning');
+  delete b.vz;
+  for (let t = 0; t < 1; t += TICK) { match.projectiles = match.projectiles.filter((q) => q === b || q.ownerId !== g.id); step(match, inputs); }
+  assert.equal(g.hp, hp, '빗나감');
+});
+
+test('공중전: 사람도 시선을 돌리지 않았으면 조준 방향의 적 높이로 자동으로 기울여 쏴서 고도가 달라도 맞힌다', () => {
+  const { match, inputs } = sky();
+  const [P1] = match.players;
+  const g = enemies(match)[0];
+  for (const e of enemies(match)) e.hp = 99999;
+  P1.z = SKY_ALT.min; g.z = SKY_ALT.max;
+  P1.pitch = 0;
+  const b = spawnProjectile(match, P1, Math.atan2(g.y - P1.y, g.x - P1.x), 'lightning');
+  assert.ok(b.vz > 0, '위로 기울어 날아감');
+  const hp = g.hp;
+  for (let t = 0; t < 1 && g.hp === hp; t += TICK) { match.projectiles = match.projectiles.filter((q) => q === b); step(match, inputs); }
+  assert.ok(g.hp < hp, '맞힘');
 });

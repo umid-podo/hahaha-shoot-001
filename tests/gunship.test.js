@@ -5,7 +5,7 @@ import { createMatch, createInputs } from '../src/game/state.js';
 import { step } from '../src/game/update.js';
 import { createAI, updateAI } from '../src/game/ai.js';
 import { createModStore, VEHICLE_SHOP, SHOP_BY_ID } from '../src/game/mods.js';
-import { TICK, WEAPONS, CHARACTERS, FLIGHT, MAX_HP } from '../src/game/config.js';
+import { TICK, WEAPONS, CHARACTERS, FLIGHT, MAX_HP, SKY_ALT } from '../src/game/config.js';
 
 const GUNSHIP = CHARACTERS.find((c) => c.id === 'assault-gunship');
 
@@ -41,14 +41,15 @@ test('상점에서 100코인으로 사면 캐릭터 선택에 나온다(사기 �
   assert.ok(store.ownsCharacter(CHARACTERS.find((c) => c.id === 'earth-arrow')), '일반 캐릭터는 언제나');
 });
 
-test('강습 건쉽: 체력이 월등히 높고 주무기는 계속 쏘는 미사일 5연발(발당 7), 보조무기는 유도미사일 50, 수류탄 없음', () => {
+test('강습 건쉽: 체력이 월등히 높고 주무기는 계속 쏘는 미사일 5연발(발당 7), 보조무기는 유도미사일 50, 아이템은 수류탄 대신 게틀링', () => {
   const others = CHARACTERS.filter((c) => !c.hidden).map((c) => c.maxHp);
   assert.ok(GUNSHIP.maxHp >= 2 * Math.max(...others) && GUNSHIP.maxHp >= 6 * MAX_HP, `체력 ${GUNSHIP.maxHp}`);
   const { P1 } = playing({ weapon: 'rpg', secondaries: ['katana'] });
   assert.equal(P1.hp, GUNSHIP.maxHp);
   assert.equal(P1.primary, 'gsrockets', '고른 무기와 상관없이 미사일 5연발');
   assert.deepEqual(P1.secondaries, ['gsmissile']);
-  assert.ok(P1.flier && P1.noItem);
+  assert.ok(P1.flier && !P1.noItem);
+  assert.equal(P1.item, 'gsgatling', '수류탄 대신 게틀링');
   assert.ok(WEAPONS.gsrockets.autoFire, '늘 계속 쏜다');
   assert.equal(WEAPONS.gsrockets.damage, 7, '미사일 한 발 7');
   assert.equal(WEAPONS.gsrockets.splash.damage, 7);
@@ -228,7 +229,7 @@ test('미사일 5연발은 공중에서 정확히 3바퀴 돈 뒤 유도된다',
   assert.ok(r.z > 0, '공중에서');
 });
 
-test('공중전(하늘): 강습 건쉽은 라이트닝 대신 건쉽 그대로 싸운다(무기 그대로, 다른 비행기와 같은 높이)', async () => {
+test('공중전(하늘): 강습 건쉽은 라이트닝 대신 건쉽 그대로 싸운다(무기 그대로, 공중전 고도 범위 안에서 오르내림)', async () => {
   const { createStoryMatch } = await import('../src/game/story.js');
   const pick = { characterId: 'assault-gunship', weapon: 'rifle' };
   const match = createStoryMatch(pick, undefined, 3, { wave: 8, hp: 3000, skip: true });
@@ -243,9 +244,34 @@ test('공중전(하늘): 강습 건쉽은 라이트닝 대신 건쉽 그대로 �
   match.phase = 'playing';
   inputs.P1.jumpHeld = true;
   for (let i = 0; i < 120; i++) { for (const p of match.players) inputs[p.id] ??= createInputs([p])[p.id]; step(match, inputs); }
-  assert.equal(P1.z, 0, '하늘에서는 고도를 바꾸지 않음');
+  assert.equal(P1.z, SKY_ALT.max, '하늘에서도 고도를 올림(공중전 최고 고도까지)');
   // 다른 주인공(라이트닝)은 그대로
   const coop = createStoryMatch({ characterId: 'earth-arrow', weapon: 'rifle' }, undefined, 3, { wave: 8, hp: 500, skip: true });
   assert.equal(coop.players[0].plane, true);
   assert.equal(coop.players[0].primary, 'lightning');
+});
+
+test('강습 건쉽 게틀링(아이템): 누르고 있는 동안 탄속이 매우 빠른 총알을 연사하고, 떼면 멈춘다', () => {
+  const g = WEAPONS.gsgatling;
+  assert.ok(g.speed >= WEAPONS.rifle.speed * 3, `탄속 ${g.speed}`);
+  assert.ok(g.interval <= 0.06, '연사');
+  const { match, inputs, P1 } = playing();
+  P1.cooldowns.gsmissile = 999;
+  const gat = (ev) => ev.filter((e) => e.type === 'fire' && e.weapon === 'gsgatling').length;
+  inputs.P1.item = true;
+  inputs.P1.itemHeld = true;
+  const held = run(match, inputs, 0.5, () => { inputs.P1.itemHeld = true; });
+  assert.ok(gat(held) >= 8, `0.5초에 ${gat(held)}발`);
+  const bullet = match.projectiles.find((b) => b.weapon === 'gsgatling');
+  assert.ok(bullet && Math.hypot(bullet.vx, bullet.vy) >= g.speed * 0.9, '빠른 탄');
+  inputs.P1.itemHeld = false;
+  const after = run(match, inputs, 0.5);
+  assert.equal(gat(after), 0, '떼면 멈춤');
+  // 수류탄은 누르고 있어도 한 번만
+  const other = createMatch({ P1: { characterId: 'earth-arrow', weapon: 'rifle' }, P2: {} }, 1, { wide: true });
+  other.phase = 'playing'; other.jetTimer = Infinity;
+  const oi = createInputs(other.players);
+  oi.P1.item = true;
+  const ev = run(other, oi, 0.5, () => { oi.P1.itemHeld = true; });
+  assert.equal(ev.filter((e) => e.type === 'fire' && e.weapon === 'grenade').length, 1);
 });

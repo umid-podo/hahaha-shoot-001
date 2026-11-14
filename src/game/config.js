@@ -342,6 +342,13 @@ export const WEAPONS = {
     splash: { damage: 7, radius: 90 }, homing: { turnRate: 6, vertical: true }, life: 5.5,
     pattern: { kind: 'swarm', spread: 100, turns: 3, omega: 12, rise: 160 },
   },
+  /**
+   * 게틀링(강습 건쉽 아이템, 수류탄 대신): 아이템 버튼을 누르고 있는 동안(hold) interval초마다 탄속이 매우 빠른 총알을 연사한다.
+   * 앞부분 총열 묶음이 돌며 쏜다
+   */
+  gsgatling: {
+    id: 'gsgatling', name: '게틀링', interval: 0.05, damage: 4, speed: 3200, burst: 1, hold: true,
+  },
   // ── 스토리 모드 3스테이지(하늘) 공중전 ──
   // 라이트닝(주인공 전용기) 기관포: 20mm·12.7mm 기관포를 한꺼번에 쏜다(2발이 나란히)
   lightning: { id: 'lightning', name: '라이트닝 기관포', interval: 0.16, damage: 9, speed: 1300, burst: 1, arrows: 2, arrowGap: 30 },
@@ -351,6 +358,11 @@ export const WEAPONS = {
   missile: {
     id: 'missile', name: '미사일', interval: 6, damage: 60, speed: 950, burst: 1,
     splash: { damage: 25, radius: 150 },
+  },
+  // ISB 건쉽 미사일 3연발(아이템): 유도 없이 똑바로 날아가는 미사일 3발을 burstGap 간격으로 연달아 쏜다. 맞거나 끝에서 터진다
+  gsmissile3: {
+    id: 'gsmissile3', name: '미사일 3연발', interval: 7, damage: 22, speed: 900, burst: 3, burstGap: 0.18, life: 1.4,
+    splash: { damage: 10, radius: 120 },
   },
   // ISB 건쉽 기관포
   gunship: { id: 'gunship', name: '건쉽 기관포', interval: 0.8, damage: 14, speed: 820, burst: 2, burstGap: 0.12 },
@@ -377,6 +389,12 @@ for (const w of Object.values(WEAPONS)) {
  * enemyFlyIn은 건쉽이 화면 위에서 날아 들어오는 시간(초), dsFirstVolley는 데스스타 전투 시작 뒤 첫 미사일까지(초).
  */
 export const SKY = { planeSpeed: 1.3, enemyFlyIn: 1.2, dsFirstVolley: 2.5 };
+/**
+ * 공중전(하늘) 고도: 라이트닝·강습 건쉽·적 건쉽 모두 점프키(위)·회피키(아래)로 고도를 바꾼다(AI도).
+ * start: 시작 고도(예전 공중전 높이가 0), min·max: 오르내릴 수 있는 범위(아래로도 내려갈 수 있다), climb: 초당 오르내리는 빠르기. 데스스타는 start 높이에 떠 있다.
+ * 높이가 다르면 위아래로 겨눠야 맞는다(커다란 비행체는 몸 크기만큼 위아래로도 크다).
+ */
+export const SKY_ALT = { start: 0, min: -400, max: 500, climb: 450 };
 /**
  * 밸런스 메뉴에서 조정하는 공통 규칙.
  * swapTime: 경기 중 무기 교체 후 다시 쏠 수 있을 때까지의 시간(초). 교체로 쿨타임을 건너뛰지 못하게 한다.
@@ -460,16 +478,17 @@ export const CHARACTERS = [
     image: 'assets/characters/gunship.svg',
   },
   {
-    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 10000, radius: 130, speed: 70 * 2,
+    id: 'deathstar', name: '데스스타', hidden: true, aircraft: true, weapon: 'flak', maxHp: 3000, radius: 130, speed: 70 * 2,
     image: 'assets/characters/deathstar.svg',
   },
   /**
    * 강습 건쉽: 상점(총기 개조 → 상점 → 탈것)에서 100코인에 사면 캐릭터 선택에 나온다(shop). 체력이 매우 높고,
-   * 주무기는 계속 쏘는 미사일 5연발, 보조무기는 유도미사일로 고정(loadout, 수류탄 없음). flier: 스테이지 위를 날아다니며
-   * 고도를 올리고 내린다(점프키 위로, 회피키 아래로). 1인칭 대신 뒤에서 보는 3인칭 화면.
+   * 주무기는 계속 쏘는 미사일 5연발, 보조무기는 유도미사일로 고정(loadout), 아이템은 수류탄 대신 게틀링(item, 누르고 있는 동안 연사).
+   * flier: 스테이지 위를 날아다니며 고도를 올리고 내린다(점프키 위로, 회피키 아래로). 1인칭 대신 뒤에서 보는 3인칭 화면.
+   * 사지 않아도 스토리 공중전(3스테이지 하늘)에서는 라이트닝 대신 탈 수 있다(skyCraft).
    */
   {
-    id: 'assault-gunship', name: '강습 건쉽', hidden: true, shop: 'vehicle-gunship', flier: true, noItem: true,
+    id: 'assault-gunship', name: '강습 건쉽', hidden: true, shop: 'vehicle-gunship', flier: true, item: 'gsgatling',
     loadout: { primary: 'gsrockets', secondaries: ['gsmissile'] },
     maxHp: 3000, radius: 80, speed: MAX_SPEED * 1.2, image: 'assets/characters/assault-gunship.svg',
   },

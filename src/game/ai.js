@@ -1,4 +1,7 @@
-import { MIN_X, MAX_X, BULLET_RADIUS, TICK, WEAPONS, RULES, ZONE, JUMP, SHOT_HEIGHT, secondarySlot } from './config.js';
+import { MIN_X, MAX_X, BULLET_RADIUS, TICK, WEAPONS, RULES, ZONE, JUMP, SHOT_HEIGHT, SKY_ALT, secondarySlot } from './config.js';
+
+/** 공중전 AI가 상대 고도 둘레로 흔드는 폭 */
+const SKY_ALT_WANDER = 110;
 import { segmentRectTime } from './collision.js';
 import { lineBlocked } from './terrain.js';
 import { createRng, between } from './state.js';
@@ -262,6 +265,26 @@ export function updateAI(ai, match, inputs, dt = TICK) {
   if (ai.hopTimer <= 0) {
     frame.jump = true;
     ai.hopTimer = between(ai.rng, ai.diff.hop ?? [3, 6]);
+  }
+
+  // 공중전(하늘): 상대 높이 근처(조금 위아래로 흔들며)로 고도를 맞추고, 곧 닿을 탄이 있으면 위나 아래로 비켜 난다
+  if (match.story?.stage === 'sky' && me.characterId !== 'deathstar') {
+    ai.altTimer = (ai.altTimer ?? 0) - dt;
+    if (ai.altTimer <= 0) {
+      ai.altOffset = (ai.rng() - 0.5) * 2 * SKY_ALT_WANDER;
+      ai.altTimer = between(ai.rng, [1.5, 3.5]);
+    }
+    if (soon.length && ai.rng() < (ai.diff.jump ?? 0) * dt * 6) ai.altOffset = ((me.z ?? 0) > (target.z ?? 0) ? 1 : -1) * SKY_ALT_WANDER;
+    const goal = Math.max(SKY_ALT.min, Math.min(SKY_ALT.max, (target.z ?? SKY_ALT.start) + (ai.altOffset ?? 0)));
+    const gap = goal - (me.z ?? 0);
+    frame.flyDir = Math.abs(gap) < 25 ? 0 : Math.sign(gap) * Math.min(1, Math.abs(gap) / 150);
+  } else frame.flyDir = undefined;
+
+  // 과냉각(공중전 적 건쉽): 쓸 수 있으면 쏘는 동안 가끔 켠다(주무기 연사가 빨라짐)
+  const boostIdx = (me.secondaries ?? []).findIndex((id) => WEAPONS[id]?.boost);
+  if (!me.primaryOnly && boostIdx >= 0 && !(me.boost > 0) && !((me.cooldowns[me.secondaries[boostIdx]] ?? 0) > 0) && ai.firing) {
+    ai.boostTimer = (ai.boostTimer ?? between(ai.rng, [1, 4])) - dt;
+    if (ai.boostTimer <= 0) { frame.select = secondarySlot(boostIdx); ai.boostTimer = undefined; }
   }
 
   // 무기 전환: 가끔 주무기 ↔ 보조무기(가진 것 중 쓸 수 있는 하나). 기관단총이 과열되거나 든 보조무기가 쿨타임이면 바로 주무기로,

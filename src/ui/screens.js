@@ -1,4 +1,5 @@
 import { createWorkshop } from './workshop.js';
+import { SKY_GUNSHIP } from '../game/state.js';
 import { modStore } from '../game/mods.js';
 import {
   TEAM_NAME, TEAM_COLOR, CHARACTERS, WEAPONS, PRIMARY_IDS, SECONDARY_IDS, DEFAULT_SECONDARY, MAX_SECONDARIES, normalizeSecondaries, TICK, MAPS,
@@ -46,7 +47,7 @@ function totals(stats) {
  * 자리 하나의 캐릭터·주무기 선택 목록(li). 고를 때마다 onPick(slotId, key, value).
  * heading을 주면 자리 이름 대신 쓴다.
  */
-function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}`) {
+function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}`, { sky = false } = {}) {
   const pick = loadout[s.id];
   const li = document.createElement('li');
   li.className = `team-${s.team}`;
@@ -158,6 +159,7 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
     if (character?.loadout) {
       const { primary, secondaries } = character.loadout;
       droneNote.textContent = `${character.name} 전용 · 체력 ${character.maxHp} · 주무기 ${WEAPONS[primary].name} · 보조무기 ${secondaries.map((id) => WEAPONS[id].name).join('·')}`
+        + (character.item ? ` · 아이템 ${WEAPONS[character.item].name}(누르고 있으면 연사)` : '')
         + ' · 하늘을 날며 점프키로 위로, 회피키로 아래로(3인칭)';
     } else if (character?.weapon) {
       const w = WEAPONS[character.weapon];
@@ -170,8 +172,49 @@ function slotItem(s, loadout, onPick, heading = `${s.id} · ${TEAM_NAME[s.team]}
   keys.textContent = `키보드: ${KEY_LABELS[s.id]}`;
   const pad = document.createElement('small');
   pad.textContent = `${s.id === 'P1' ? '첫 번째' : '두 번째'} ${PAD_LABEL}`;
-  li.append(title, chars, weapons, droneNote, keys, pad);
+  li.append(title, chars, weapons, droneNote, ...(sky ? [skyCraftRow(s, loadout, onPick)] : []), keys, pad);
   return li;
+}
+
+/**
+ * 공중전 기체 고르기(스토리 모드 3스테이지 하늘): 라이트닝 또는 강습 건쉽. 강습 건쉽은 상점에서 사지 않아도 공중전에서는 탈 수 있다.
+ * 땅 스테이지(4스테이지부터)에서는 위에서 고른 캐릭터로 돌아간다. 스토리 모드일 때만 보인다(.sky-craft).
+ */
+const SKY_CRAFTS = [
+  { id: 'lightning', name: '라이트닝', info: '전용기 · 라이트닝 기관포·과냉각·미사일', image: 'assets/ui/lightning.svg' },
+  { id: SKY_GUNSHIP, name: '강습 건쉽', info: '구매 없이 공중전에서 · 체력 3000 · 미사일 5연발·유도미사일·게틀링', image: 'assets/characters/assault-gunship.svg' },
+];
+function skyCraftRow(s, loadout, onPick) {
+  const box = document.createElement('div');
+  box.className = 'sky-craft';
+  const heading = document.createElement('div');
+  heading.className = 'field-label';
+  heading.textContent = '공중전 기체 (스토리 3스테이지 하늘)';
+  const row = document.createElement('div');
+  row.className = 'choices characters';
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', `${s.id} 공중전 기체`);
+  const now = () => (loadout[s.id].skyCraft === SKY_GUNSHIP ? SKY_GUNSHIP : 'lightning');
+  const buttons = SKY_CRAFTS.map((c) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'choice';
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = c.image;
+    const name = document.createElement('span');
+    name.textContent = c.name;
+    const info = document.createElement('small');
+    info.textContent = c.info;
+    btn.append(img, name, info);
+    btn.addEventListener('click', () => { onPick(s.id, 'skyCraft', c.id); sync(); });
+    return { c, btn };
+  });
+  function sync() { for (const { c, btn } of buttons) btn.setAttribute('aria-pressed', String(now() === c.id)); }
+  sync();
+  row.append(...buttons.map((b) => b.btn));
+  box.append(heading, row);
+  return box;
 }
 
 /** 메뉴·준비·일시정지·결과 DOM 화면. 'pause'와 'result'는 경기 화면 위에 겹친다. */
@@ -333,9 +376,9 @@ export function createScreens(handlers) {
      * coopLoadout은 스토리 모드 2인 협동 P2의 선택({ P2 }). 2인 협동을 고르면 P2 칸이 보인다.
      */
     showSingle(slot, loadout, single, story, coopLoadout) {
-      const partner = slotItem(COOP_SLOT, coopLoadout, handlers.onCoopPick, `P2 · 2인 협동 · ${TEAM_NAME[COOP_SLOT.team]}`);
+      const partner = slotItem(COOP_SLOT, coopLoadout, handlers.onCoopPick, `P2 · 2인 협동 · ${TEAM_NAME[COOP_SLOT.team]}`, { sky: true });
       partner.id = 'single-p2';
-      $('#single-player').replaceChildren(slotItem(slot, loadout, handlers.onPick, `플레이어 · ${TEAM_NAME[slot.team]}`), partner);
+      $('#single-player').replaceChildren(slotItem(slot, loadout, handlers.onPick, `플레이어 · ${TEAM_NAME[slot.team]}`, { sky: true }), partner);
       singleSetup.open(single);
       storySetup.open(story);
       show('single');

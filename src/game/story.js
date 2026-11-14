@@ -1,8 +1,8 @@
 import {
   ARENA_WIDTH, RAIL_Y, MIN_X, MAX_X, PRIMARY_IDS, SECONDARY_IDS, MUZZLE_OFFSET, COUNTDOWN, TURRET, TURRETS, CHARACTERS,
-  MAX_SPEED as MAX_SPEED_BASE, SKY, TANK, SHIP, DRIVE, RULES, WEAPONS,
+  MAX_SPEED as MAX_SPEED_BASE, SKY, SKY_ALT, TANK, SHIP, DRIVE, RULES, WEAPONS,
 } from './config.js';
-import { SLOTS, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers, between, widen } from './state.js';
+import { SLOTS, SKY_GUNSHIP, characterOf, createPlayer, createInput, createMatchWith, addStats, createRng, createCovers, between, widen } from './state.js';
 import { applyMap } from './maps.js';
 import { createAI, AI_CHARACTERS, DIFFICULTY } from './ai.js';
 
@@ -168,9 +168,9 @@ export function defaultStory() {
   const waves = [
     agent(500), agent(300), agent(200), { ...agent(800), secondary: 'random' },
     agent(500), agent(300), agent(200), { ...agent(600), radius: 48 },
-    // 하늘: 건쉽(히트박스 46), 데스스타(체력 10000, 히트박스 130)
+    // 하늘: 건쉽(히트박스 46), 데스스타(체력 3000, 히트박스 130)
     { ...agent(250), radius: 46 }, { ...agent(300), radius: 46 }, { ...agent(350), radius: 46 },
-    { ...agent(10000), radius: 130 },
+    { ...agent(3000), radius: 130 },
     // 도로: 보스 윌슨 요원 체력 800
     agent(300), agent(250), agent(200), agent(800),
     // 대교: 보스 존슨 요원 체력 900
@@ -180,8 +180,8 @@ export function defaultStory() {
   return { gunkata: true, waves: waves.map((w, i) => ({ ...w, weapons: defaultWeapons(i) })) };
 }
 
-/** 예전 기본값: 저장값이 이 값이면 바뀐 새 기본값을 쓴다(웨이브 번호 → { 칸: 예전 기본값 }). 데스스타 체력 3000 → 10000 */
-const OLD_DEFAULTS = { 11: { hp: 3000 } };
+/** 예전 기본값: 저장값이 이 값이면 바뀐 새 기본값을 쓴다(웨이브 번호 → { 칸: 예전 기본값 }). 데스스타 체력 10000 → 3000 */
+const OLD_DEFAULTS = { 11: { hp: 10000 } };
 /** 예전 난이도 기본값(쉬움·기획대로). 저장값이 이 값이면 새 기본값(보통)을 쓴다 */
 const OLD_DIFFICULTY = { 5: 'mixed', 6: 'easy', 8: 'easy', 16: 'easy', 17: 'mixed', 18: 'easy' };
 
@@ -338,7 +338,8 @@ export function createStoryMatch(playerPick, settings = defaultStory(), seed = D
     heroes.forEach((p, i) => {
       const hp = Number(i === 0 ? resume.hp : resume.hp2);
       if (!Number.isFinite(hp)) return;
-      p.hp = Math.min(p.maxHp, Math.max(0, Math.round(hp)));
+      p.savedHp = Math.max(0, Math.round(hp)); // 공중전에서 강습 건쉽(체력이 더 큼)을 타고 저장했으면 그 체력으로 이어 한다
+      p.hp = Math.min(p.maxHp, p.savedHp);
       if (p.hp === 0) p.alive = false;
     });
   }
@@ -465,6 +466,11 @@ function spawnWave(match, inputs, index) {
       p.y = CHUTE_FROM_Y;
       p.carX = x;
     }
+    // 하늘: 모두 같은 시작 고도에서. 적 건쉽은 과냉각(보조무기)과 유도 없는 미사일 3연발(아이템)도 쓴다
+    if (sky) {
+      p.z = SKY_ALT.start; p.vz = 0;
+      if (!deathstar) Object.assign(p, { primaryOnly: false, secondary: 'overcool', secondaries: ['overcool'], item: 'gsmissile3' });
+    }
     // 존슨 요원은 일반 사격 대신 조준선 저격을 story.js가 쏜다(updateJohnsonSniper)
     if (johnson) { p.scripted = true; story.sniper = null; }
     // 쓰러질 때 하는 한마디(기획서의 요원마다 대사)
@@ -545,7 +551,7 @@ function setupSky(match, { heal = true } = {}) {
   list.forEach((p, i) => {
     if (!p.flier) return;
     Object.assign(p, {
-      plane: false, slot: 'primary', weapon: p.primary, shield: null, z: 0, vz: 0, hurt: 0, dash: null, evade: null,
+      plane: false, slot: 'primary', weapon: p.primary, shield: null, z: SKY_ALT.start, vz: 0, hurt: 0, dash: null, evade: null,
       ...(heal ? { hp: p.maxHp, alive: true } : {}),
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,
@@ -557,12 +563,27 @@ function setupSky(match, { heal = true } = {}) {
     p.ground ??= {
       primary: p.primary, secondary: p.secondary, secondaries: p.secondaries, weapon: p.primary, item: p.item, primaryOnly: p.primaryOnly,
       flier: p.flier, noItem: p.noItem, radius: p.radius,
-      drone: p.drone, jetpack: p.jetpack, scale: p.scale, speed: p.speed,
+      drone: p.drone, jetpack: p.jetpack, scale: p.scale, speed: p.speed, maxHp: p.maxHp,
     };
   }
+  // 공중전 기체로 강습 건쉽을 고른 사람(사지 않아도 됨): 라이트닝 대신 강습 건쉽을 타고 싸운다(4스테이지에서 원래 캐릭터로 돌아감)
+  list.forEach((p, i) => {
+    if (p.flier || p.ai || p.skyCraft !== SKY_GUNSHIP) return;
+    const gs = characterOf(SKY_GUNSHIP);
+    const hp = heal ? gs.maxHp : Math.min(gs.maxHp, p.savedHp ?? p.hp);
+    delete p.savedHp;
+    Object.assign(p, {
+      plane: false, flier: true, noItem: false, primaryOnly: false, drone: false, jetpack: null, scale: gs.scale ?? 1,
+      primary: gs.loadout.primary, weapon: gs.loadout.primary, secondaries: [...gs.loadout.secondaries], secondary: gs.loadout.secondaries[0],
+      item: gs.item, slot: 'primary', radius: gs.radius, speed: gs.speed, maxHp: gs.maxHp, hp, alive: heal ? true : p.alive && hp > 0,
+      shield: null, z: SKY_ALT.start, vz: 0, hurt: 0, dash: null, evade: null,
+      x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
+      cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity, battery: 0,
+    });
+  });
   list.forEach((p, i) => !p.flier && Object.assign(p, {
     plane: true, primary: 'lightning', weapon: 'lightning', secondary: 'overcool', secondaries: ['overcool'], item: 'missile', slot: 'primary', shield: null,
-    flier: false, noItem: false, z: 0, vz: 0, radius: Math.min(p.radius, 46),
+    flier: false, noItem: false, z: SKY_ALT.start, vz: 0, radius: Math.min(p.radius, 46),
     primaryOnly: !!p.ai, drone: false, jetpack: null, scale: 1,
     speed: MAX_SPEED_BASE * SKY.planeSpeed, hurt: 0, dash: null, evade: null,
     // 이어하기(heal: false)는 저장한 체력·쓰러짐을 그대로 둔다
@@ -591,8 +612,9 @@ function setupRoad(match, { heal = true } = {}) {
   list.forEach((p, i) => {
     if (p.ground) Object.assign(p, p.ground);
     delete p.ground;
+    p.hp = Math.min(p.hp, p.maxHp); // 공중전에서만 탄 강습 건쉽(체력 3000)에서 내리면 원래 체력 한도로
     Object.assign(p, {
-      plane: false, item: 'grenade', slot: 'primary', hurt: 0, dash: null, evade: null,
+      plane: false, item: p.flier ? p.item : 'grenade', slot: 'primary', ...(p.flier ? {} : { z: 0, vz: 0 }), hurt: 0, dash: null, evade: null,
       ...(heal ? { hp: p.maxHp, alive: true } : {}),
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth,
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,
@@ -626,8 +648,9 @@ function setupBridge(match, { heal = true } = {}) {
   list.forEach((p, i) => {
     if (p.ground) Object.assign(p, p.ground);
     delete p.ground;
+    p.hp = Math.min(p.hp, p.maxHp); // 공중전에서만 탄 강습 건쉽(체력 3000)에서 내리면 원래 체력 한도로
     Object.assign(p, {
-      plane: false, item: 'grenade', slot: 'primary', hurt: 0, dash: null, evade: null,
+      plane: false, item: p.flier ? p.item : 'grenade', slot: 'primary', ...(p.flier ? {} : { z: 0, vz: 0 }), hurt: 0, dash: null, evade: null,
       ...(heal ? { hp: p.maxHp, alive: true } : {}),
       x: xs[i], previousX: xs[i], y: RAIL_Y.earth, carX: xs[i],
       cooldown: 0, cooldowns: {}, burstLeft: 0, grenadeCooldown: 0, heat: 0, overheat: 0, boost: 0, sinceShot: Infinity,
